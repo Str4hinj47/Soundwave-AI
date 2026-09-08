@@ -1,0 +1,30 @@
+# deps
+node_modules/
+
+# builds
+dist/
+frontend/dist/
+server/dist/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# runtime data
+server/data/
+server/uploads/
+server/generated/
+
+# logs
+*.log
+npm-debug.log*
+
+# tooling
+.DS_Store
+.idea/
+.vscode/
+
+# test artifacts
+coverage/
