@@ -4,9 +4,12 @@ import {
   Clapperboard,
   Download,
   FileVideo,
+  Monitor,
   Music,
+  Smartphone,
   Trash2,
   Upload,
+  Youtube,
 } from "lucide-react";
 import { useStudio } from "../store/studio";
 import { useAuth } from "../store/auth";
@@ -27,8 +30,22 @@ import { PLANS, type Plan } from "../lib/plans";
 import type { SubtitleCue } from "../lib/types";
 
 type Resolution = "720p" | "1080p" | "1440p" | "4K";
+type Aspect = "16:9" | "9:16";
 
 const RES_ORDER: Resolution[] = ["720p", "1080p", "1440p", "4K"];
+
+const RES_DIMS: Record<Resolution, [number, number]> = {
+  "720p": [1280, 720],
+  "1080p": [1920, 1080],
+  "1440p": [2560, 1440],
+  "4K": [3840, 2160],
+};
+
+/** Pixel dimensions label honoring the chosen aspect (9:16 swaps the axes). */
+function dimsLabel(r: Resolution, aspect: Aspect): string {
+  const [w, h] = RES_DIMS[r];
+  return aspect === "9:16" ? `${h}×${w}` : `${w}×${h}`;
+}
 
 export function VideoCompositor() {
   const navigate = useNavigate();
@@ -41,6 +58,8 @@ export function VideoCompositor() {
   const [videoName, setVideoName] = useState<string | null>(studio.video.name);
   const [videoFileKey, setVideoFileKey] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [ytUrl, setYtUrl] = useState("");
+  const [ytImporting, setYtImporting] = useState(false);
   const [bgColor, setBgColor] = useState("#0A0F1C");
 
   const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
@@ -51,6 +70,7 @@ export function VideoCompositor() {
   const [zoom, setZoom] = useState(1);
 
   const [resolution, setResolution] = useState<Resolution>(planDef.maxResolution as Resolution);
+  const [aspect, setAspect] = useState<Aspect>("16:9");
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
   const [fps, setFps] = useState(30);
@@ -62,10 +82,27 @@ export function VideoCompositor() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewW, setPreviewW] = useState(0);
 
   const cues: SubtitleCue[] = studio.cues;
   const style = studio.subtitleStyle;
   const duration = studio.audioBuffer?.duration ?? studio.lastDuration;
+
+  // Measure the preview box so subtitle px values scale with its real width.
+  // Exports are laid out against a 1280-unit reference, so the rendered text
+  // keeps the same proportions on screen (both 16:9 and 9:16).
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setPreviewW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const k = (previewW > 0 ? previewW : 768) / 1280;
 
   useEffect(() => {
     if (studio.audioBuffer) setDecodedAudio(studio.audioBuffer);
@@ -123,6 +160,37 @@ export function VideoCompositor() {
     studio.setVideo({ blob: null, url: null, name: null });
   };
 
+  // A video attached via "Import from YouTube" is streamed back from our API.
+  const videoFromYouTube = videoUrl != null && videoUrl.startsWith("/api/v1/upload/file/");
+
+  const importYouTube = async () => {
+    const url = ytUrl.trim();
+    if (!url) {
+      toast.warning("No link", "Paste a YouTube link first.");
+      return;
+    }
+    setYtImporting(true);
+    try {
+      const res = await http.post<{ fileKey: string; name: string; size: number }>(
+        "/upload/youtube",
+        { url },
+        // Downloads of long videos can take a while — allow up to 5 minutes.
+        { timeout: 300_000 },
+      );
+      const streamUrl = `/api/v1/upload/file/${res.fileKey}`;
+      setVideoFileKey(res.fileKey);
+      setVideoUrl(streamUrl);
+      setVideoName(res.name);
+      studio.setVideo({ blob: null, url: streamUrl, name: res.name });
+      setYtUrl("");
+      toast.success("YouTube video imported", "It is ready to use as your video background.");
+    } catch (e) {
+      toast.error("YouTube import failed", (e as Error).message);
+    } finally {
+      setYtImporting(false);
+    }
+  };
+
   const estimatedSize = useMemo(() => {
     const baseBps = { "720p": 5e6, "1080p": 8e6, "1440p": 16e6, "4K": 35e6 }[resolution];
     const qMul = quality === "low" ? 0.6 : quality === "high" ? 1.6 : 1;
@@ -158,6 +226,7 @@ export function VideoCompositor() {
         subtitleStyle: { ...style, fontFamily: style.fontFamily },
         exportSettings: {
           resolution,
+          aspect,
           format,
           quality,
           fps,
@@ -224,15 +293,36 @@ export function VideoCompositor() {
         <div className="min-w-0 space-y-5">
           {/* Preview */}
           <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-lg bg-black" style={{ aspectRatio: "16 / 9" }}>
+            <div
+              ref={previewRef}
+              className={cn(
+                "relative mx-auto w-full overflow-hidden rounded-lg bg-black transition-all duration-300",
+                aspect === "9:16" ? "max-w-[280px] sm:max-w-[330px]" : "max-w-3xl",
+              )}
+              style={{ aspectRatio: aspect === "9:16" ? "9 / 16" : "16 / 9" }}
+            >
               {videoUrl ? (
                 <video ref={videoRef} src={videoUrl} className="h-full w-full object-contain" muted playsInline />
               ) : (
                 <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
               )}
               {activeCue && (
-                <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition(style) }}>
-                  <div style={subtitleStyleToCss(style)}>{activeCue.text}</div>
+                <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition({ ...style, margin: style.margin * k }) }}>
+                  <div
+                    style={subtitleStyleToCss({
+                      ...style,
+                      fontSize: style.fontSize * k,
+                      letterSpacing: style.letterSpacing * k,
+                      bgPadding: style.bgPadding * k,
+                      bgRadius: style.bgRadius * k,
+                      strokeWidth: style.strokeWidth * k,
+                      shadowX: style.shadowX * k,
+                      shadowY: style.shadowY * k,
+                      shadowBlur: style.shadowBlur * k,
+                    })}
+                  >
+                    {activeCue.text}
+                  </div>
                 </div>
               )}
               {!videoUrl && (
@@ -287,7 +377,11 @@ export function VideoCompositor() {
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-300">Video Background</p>
-              {videoUrl && <Badge tone="green" dot>Uploaded</Badge>}
+              {videoUrl && (
+                <Badge tone={videoFromYouTube ? "violet" : "green"} dot>
+                  {videoFromYouTube ? "YouTube" : "Uploaded"}
+                </Badge>
+              )}
             </div>
 
             {videoUrl ? (
@@ -315,6 +409,42 @@ export function VideoCompositor() {
                   {uploading && <ProgressBar indeterminate className="mt-4 max-w-xs" />}
                   <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
                 </div>
+
+                {/* Import straight from YouTube */}
+                <div className="mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4">
+                  <p className="flex items-center gap-2 text-sm font-medium text-gray-200">
+                    <Youtube className="h-4 w-4 text-red-400" /> Import from YouTube
+                  </p>
+                  <form
+                    className="mt-2.5 flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void importYouTube();
+                    }}
+                  >
+                    <input
+                      value={ytUrl}
+                      onChange={(e) => setYtUrl(e.target.value)}
+                      disabled={ytImporting}
+                      placeholder="Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…"
+                      aria-label="YouTube video URL"
+                      className="h-10 w-full rounded-input border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600 focus:border-blue-500 disabled:opacity-60"
+                    />
+                    <Button type="submit" size="sm" loading={ytImporting} icon={<Youtube className="h-4 w-4" />} className="h-10 shrink-0 sm:w-auto w-full">
+                      {ytImporting ? "Importing…" : "Import"}
+                    </Button>
+                  </form>
+                  {ytImporting && (
+                    <div className="mt-3">
+                      <ProgressBar indeterminate />
+                      <p className="mt-1.5 text-xs text-gray-500">Downloading from YouTube — long videos can take a minute.</p>
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    The video is downloaded straight to your project. Only import content you own or have permission to use.
+                  </p>
+                </div>
+
                 <div className="mt-4 flex items-center gap-3">
                   <span className="text-sm text-gray-400">Or use a solid background:</span>
                   <ColorPicker value={bgColor} onChange={setBgColor} label="Background color" />
@@ -349,13 +479,37 @@ export function VideoCompositor() {
             <p className="mb-4 text-sm font-semibold text-white">Export Settings</p>
             <div className="space-y-4">
               <div>
+                <label className="mb-1.5 block text-sm text-gray-300">Video style</label>
+                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Video style">
+                  <AspectButton
+                    active={aspect === "16:9"}
+                    onClick={() => setAspect("16:9")}
+                    icon={<Monitor className="h-4 w-4" />}
+                    title="Landscape"
+                    sub="16:9 · YouTube"
+                  />
+                  <AspectButton
+                    active={aspect === "9:16"}
+                    onClick={() => setAspect("9:16")}
+                    icon={<Smartphone className="h-4 w-4" />}
+                    title="Portrait"
+                    sub="9:16 · Shorts · TikTok"
+                  />
+                </div>
+                {aspect === "9:16" && (
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Vertical video for YouTube Shorts, TikTok & Reels. Landscape footage is fitted with black bars.
+                  </p>
+                )}
+              </div>
+              <div>
                 <label className="mb-1.5 block text-sm text-gray-300">Resolution</label>
                 <Select
                   value={resolution}
                   onChange={(v) => setResolution(v as Resolution)}
                   options={RES_ORDER.map((r, i) => ({
                     value: r,
-                    label: `${r} ${r === "4K" ? "(3840×2160)" : r === "1440p" ? "(2560×1440)" : r === "1080p" ? "(1920×1080)" : "(1280×720)"}`,
+                    label: `${r} (${dimsLabel(r, aspect)})`,
                     sublabel: i > maxResolutionIdx ? `${planDef.name} plan required` : undefined,
                   }))}
                   ariaLabel="Resolution"
@@ -413,5 +567,40 @@ export function VideoCompositor() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AspectButton({
+  active,
+  onClick,
+  icon,
+  title,
+  sub,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center gap-1 rounded-card border px-3 py-3 text-center transition-all duration-200",
+        active
+          ? "border-blue-500/60 bg-blue-500/10 text-white shadow-glow"
+          : "border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200",
+      )}
+    >
+      <span className={cn("flex items-center gap-1.5 text-sm font-semibold", active ? "text-white" : "text-gray-300")}>
+        {icon}
+        {title}
+      </span>
+      <span className="text-[11px] text-gray-500">{sub}</span>
+    </button>
   );
 }

@@ -111,7 +111,10 @@ export function buildAss(
   height: number,
   watermark = false,
 ): string {
-  const scale = height / 720;
+  // Scale relative to a 1280×720 reference. Using the smaller of the two
+  // axes keeps 16:9 behavior identical (both equal the old height/720) while
+  // preventing oversized subtitles in 9:16 portrait frames (Shorts/TikTok).
+  const scale = Math.min(width / 1280, height / 720);
   const fontSize = Math.round((style.fontSize ?? 48) * scale);
   const outline = style.strokeEnabled ? Math.max(0, Math.round((style.strokeWidth ?? 0) * scale)) : 0;
   const shadow = style.shadowEnabled
@@ -178,12 +181,17 @@ export function buildAss(
       tags += `\\t(0,${Math.round(durMs)},\\fscx60\\fscy60)` + `\\t(0,${Math.round(durMs)},\\fscx100\\fscy100)`;
     }
 
+    // ASS override tags only take effect inside a { … } block — previously
+    // they were prepended bare, so "\fad(25,25)" was burned into the video
+    // as literal text for the default fade animation.
+    const tagBlock = tags ? `{${tags}}` : "";
+
     const isWordAnim = animIn === "wordByWord" || animIn === "typewriter";
     if (isWordAnim) {
       // Cumulative word-by-word reveal across the cue duration.
       const words = cue.text.split(/\s+/).filter(Boolean);
       if (words.length <= 1) {
-        lines.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,${tags}${escAss(cue.text)}`);
+        lines.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,${tagBlock}${escAss(cue.text)}`);
       } else {
         const wordDur = dur / words.length;
         for (let i = 0; i < words.length; i++) {
@@ -194,15 +202,15 @@ export function buildAss(
           if (animIn === "wordByWord" && i === words.length - 1) {
             text = `${escAss(words.slice(0, i).join(" "))} {\\c&H00FDE0&}${escAss(words[i]!)}`;
           }
-          lines.push(`Dialogue: 0,${assTime(start)},${assTime(end)},Default,,0,0,0,,${tags}${text}`);
+          lines.push(`Dialogue: 0,${assTime(start)},${assTime(end)},Default,,0,0,0,,${tagBlock}${text}`);
         }
       }
     } else if (style.customX != null || style.customY != null) {
       lines.push(
-        `Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,{\\pos(${Math.round(x)},${Math.round(y)})}${tags}${escAss(cue.text)}`,
+        `Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,{\\pos(${Math.round(x)},${Math.round(y)})}${tagBlock}${escAss(cue.text)}`,
       );
     } else {
-      lines.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,${tags}${escAss(cue.text)}`);
+      lines.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Default,,0,0,0,,${tagBlock}${escAss(cue.text)}`);
     }
   }
 

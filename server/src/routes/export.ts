@@ -7,7 +7,7 @@ import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
 import { getStore } from "../lib/store.js";
-import { PLANS, RESOLUTIONS, resolutionAllowed, type ResolutionKey } from "../lib/plans.js";
+import { PLANS, dimensionsFor, resolutionAllowed, type ResolutionKey } from "../lib/plans.js";
 import { runFfmpegExport, probeMedia, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { spawn } from "node:child_process";
 import { filePath } from "./upload.js";
@@ -32,6 +32,7 @@ const exportSchema = z.object({
   subtitleStyle: styleSchema.default({}),
   exportSettings: z.object({
     resolution: z.enum(["720p", "1080p", "1440p", "4K"]),
+    aspect: z.enum(["16:9", "9:16"]).default("16:9"),
     format: z.enum(["mp4", "webm"]),
     quality: z.enum(["low", "medium", "high"]),
     fps: z.number().int().min(24).max(60),
@@ -66,17 +67,25 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
     const audioPath = filePath(body.audioFileKey);
     if (!fs.existsSync(audioPath)) throw new ApiError(400, "AUDIO_NOT_FOUND", "The audio file could not be found. Please re-upload.");
 
-    // Background: solid color if no video uploaded.
+    const dims = dimensionsFor(body.exportSettings.resolution, body.exportSettings.aspect);
+
+    // Background: solid color if no video uploaded. The clip only needs to be
+    // as long as the audio (the export ends via -shortest) — previously a full
+    // 1-hour clip was rendered on every export, stalling the request for
+    // minutes.
     let videoPath: string;
     if (body.videoFileKey) {
       videoPath = filePath(body.videoFileKey);
       if (!fs.existsSync(videoPath)) throw new ApiError(400, "VIDEO_NOT_FOUND", "The video file could not be found. Please re-upload.");
     } else {
-      videoPath = await generateColorVideo(body.exportSettings.resolution, req.user!.id);
+      const audioProbe = await probeMedia(audioPath).catch(() => null);
+      const subtitleEnd = body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0);
+      const seconds = Math.min(3600, Math.max(1, Math.ceil((audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
+      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user!.id);
     }
 
     const settings: ExportSettings = {
-      resolution: { width: RESOLUTIONS[body.exportSettings.resolution].width, height: RESOLUTIONS[body.exportSettings.resolution].height },
+      resolution: dims,
       format: body.exportSettings.format,
       quality: body.exportSettings.quality,
       fps: body.exportSettings.fps,
@@ -112,16 +121,17 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
   }
 });
 
-async function generateColorVideo(resolution: ResolutionKey, userId: string): Promise<string> {
+async function generateColorVideo(width: number, height: number, seconds: number, userId: string): Promise<string> {
   const dir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, `${userId}-bg-${Date.now()}.mp4`);
-  const { width, height } = RESOLUTIONS[resolution];
-  // lavfi color source → 1s loop; the export ends at audio length via -shortest.
+  const dur = Math.min(3600, Math.max(1, Math.round(seconds)));
+  // lavfi color source of just the needed length; the export ends at audio
+  // length via -shortest.
   await new Promise<void>((resolve, reject) => {
     const child = spawn(resolveFfmpegPath(), [
-      "-y", "-f", "lavfi", "-i", `color=c=0x0A0F1C:s=${width}x${height}:d=3600:r=30`,
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", "3600", out,
+      "-y", "-f", "lavfi", "-i", `color=c=0x0A0F1C:s=${width}x${height}:d=${dur}:r=30`,
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", String(dur), out,
     ]);
     child.on("error", reject);
     child.on("close", (code: number) => (code === 0 ? resolve() : reject(new Error("Background generation failed"))));

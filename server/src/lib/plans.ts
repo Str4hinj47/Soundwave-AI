@@ -80,6 +80,15 @@ export const RESOLUTIONS = {
 } as const;
 
 export type ResolutionKey = keyof typeof RESOLUTIONS;
+export type AspectRatio = "16:9" | "9:16";
+
+/** Output dimensions for a resolution + aspect ratio. Portrait (9:16) swaps
+ * the axes, so 1080p portrait is 1080×1920 — the vertical style used by
+ * YouTube Shorts, TikTok, and Instagram Reels. */
+export function dimensionsFor(res: ResolutionKey, aspect: AspectRatio = "16:9"): { width: number; height: number } {
+  const { width, height } = RESOLUTIONS[res];
+  return aspect === "9:16" ? { width: height, height: width } : { width, height };
+}
 
 export function resolutionAllowed(plan: Plan, res: ResolutionKey): boolean {
   const order: ResolutionKey[] = ["720p", "1080p", "1440p", "4K"];

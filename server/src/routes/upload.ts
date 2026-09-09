@@ -3,11 +3,14 @@ import multer from "multer";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
 import { ApiError } from "../middleware/error.js";
 import { uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
 import { PLANS } from "../lib/plans.js";
+import { parseYouTubeUrl, fetchMetadata, downloadVideo } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 
 const router = Router();
@@ -98,6 +101,83 @@ router.post("/avatar", requireAuth, uploadLimiter, upload.single("file"), async 
     const store = await getStore();
     await store.updateUser(req.user!.id, { avatarUrl: `/api/v1/user/avatar/${key}` });
     res.status(201).json({ avatarUrl: `/api/v1/user/avatar/${key}` });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── YouTube import ──────────────────────────────────────────────────────────
+// Downloads a video straight from a YouTube URL into the uploads dir so it
+// can be attached as a compositing background without leaving the app.
+const youtubeSchema = z.object({
+  url: z.string().min(10).max(2048),
+});
+
+router.post("/youtube", requireAuth, uploadLimiter, validate({ body: youtubeSchema }), async (req, res, next) => {
+  try {
+    const { url } = req.body as z.infer<typeof youtubeSchema>;
+    const parsed = parseYouTubeUrl(url);
+    if (!parsed) {
+      throw new ApiError(400, "INVALID_YOUTUBE_URL", "Paste a valid YouTube link (youtube.com/watch, youtu.be, or /shorts).");
+    }
+    const target = parsed.toString();
+
+    // Metadata first: cheap validation + title for the UI + duration guard.
+    const meta = await fetchMetadata(target).catch((e: Error) => {
+      throw new ApiError(502, "YOUTUBE_METADATA_FAILED", e.message);
+    });
+    if (config.ytDlpMaxDuration > 0 && meta.duration > config.ytDlpMaxDuration) {
+      throw new ApiError(
+        400,
+        "VIDEO_TOO_LONG",
+        `This video is ${Math.round(meta.duration / 60)} minutes long — the limit for YouTube imports is ${Math.round(
+          config.ytDlpMaxDuration / 60,
+        )} minutes.`,
+      );
+    }
+
+    const maxBytes = PLANS[req.user!.plan].maxVideoMb * 1024 * 1024;
+    const uuid = crypto.randomUUID();
+    const result = await downloadVideo(target, uuid, maxBytes).catch((e: Error & { status?: number; code?: string }) => {
+      if (e.status === 413) {
+        throw new ApiError(413, "FILE_TOO_LARGE", `The video exceeds the ${PLANS[req.user!.plan].maxVideoMb}MB limit for your plan.`);
+      }
+      if (e.message.includes("yt-dlp is not installed")) {
+        throw new ApiError(503, "YOUTUBE_IMPORT_UNAVAILABLE", e.message);
+      }
+      throw new ApiError(502, "YOUTUBE_DOWNLOAD_FAILED", e.message);
+    });
+
+    const name = `${meta.title}.${result.ext}`.replace(/[\\/:*?"<>|]/g, "_").slice(0, 180);
+    res.status(201).json({ fileKey: result.fileKey, name, size: result.size, duration: meta.duration });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Stream an uploaded/imported video (preview before export) ───────────────
+const VIDEO_MIME: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mkv: "video/x-matroska",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+};
+
+router.get("/file/:key", requireAuth, async (req, res, next) => {
+  try {
+    const key = req.params.key ?? "";
+    const ext = key.split(".").pop() ?? "";
+    const mime = VIDEO_MIME[ext];
+    if (!mime) throw new ApiError(400, "INVALID_FILE", "Not a streamable video file.");
+    const p = filePath(key);
+    if (!fs.existsSync(p)) throw new ApiError(404, "NOT_FOUND", "The file no longer exists. Please import it again.");
+    // res.sendFile sets Content-Length and supports HTTP Range for seeking.
+    res.setHeader("Content-Type", mime);
+    res.sendFile(p, (err) => {
+      if (err && !res.headersSent) next(err);
+    });
   } catch (e) {
     next(e);
   }

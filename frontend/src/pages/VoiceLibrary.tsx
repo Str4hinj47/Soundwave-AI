@@ -43,10 +43,17 @@ export function VoiceLibrary({ standalone = true }: { standalone?: boolean }) {
   };
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className={standalone ? "min-h-screen bg-navy" : undefined}>
       {standalone && <Navbar />}
       <audio ref={audioRef} onEnded={() => setPlaying(null)} className="hidden" />
-      <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8">
+      <div
+        className={cn(
+          "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8",
+          // Standalone clears the fixed marketing navbar; embedded in AppShell
+          // the <main> area already provides horizontal padding + top spacing.
+          standalone ? "pb-24 pt-28" : "pb-16 pt-2",
+        )}
+      >
         <h1 className="text-4xl font-extrabold text-white">Voice Library</h1>
         <p className="mt-2 max-w-xl text-gray-400">
           Every Microsoft Neural voice, with a pre-generated sample. Tap any card to hear the real voice.

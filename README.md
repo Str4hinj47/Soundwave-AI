@@ -28,12 +28,12 @@ soundwave-ai/
 │   └── src/store/       # Zustand: auth, studio, toast
 ├── server/              # Express API
 │   ├── src/routes/      # auth, voices, tts, projects, upload, export, user, billing, apiKeys
-│   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, plans, security
+│   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytdlp, plans, security
 │   ├── prisma/schema.prisma
 │   └── scripts/generate-samples.ts
 ├── deploy/              # Dockerfile.api, nginx.conf
 ├── docker-compose.yml
-└── vendor/ffmpeg/       # static ffmpeg for local export (dev)
+└── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import)
 ```
 
 ---
@@ -61,6 +61,18 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > at a static binary (e.g. `vendor/ffmpeg/ffmpeg`) or install ffmpeg. Note: the
 > static build has no `drawtext` filter, so the export watermark is rendered
 > through the `libass` filter (same path as subtitle burn-in).
+>
+> **YouTube import** (Video Compositor → "Import from YouTube") uses
+> [yt-dlp](https://github.com/yt-dlp/yt-dlp). A prebuilt zipapp lives in
+> `vendor/yt-dlp/yt-dlp` and is auto-detected — it only needs `python3`. To
+> override, install yt-dlp yourself (`pip install yt-dlp` / `brew install
+> yt-dlp`) or point `YTDLP_PATH` at the binary. `YTDLP_COOKIES` accepts a
+> cookies.txt export for bot/age-gated videos, and `YTDLP_MAX_DURATION`
+> (seconds) caps the length of importable videos.
+>
+> **Portrait video** is a first-class export style: pick 9:16 in the Video
+> Compositor to render vertical video optimized for YouTube Shorts, TikTok,
+> and Instagram Reels (all resolutions supported, e.g. 1080p → 1080×1920).
 
 ### Tests
 
@@ -94,7 +106,9 @@ cd frontend && npm run build     # production build
 | GET/POST | `/api/v1/projects` | ✓ | cloud projects (Pro+ for save) |
 | PATCH/DELETE | `/api/v1/projects/:id` | ✓ | update / soft-delete |
 | POST | `/api/v1/upload/video\|audio\|avatar` | ✓ | magic-byte validated uploads |
-| POST | `/api/v1/export/video` | ✓ | start FFmpeg export job |
+| POST | `/api/v1/upload/youtube` | ✓ | import a background video straight from a YouTube URL (yt-dlp) |
+| GET | `/api/v1/upload/file/:key` | ✓ | stream an imported/uploaded video (Range supported, for previews) |
+| POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
 | GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |
 | GET | `/api/v1/export/jobs/:id/download` | ✓ | download finished export |
 | GET/PATCH | `/api/v1/user/me` | ✓ | profile + password change |

@@ -36,6 +36,12 @@ export const config = {
   stripeSecretKey: str("STRIPE_SECRET_KEY", ""),
   stripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
   ffmpegPath: str("FFMPEG_PATH", ""),
+  // YouTube import (yt-dlp). The vendored zipapp is auto-detected (needs python3);
+  // set YTDLP_PATH to override with a system binary.
+  ytDlpPath: str("YTDLP_PATH", ""),
+  ytDlpCookies: str("YTDLP_COOKIES", ""), // optional cookies.txt for age/bot-gated videos
+  ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
+  ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;

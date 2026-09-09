@@ -61,6 +61,20 @@ function PublicOnly({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// The Voice Library is a public page (linked from the landing site), but when
+// a signed-in user opens it from the sidebar it must stay inside the AppShell
+// — otherwise the left navigation tabs vanish for that route.
+function VoiceLibraryRoute() {
+  const { user, loading } = useAuth();
+  if (loading && !user) return <FullPageLoader />;
+  if (!user) return <VoiceLibrary standalone />;
+  return (
+    <AppShell>
+      <VoiceLibrary standalone={false} />
+    </AppShell>
+  );
+}
+
 export default function App() {
   const loadSession = useAuth((s) => s.loadSession);
   useEffect(() => {
@@ -78,7 +92,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/voices" element={<VoiceLibrary standalone />} />
+        <Route path="/voices" element={<VoiceLibraryRoute />} />
         <Route
           path="/signin"
           element={
