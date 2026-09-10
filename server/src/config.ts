@@ -40,6 +40,9 @@ export const config = {
   ytDlpCookies: str("YTDLP_COOKIES", ""), // optional cookies.txt for age/bot-gated videos
   ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
+  // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
+  voiceCloneUrl: str("VOICECLONE_URL", ""),
+  voiceCloneTimeoutMs: int("VOICECLONE_TIMEOUT_MS", 600_000), // CPU cloning is slow
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;

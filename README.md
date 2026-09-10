@@ -3,8 +3,9 @@
 **Production-grade, client-side AI text-to-speech and video compositing studio.**
 
 Generate studio-quality voiceovers with **Microsoft Neural voices** (via the
-free, key-less Edge TTS service), style and burn subtitles into video, and
-export finished MP4/WebM with FFmpeg.
+free, key-less Edge TTS service) or with **your own cloned voice** (OmniVoice
+voice cloning, optional local sidecar), style and burn subtitles into video,
+and export finished MP4/WebM with FFmpeg.
 
 ---
 
@@ -32,6 +33,7 @@ soundwave-ai/
 │   ├── prisma/schema.prisma
 │   └── scripts/generate-samples.ts
 ├── deploy/              # Dockerfile.api, nginx.conf
+├── voiceclone/          # optional OmniVoice voice-cloning sidecar (see its README)
 ├── docker-compose.yml
 └── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import)
 ```
@@ -198,6 +200,24 @@ OAuth identity; new OAuth users are created email-verified with no password.
 | SMTP | not configured | emails are logged to stdout |
 | Stripe | not configured | billing returns 501 stubs |
 | Edge TTS (Microsoft) | unreachable | `/tts/synthesize` returns an error; the frontend falls back to the built-in demo voice |
+| Voice cloning | `VOICECLONE_URL` unset or sidecar down | "Cloned voices" tab is hidden / shows an offline notice; neural voices unaffected |
+
+### Voice cloning (OmniVoice)
+
+An optional sidecar in [`voiceclone/`](voiceclone/README.md) runs
+[OmniVoice](https://github.com/k2-fsa/OmniVoice) (zero-shot voice cloning,
+600+ languages) next to the app. Upload a 3–10 s reference clip in the
+Studio's **Cloned voices** tab, generate with your cloned voice, and the audio
+flows through the exact same subtitles + video pipeline. Reuse is instant —
+cloned voices are saved as profiles. Set `VOICECLONE_URL` in `server/.env`
+(pointing at the running sidecar, default `http://localhost:8100`) to enable
+it; quickstart, GPU/CPU notes, and API details are in
+[voiceclone/README.md](voiceclone/README.md).
+
+The Node API proxies it under `/api/v1/tts/clone*`: quota accounting and auth
+are identical to `/tts/synthesize`. OmniVoice doesn't emit word timings, so
+the API derives weighted per-word estimates from the text + audio duration,
+which keeps subtitle auto-cueing working.
 
 ---
 

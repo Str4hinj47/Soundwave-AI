@@ -111,6 +111,38 @@ describe("quota enforcement", () => {
   });
 });
 
+describe("voice cloning (sidecar not configured in tests)", () => {
+  it("reports clone status as unavailable when VOICECLONE_URL is unset", async () => {
+    const res = await request(app).get("/api/v1/tts/clone/status").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ configured: false, available: false });
+  });
+
+  it("requires auth for clone status", async () => {
+    const res = await request(app).get("/api/v1/tts/clone/status");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns a friendly 503 from /tts/clone when not configured", async () => {
+    const res = await request(app)
+      .post("/api/v1/tts/clone")
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfFromCookies(cookie))
+      .send({ text: "hello there", profileId: "abc-123" });
+    expect(res.status).toBe(503);
+    expect(JSON.stringify(res.body)).toContain("VOICECLONE_NOT_CONFIGURED");
+  });
+
+  it("validates the clone request body", async () => {
+    const res = await request(app)
+      .post("/api/v1/tts/clone")
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfFromCookies(cookie))
+      .send({ text: "", profileId: "" });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("projects", () => {
   it("blocks cloud save for FREE users", async () => {
     const res = await request(app)

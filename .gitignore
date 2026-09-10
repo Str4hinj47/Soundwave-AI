@@ -28,3 +28,8 @@ npm-debug.log*
 
 # test artifacts
 coverage/
+
+# voice-clone sidecar runtime artifacts
+voiceclone/profiles/
+voiceclone/.venv/
+voiceclone/__pycache__/

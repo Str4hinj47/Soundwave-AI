@@ -9,11 +9,13 @@ import {
   Pause,
   RefreshCw,
   Save,
+  Trash2,
+  Upload,
   Wand2,
   WifiOff,
   X,
 } from "lucide-react";
-import { useTTS, type TTSResult } from "../hooks/useTTS";
+import { useTTS, isCloneVoiceId, type TTSResult } from "../hooks/useTTS";
 import { useStudio } from "../store/studio";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
@@ -25,6 +27,8 @@ import { encodeAudio, downloadBlob, cuesFromTimings } from "../lib/audio";
 import { AudioPlayer, type AudioPlayerHandle } from "../components/AudioPlayer";
 import { VoicePicker } from "../components/VoicePicker";
 import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Select";
+import { TextField } from "../components/ui/TextField";
 import { Slider } from "../components/ui/Slider";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Badge } from "../components/ui/Badge";
@@ -34,6 +38,13 @@ import { saveLocalProject } from "../lib/localProjects";
 import type { ProjectMeta } from "../lib/types";
 
 const BREAK_TAG = '<break time="500ms"/>';
+
+interface CloneProfile {
+  id: string;
+  name: string;
+  createdAt: string;
+  hasRefText?: boolean;
+}
 
 export function Studio() {
   const navigate = useNavigate();
@@ -46,6 +57,86 @@ export function Studio() {
   const [saving, setSaving] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [online] = useState(() => navigator.onLine);
+
+  // ── Voice cloning (OmniVoice sidecar) ────────────────────────────────────
+  const [voiceTab, setVoiceTab] = useState<"neural" | "clone">(() => (isCloneVoiceId(studio.voiceId) ? "clone" : "neural"));
+  const [cloneConfigured, setCloneConfigured] = useState(false);
+  const [cloneAvailable, setCloneAvailable] = useState(false);
+  const [cloneProfiles, setCloneProfiles] = useState<CloneProfile[]>([]);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneFile, setCloneFile] = useState<File | null>(null);
+  const [cloneRefText, setCloneRefText] = useState("");
+  const [cloneSaving, setCloneSaving] = useState(false);
+
+  const nameFor = useCallback(
+    (id: string) =>
+      isCloneVoiceId(id)
+        ? cloneProfiles.find((p) => `clone:${p.id}` === id)?.name ?? "Cloned voice"
+        : displayNameFor(id),
+    [cloneProfiles],
+  );
+
+  const refreshCloneProfiles = useCallback(async () => {
+    try {
+      const r = await http.get<{ profiles: CloneProfile[] }>("/tts/clone/profiles");
+      setCloneProfiles(r.profiles);
+    } catch {
+      // Status banner still reflects availability; avoid noisy errors here.
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await http.get<{ configured: boolean; available: boolean }>("/tts/clone/status");
+        if (cancelled) return;
+        setCloneConfigured(s.configured);
+        setCloneAvailable(s.available);
+        if (s.available) void refreshCloneProfiles();
+      } catch {
+        // Not configured (or request failed) → keep the feature hidden.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshCloneProfiles]);
+
+  const submitClone = async () => {
+    if (!cloneFile || !cloneName.trim() || cloneSaving) return;
+    setCloneSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", cloneFile);
+      fd.append("name", cloneName.trim());
+      if (cloneRefText.trim()) fd.append("refText", cloneRefText.trim());
+      const r = await http.upload<{ profile: CloneProfile }>("/tts/clone/profiles", fd, { timeout: 300_000 });
+      await refreshCloneProfiles();
+      studio.setVoiceId(`clone:${r.profile.id}`);
+      setCloneModalOpen(false);
+      setCloneName("");
+      setCloneFile(null);
+      setCloneRefText("");
+      toast.success("Voice cloned", `"${r.profile.name}" is ready — generate away.`);
+    } catch (e) {
+      toast.error("Cloning failed", (e as Error).message);
+    } finally {
+      setCloneSaving(false);
+    }
+  };
+
+  const removeCloneProfile = async (id: string) => {
+    try {
+      await http.del(`/tts/clone/profiles/${id}`);
+      await refreshCloneProfiles();
+      if (studio.voiceId === `clone:${id}`) studio.setVoiceId(DEFAULT_VOICES[0]?.id ?? "");
+      toast.success("Voice deleted", "The cloned voice and its reference clip were removed.");
+    } catch (e) {
+      toast.error("Delete failed", (e as Error).message);
+    }
+  };
 
   const onComplete = useCallback(
     (r: TTSResult) => {
@@ -65,11 +156,11 @@ export function Studio() {
         createdAt: Date.now(),
         duration: r.duration,
       });
-      // Usage is accounted server-side by /tts/synthesize — just refresh quota.
+      // Usage is accounted server-side by /tts/synthesize (and /tts/clone) — just refresh quota.
       refreshQuota();
-      toast.success("Audio ready", `Generated ${formatDuration(r.duration)} with ${displayNameFor(r.voiceId)}.`);
+      toast.success("Audio ready", `Generated ${formatDuration(r.duration)} with ${nameFor(r.voiceId)}.`);
     },
-    [refreshQuota, studio],
+    [nameFor, refreshQuota, studio],
   );
 
   const tts = useTTS(onComplete);
@@ -105,6 +196,11 @@ export function Studio() {
 
   const handleGenerate = () => {
     if (studio.text.trim().length === 0) return;
+    if (voiceTab === "clone" && cloneConfigured && !isCloneVoiceId(studio.voiceId)) {
+      toast.warning("Pick a cloned voice", "Select one of your cloned voices, or clone a new one.");
+      if (cloneAvailable) setCloneModalOpen(true);
+      return;
+    }
     if (limitReached) {
       toast.warning("Monthly limit reached", "Upgrade to Pro for more characters.");
       return;
@@ -225,6 +321,7 @@ export function Studio() {
         </div>
         <div className="flex items-center gap-2">
           <Badge tone="green" dot>Microsoft Neural</Badge>
+          {tts.engine === "clone" && <Badge tone="violet">OmniVoice clone</Badge>}
           {tts.engine === "offline" && <Badge tone="amber">Demo fallback</Badge>}
         </div>
       </div>
@@ -275,11 +372,92 @@ export function Studio() {
           {/* Voice */}
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <p className="mb-2 text-sm font-medium text-gray-300">Voice</p>
-            <VoicePicker voices={voices} value={studio.voiceId} onChange={studio.setVoiceId} />
+            {cloneConfigured && (
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-input border border-gray-700 bg-gray-900 p-1 text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceTab("neural");
+                    if (isCloneVoiceId(studio.voiceId)) studio.setVoiceId(DEFAULT_VOICES[0]?.id ?? studio.voiceId);
+                  }}
+                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "neural" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+                >
+                  Microsoft Neural
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceTab("clone");
+                    if (!isCloneVoiceId(studio.voiceId) && cloneProfiles[0]) studio.setVoiceId(`clone:${cloneProfiles[0].id}`);
+                  }}
+                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "clone" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+                >
+                  Cloned voices
+                </button>
+              </div>
+            )}
+
+            {voiceTab === "clone" && cloneConfigured ? (
+              !cloneAvailable ? (
+                <div className="rounded-input border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm leading-relaxed text-amber-200">
+                  The voice-clone service isn't running. In a separate terminal, start it from the <code>voiceclone/</code> folder
+                  (<code className="text-amber-100">uvicorn server:app --port 8100</code> — first start downloads the model), then refresh this page.
+                </div>
+              ) : cloneProfiles.length === 0 ? (
+                <div className="flex flex-col items-start gap-3 rounded-input border border-dashed border-gray-700 px-3.5 py-4 text-sm text-gray-400">
+                  <p>No cloned voices yet. Upload a 3–10&nbsp;s clean reference clip to create one.</p>
+                  <Button size="sm" variant="outline" onClick={() => setCloneModalOpen(true)} icon={<Upload className="h-4 w-4" />}>
+                    Clone a new voice
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Select
+                        ariaLabel="Cloned voice"
+                        options={cloneProfiles.map((p) => ({
+                          value: `clone:${p.id}`,
+                          label: p.name,
+                          sublabel: new Date(p.createdAt).toLocaleDateString(),
+                        }))}
+                        value={isCloneVoiceId(studio.voiceId) ? studio.voiceId : ""}
+                        onChange={(v) => studio.setVoiceId(v)}
+                        placeholder="Select a cloned voice"
+                      />
+                    </div>
+                    <Button size="sm" variant="subtle" onClick={() => setCloneModalOpen(true)} icon={<Upload className="h-4 w-4" />}>
+                      New voice
+                    </Button>
+                    {isCloneVoiceId(studio.voiceId) && (
+                      <button
+                        type="button"
+                        onClick={() => removeCloneProfile(studio.voiceId.slice("clone:".length))}
+                        title="Delete this cloned voice"
+                        aria-label="Delete this cloned voice"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-input border border-gray-700 text-gray-400 transition-colors hover:border-red-500/50 hover:text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Powered by OmniVoice running on your machine — on CPU each generation takes longer than the neural voices.
+                  </p>
+                </>
+              )
+            ) : (
+              <VoicePicker voices={voices} value={studio.voiceId} onChange={studio.setVoiceId} />
+            )}
+
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-gray-400">Selected:</span>
-              <span className="font-semibold text-white">{displayNameFor(studio.voiceId)}</span>
-              <Badge tone={studio.voiceId.includes("-GB-") ? "violet" : "blue"}>{studio.voiceId.includes("-GB-") ? "British" : "American"}</Badge>
+              <span className="font-semibold text-white">{nameFor(studio.voiceId)}</span>
+              {isCloneVoiceId(studio.voiceId) ? (
+                <Badge tone="violet">Cloned (OmniVoice)</Badge>
+              ) : (
+                <Badge tone={studio.voiceId.includes("-GB-") ? "violet" : "blue"}>{studio.voiceId.includes("-GB-") ? "British" : "American"}</Badge>
+              )}
             </div>
           </div>
 
@@ -409,12 +587,13 @@ export function Studio() {
                       onClick={() => {
                         studio.setVoiceId(h.voiceId);
                         studio.setText(h.text);
+                        if (cloneConfigured) setVoiceTab(isCloneVoiceId(h.voiceId) ? "clone" : "neural");
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
                       <span className="block truncate text-sm text-white">{truncate(h.text, 60)}</span>
                       <span className="block text-xs text-gray-500">
-                        {displayNameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
+                        {nameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
                       </span>
                     </button>
                     <button
@@ -431,6 +610,60 @@ export function Studio() {
           </div>
         </div>
       </div>
+
+      {/* Clone-a-new-voice modal */}
+      <Modal
+        open={cloneModalOpen}
+        onClose={() => !cloneSaving && setCloneModalOpen(false)}
+        title="Clone a new voice"
+        description="Upload a 3–10 second clip of clean single-speaker speech. The voice is cloned on your machine (OmniVoice) and nothing leaves your computer."
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCloneModalOpen(false)} disabled={cloneSaving}>
+              Cancel
+            </Button>
+            <Button onClick={submitClone} loading={cloneSaving} disabled={!cloneFile || !cloneName.trim()} icon={<Upload className="h-4 w-4" />}>
+              {cloneSaving ? "Cloning…" : "Clone voice"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <TextField
+            label="Voice name"
+            placeholder='e.g. "My voice" or "Narrator"'
+            value={cloneName}
+            onChange={(e) => setCloneName(e.target.value)}
+            maxLength={80}
+            autoFocus
+          />
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-300">Reference audio</label>
+            <input
+              type="file"
+              accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a"
+              onChange={(e) => setCloneFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-gray-400 file:mr-3 file:rounded-input file:border-0 file:bg-gray-800 file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-gray-100 hover:file:bg-gray-700"
+            />
+            <p className="mt-1.5 text-xs text-gray-500">
+              WAV, MP3, FLAC, OGG, or M4A · 3–10&nbsp;s is ideal — same language as the text you'll generate, minimal background noise.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="clone-ref-text" className="mb-1.5 block text-sm font-medium text-gray-300">
+              Transcript of the clip <span className="font-normal text-gray-500">(optional)</span>
+            </label>
+            <textarea
+              id="clone-ref-text"
+              rows={3}
+              value={cloneRefText}
+              onChange={(e) => setCloneRefText(e.target.value)}
+              placeholder="Exactly what is said in the clip — improves cloning quality. If empty, the service transcribes it automatically (slower)."
+              className="w-full resize-y rounded-input border border-gray-700 bg-gray-900 px-3.5 py-2.5 text-sm text-white placeholder-gray-500 transition-colors focus:border-blue-500"
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* Download modal */}
       <Modal

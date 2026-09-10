@@ -1,13 +1,24 @@
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
-import { usageLimiter } from "../lib/security.js";
+import { usageLimiter, uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
 import { PLANS } from "../lib/plans.js";
 import { getVoice } from "../lib/voices.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
+import {
+  assertConfigured,
+  createCloneProfile,
+  deleteCloneProfile,
+  listCloneProfiles,
+  probeVoiceClone,
+  sniffAudio,
+  synthesizeClone,
+  voiceCloneConfigured,
+} from "../lib/voiceclone.js";
 
 const router = Router();
 
@@ -89,6 +100,116 @@ router.post("/synthesize", requireAuth, usageLimiter, validate({ body: synthesiz
       duration: result.duration,
       wordTimings: result.wordTimings,
       voiceId: voice,
+      used: quota.used + characters,
+      limit: quota.limit,
+      resetDate: quota.resetDate,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Voice cloning (OmniVoice sidecar) ───────────────────────────────────────
+// All routes degrade gracefully when VOICECLONE_URL is unset: /clone/status
+// reports it and the UI hides the feature.
+
+router.get("/clone/status", requireAuth, async (_req, res, next) => {
+  try {
+    const configured = voiceCloneConfigured();
+    res.json({ configured, available: configured ? await probeVoiceClone() : false });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/clone/profiles", requireAuth, async (_req, res, next) => {
+  try {
+    assertConfigured();
+    res.json({ profiles: await listCloneProfiles() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const refUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+const createProfileSchema = z.object({
+  name: z.string().min(1).max(80),
+  refText: z.string().max(2000).optional(),
+});
+
+router.post("/clone/profiles", requireAuth, uploadLimiter, refUpload.single("file"), async (req, res, next) => {
+  try {
+    assertConfigured();
+    if (!req.file) throw new ApiError(400, "NO_FILE", "Attach a reference audio clip (3–10s of clean speech).");
+    const parsed = createProfileSchema.safeParse(req.body);
+    if (!parsed.success) throw new ApiError(400, "VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid profile data.");
+    if (!sniffAudio(req.file.buffer)) {
+      throw new ApiError(400, "INVALID_FILE", "The reference clip must be a WAV, MP3, FLAC, OGG, or M4A audio file.");
+    }
+    const profile = await createCloneProfile({
+      name: parsed.data.name.trim(),
+      audio: req.file.buffer,
+      filename: req.file.originalname || "reference.wav",
+      mimeType: req.file.mimetype || "audio/wav",
+      refText: parsed.data.refText,
+    });
+    res.status(201).json({ profile });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete("/clone/profiles/:id", requireAuth, async (req, res, next) => {
+  try {
+    assertConfigured();
+    await deleteCloneProfile(req.params.id ?? "");
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+const cloneSchema = z.object({
+  text: z.string().min(1).max(5000),
+  profileId: z.string().min(1).max(64),
+  speed: z.number().min(0.5).max(2).optional(),
+});
+
+// Cloned-voice synthesis — same response shape as /synthesize (MP3 base64 +
+// word timings), same quota accounting.
+router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema }), async (req, res, next) => {
+  try {
+    assertConfigured();
+    const { text, profileId, speed } = req.body as z.infer<typeof cloneSchema>;
+
+    const quota = await getQuotaFor(req.user!.id);
+    const characters = text.length;
+    if (quota.used + characters > quota.limit) {
+      throw new ApiError(403, "QUOTA_EXCEEDED", "You've reached your monthly character limit. Upgrade to Pro for more.");
+    }
+
+    const result = await synthesizeClone({ text, profileId, speed });
+
+    const store = await getStore();
+    await store.addUsageLog({
+      userId: req.user!.id,
+      characterCount: characters,
+      voiceId: `clone:${profileId}`,
+      audioDurationSeconds: Math.max(1, Math.round(result.duration)),
+      generatedAt: new Date().toISOString(),
+    });
+    await store.updateUser(req.user!.id, {
+      charactersUsedThisMonth: quota.used + characters,
+      totalAudioDurationSeconds: req.user!.totalAudioDurationSeconds + Math.round(result.duration),
+    });
+
+    res.json({
+      audioBase64: result.audioBase64,
+      mimeType: result.mimeType,
+      duration: result.duration,
+      wordTimings: result.wordTimings,
+      voiceId: `clone:${profileId}`,
       used: quota.used + characters,
       limit: quota.limit,
       resetDate: quota.resetDate,
