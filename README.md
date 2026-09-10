@@ -57,6 +57,16 @@ npm run dev                   # http://localhost:5173 (proxies /api → :4000)
 Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 (`server/data/store.json`) so the full product works locally with zero infra.
 
+> **Windows:** the commands are the same in PowerShell or `cmd`. Install
+> [Node.js 20+](https://nodejs.org), and for video export install FFmpeg once
+> with `winget install ffmpeg` (then restart the terminal) or point
+> `FFMPEG_PATH` at `ffmpeg.exe`. YouTube import needs Python 3
+> ([python.org](https://www.python.org/downloads/) or `winget install
+> Python.Python.3.12`) — the vendored `vendor/yt-dlp/yt-dlp` zipapp is
+> launched through it automatically; `pip install yt-dlp` works too.
+> Copy the env file with `copy .env.example .env` and fill in the two JWT
+> secrets (any random strings in dev).
+
 > **FFmpeg** is required only for *video export*. In dev, point `FFMPEG_PATH`
 > at a static binary (e.g. `vendor/ffmpeg/ffmpeg`) or install ffmpeg. Note: the
 > static build has no `drawtext` filter, so the export watermark is rendered

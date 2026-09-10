@@ -41,7 +41,9 @@ export function parseYouTubeUrl(raw: string): URL | null {
   return null;
 }
 
-/** Resolve the yt-dlp executable: env override → vendored zipapp → PATH. */
+/** Resolve how to launch yt-dlp: env override → vendored zipapp → PATH.
+ * The vendored zipapp needs a Python interpreter; POSIX spawns it directly
+ * via its shebang, Windows spawns it through `python`/`py`. */
 export function resolveYtDlpPath(): string {
   if (config.ytDlpPath) return config.ytDlpPath;
   const candidates = [
@@ -61,6 +63,16 @@ export function resolveYtDlpPath(): string {
   return "yt-dlp";
 }
 
+function ytDlpSpawn(): { command: string; prefixArgs: string[] } {
+  const bin = resolveYtDlpPath();
+  // A vendored zipapp can't be executed natively on Windows — run it via Python.
+  if (process.platform === "win32" && (bin.endsWith("yt-dlp") || bin.endsWith(".pyz")) && !bin.toLowerCase().endsWith(".exe")) {
+    const py = process.env.PYTHON ?? "python";
+    return { command: py, prefixArgs: [bin] };
+  }
+  return { command: bin, prefixArgs: [] };
+}
+
 interface RunResult {
   stdout: string;
   stderr: string;
@@ -68,10 +80,10 @@ interface RunResult {
 
 function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => void): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const bin = resolveYtDlpPath();
+    const { command, prefixArgs } = ytDlpSpawn();
     let child;
     try {
-      child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+      child = spawn(command, [...prefixArgs, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     } catch (e) {
       reject(e);
       return;
@@ -185,13 +197,12 @@ export async function downloadVideo(
     ...baseArgs(),
     "-f",
     "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
-    "--ffmpeg-location",
-    path.dirname(resolveFfmpegPath()),
-    "--newline",
-    "-o",
-    template,
-    url,
   ];
+  // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
+  // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
+  const ffmpegDir = path.dirname(resolveFfmpegPath());
+  if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
+  args.push("--newline", "-o", template, url);
 
   const cleanup = () => {
     for (const f of fs.readdirSync(dir)) {

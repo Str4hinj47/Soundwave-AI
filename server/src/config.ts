@@ -84,13 +84,17 @@ export function validateConfig(): void {
 /** Resolve the FFmpeg binary path (env override → vendored static binary → PATH). */
 export function resolveFfmpegPath(): string {
   if (config.ffmpegPath) return config.ffmpegPath;
-  const candidates = [
-    path.join(process.cwd(), "..", "vendor", "ffmpeg", "ffmpeg"),
-    path.join(process.cwd(), "vendor", "ffmpeg", "ffmpeg"),
-    "/usr/bin/ffmpeg",
-  ];
-  for (const c of candidates) {
-    if (existsSyncSafe(c)) return c;
+  // The vendored binary is a Linux ELF — skip it on Windows, where ffmpeg
+  // must come from PATH (e.g. `winget install ffmpeg`) or FFMPEG_PATH.
+  if (process.platform !== "win32") {
+    const candidates = [
+      path.join(process.cwd(), "..", "vendor", "ffmpeg", "ffmpeg"),
+      path.join(process.cwd(), "vendor", "ffmpeg", "ffmpeg"),
+      "/usr/bin/ffmpeg",
+    ];
+    for (const c of candidates) {
+      if (existsSyncSafe(c)) return c;
+    }
   }
   return "ffmpeg";
 }
