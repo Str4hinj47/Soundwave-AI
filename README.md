@@ -106,7 +106,7 @@ cd frontend && npm run build     # production build
 | POST | `/api/v1/auth/forgot-password` | — | email (log transport in dev) |
 | POST | `/api/v1/auth/reset-password` | — | tokenized reset |
 | POST | `/api/v1/auth/verify-email` | — | tokenized verify |
-| GET | `/api/v1/auth/oauth/google\|github` | — | starts OAuth (302 to provider) |
+| GET | `/api/v1/auth/oauth/google` | — | starts OAuth (302 to provider) |
 | GET | `/api/v1/auth/oauth/:provider/callback` | — | OAuth callback → sets session |
 | GET | `/api/v1/auth/sessions` | ✓ | list / revoke sessions |
 | GET | `/api/v1/voices` | — | voice metadata + sample URLs |
@@ -175,7 +175,7 @@ docker compose up --build
 
 - **API** auto-selects Prisma + Postgres when `DATABASE_URL` is set (see
   `server/prisma/schema.prisma`); otherwise the JSON store is used.
-- Set `STRIPE_*`, `SMTP_*`, `GOOGLE_*`/`GITHUB_*` env vars to activate billing,
+- Set `STRIPE_*`, `SMTP_*`, `GOOGLE_*` env vars to activate billing,
   email, and OAuth; without them the corresponding endpoints degrade gracefully
   (billing 501 / logged email / OAuth redirect to a "not configured" notice).
 - Run `prisma migrate deploy` in CI before rolling out schema changes.
@@ -183,8 +183,7 @@ docker compose up --build
 ### Setting up OAuth sign-in
 
 1. **Google** — [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → *Create credentials → OAuth client ID* → Web application. Add authorized redirect URI `http://localhost:5173/api/v1/auth/oauth/google/callback`, then set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
-2. **GitHub** — [GitHub Developer Settings](https://github.com/settings/developers) → *New OAuth App*. Set the callback URL to `http://localhost:5173/api/v1/auth/oauth/github/callback`, then set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`.
-3. Restart the server. In production, use your `APP_URL` origin in the redirect URIs.
+2. Restart the server. In production, use your `APP_URL` origin in the redirect URI.
 
 Users are matched by email — an existing password account is linked to the
 OAuth identity; new OAuth users are created email-verified with no password.

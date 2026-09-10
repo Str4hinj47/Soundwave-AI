@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Github } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { AuthLayout } from "../components/layout/AuthLayout";
 import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
@@ -76,8 +76,8 @@ export function SignUp() {
     }
   };
 
-  const startOAuth = (provider: "google" | "github") => {
-    window.location.assign(`/api/v1/auth/oauth/${provider}`);
+  const startOAuth = () => {
+    window.location.assign("/api/v1/auth/oauth/google");
   };
 
   return (
@@ -97,12 +97,9 @@ export function SignUp() {
       <h1 className="text-2xl font-bold text-white">Create your account</h1>
       <p className="mt-1 text-sm text-gray-400">Start generating voice content in seconds.</p>
 
-      <div className="mt-6 grid grid-cols-1 gap-3">
-        <Button variant="outline" type="button" onClick={() => startOAuth("google")}>
+      <div className="mt-6">
+        <Button variant="outline" type="button" fullWidth onClick={startOAuth}>
           <GoogleIcon className="h-5 w-5" /> Continue with Google
-        </Button>
-        <Button variant="outline" type="button" onClick={() => startOAuth("github")}>
-          <Github className="h-5 w-5" /> Continue with GitHub
         </Button>
       </div>
 

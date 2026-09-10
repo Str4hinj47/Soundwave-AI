@@ -31,8 +31,6 @@ export const config = {
   resendApiKey: str("RESEND_API_KEY", ""),
   googleClientId: str("GOOGLE_CLIENT_ID", ""),
   googleClientSecret: str("GOOGLE_CLIENT_SECRET", ""),
-  githubClientId: str("GITHUB_CLIENT_ID", ""),
-  githubClientSecret: str("GITHUB_CLIENT_SECRET", ""),
   stripeSecretKey: str("STRIPE_SECRET_KEY", ""),
   stripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
   ffmpegPath: str("FFMPEG_PATH", ""),
@@ -54,8 +52,6 @@ const REQUIRED_PROD = [
   "STRIPE_WEBHOOK_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
 ];
 
 const REQUIRED_DEV = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];

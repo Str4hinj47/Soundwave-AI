@@ -20,14 +20,7 @@ import { getStore } from "../lib/store.js";
 import { passwordResetEmail, sendMail, verificationEmail } from "../lib/mail.js";
 import { deviceInfo, requireAuth } from "../middleware/auth.js";
 import { config } from "../config.js";
-import {
-  exchangeGithubCode,
-  exchangeGoogleCode,
-  githubAuthUrl,
-  googleAuthUrl,
-  oauthEnabled,
-  type OAuthProvider,
-} from "../lib/oauth.js";
+import { exchangeGoogleCode, googleAuthUrl, oauthEnabled, type OAuthProvider } from "../lib/oauth.js";
 
 const router = Router();
 
@@ -295,7 +288,7 @@ router.post("/resend-verification", requireAuth, async (req, res, next) => {
   }
 });
 
-// ── OAuth (Google / GitHub) — authorization-code flow ───────────────────────
+// ── OAuth (Google) — authorization-code flow ────────────────────────────────
 //  1. GET /oauth/:provider            → 302 to the provider with a state cookie
 //  2. GET /oauth/:provider/callback   → verify state, exchange code, sign in
 
@@ -320,7 +313,7 @@ function oauthStateCookie(res: Response, value: string | null): void {
 
 router.get("/oauth/:provider", (req, res, next) => {
   const provider = req.params.provider as OAuthProvider;
-  if (provider !== "google" && provider !== "github") {
+  if (provider !== "google") {
     return next(new ApiError(400, "INVALID_PROVIDER", "Unknown OAuth provider."));
   }
   if (!oauthEnabled(provider)) {
@@ -328,12 +321,12 @@ router.get("/oauth/:provider", (req, res, next) => {
   }
   const state = randomToken(16);
   oauthStateCookie(res, state);
-  res.redirect(provider === "google" ? googleAuthUrl(state) : githubAuthUrl(state));
+  res.redirect(googleAuthUrl(state));
 });
 
 router.get("/oauth/:provider/callback", async (req, res, next) => {
   const provider = req.params.provider as OAuthProvider;
-  if (provider !== "google" && provider !== "github") {
+  if (provider !== "google") {
     return next(new ApiError(400, "INVALID_PROVIDER", "Unknown OAuth provider."));
   }
   const fail = (code: string) => res.redirect(`${config.appUrl}/oauth/callback?error=${encodeURIComponent(code)}`);
@@ -351,7 +344,7 @@ router.get("/oauth/:provider/callback", async (req, res, next) => {
 
     const code = req.query.code;
     if (typeof code !== "string" || code.length === 0) return fail("missing_code");
-    const profile = provider === "google" ? await exchangeGoogleCode(code) : await exchangeGithubCode(code);
+    const profile = await exchangeGoogleCode(code);
     const store = await getStore();
     let user = await store.findUserByEmail(profile.email);
     if (user) {
@@ -364,7 +357,9 @@ router.get("/oauth/:provider/callback", async (req, res, next) => {
       user = await store.createUser({
         name: profile.name,
         email: profile.email,
-        emailVerified: false, // OAuth-verified email requires verification unless explicitly trusted
+        // The provider already verified this email — trust it, matching the
+        // behavior the test suite encodes (and standard OAuth practice).
+        emailVerified: true,
         avatarUrl: profile.avatarUrl,
         passwordHash: null,
       });

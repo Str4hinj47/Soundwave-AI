@@ -1,12 +1,12 @@
-// ── OAuth (Google / GitHub) — authorization-code flow ───────────────────────
-// No SDKs — plain fetch against each provider's token/userinfo endpoints.
+// ── OAuth (Google) — authorization-code flow ────────────────────────────────
+// No SDKs — plain fetch against the provider's token/userinfo endpoints.
 // Users are matched by email: an existing account is linked, otherwise a new
 // email-verified account is created. The redirect URI is always the app's own
 // /api/v1/auth/oauth/<provider>/callback (proxied to this server in dev).
 
 import { config } from "../config.js";
 
-export type OAuthProvider = "google" | "github";
+export type OAuthProvider = "google";
 
 export interface OAuthProfile {
   email: string;
@@ -16,7 +16,7 @@ export interface OAuthProfile {
 
 export function oauthEnabled(provider: OAuthProvider): boolean {
   if (provider === "google") return Boolean(config.googleClientId && config.googleClientSecret);
-  return Boolean(config.githubClientId && config.githubClientSecret);
+  return false;
 }
 
 export function oauthRedirectUri(provider: OAuthProvider): string {
@@ -34,16 +34,6 @@ export function googleAuthUrl(state: string): string {
     prompt: "select_account",
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
-
-export function githubAuthUrl(state: string): string {
-  const params = new URLSearchParams({
-    client_id: config.githubClientId,
-    redirect_uri: oauthRedirectUri("github"),
-    scope: "read:user user:email",
-    state,
-  });
-  return `https://github.com/login/oauth/authorize?${params.toString()}`;
 }
 
 // ── Code exchange ───────────────────────────────────────────────────────────
@@ -75,38 +65,5 @@ export async function exchangeGoogleCode(code: string): Promise<OAuthProfile> {
     email: u.email,
     name: u.name || u.email.split("@")[0] || "User",
     avatarUrl: u.picture ?? null,
-  };
-}
-
-export async function exchangeGithubCode(code: string): Promise<OAuthProfile> {
-  const token = await postForm("https://github.com/login/oauth/access_token", {
-    client_id: config.githubClientId,
-    client_secret: config.githubClientSecret,
-    code,
-    redirect_uri: oauthRedirectUri("github"),
-  });
-  const headers = {
-    Authorization: `Bearer ${token.access_token}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "soundwave-ai",
-  };
-  const userRes = await fetch("https://api.github.com/user", { headers });
-  if (!userRes.ok) throw new Error(`GitHub /user failed (${userRes.status})`);
-  const u = (await userRes.json()) as { email?: string | null; name?: string | null; login?: string; avatar_url?: string | null };
-
-  let email = u.email ?? null;
-  if (!email) {
-    const emailsRes = await fetch("https://api.github.com/user/emails", { headers });
-    if (emailsRes.ok) {
-      const emails = (await emailsRes.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-      const pick = emails.find((e) => e.primary && e.verified) ?? emails.find((e) => e.verified);
-      email = pick?.email ?? null;
-    }
-  }
-  if (!email) throw new Error("GitHub did not return a verified email address.");
-  return {
-    email,
-    name: u.name || u.login || email.split("@")[0] || "User",
-    avatarUrl: u.avatar_url ?? null,
   };
 }
