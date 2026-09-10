@@ -67,6 +67,7 @@ export function Studio() {
   const [cloneName, setCloneName] = useState("");
   const [cloneFile, setCloneFile] = useState<File | null>(null);
   const [cloneRefText, setCloneRefText] = useState("");
+  const [cloneConsent, setCloneConsent] = useState(false);
   const [cloneSaving, setCloneSaving] = useState(false);
 
   const nameFor = useCallback(
@@ -112,6 +113,7 @@ export function Studio() {
       fd.append("file", cloneFile);
       fd.append("name", cloneName.trim());
       if (cloneRefText.trim()) fd.append("refText", cloneRefText.trim());
+      fd.append("consent", String(cloneConsent));
       const r = await http.upload<{ profile: CloneProfile }>("/tts/clone/profiles", fd, { timeout: 300_000 });
       await refreshCloneProfiles();
       studio.setVoiceId(`clone:${r.profile.id}`);
@@ -119,6 +121,7 @@ export function Studio() {
       setCloneName("");
       setCloneFile(null);
       setCloneRefText("");
+      setCloneConsent(false);
       toast.success("Voice cloned", `"${r.profile.name}" is ready — generate away.`);
     } catch (e) {
       toast.error("Cloning failed", (e as Error).message);
@@ -622,7 +625,7 @@ export function Studio() {
             <Button variant="ghost" onClick={() => setCloneModalOpen(false)} disabled={cloneSaving}>
               Cancel
             </Button>
-            <Button onClick={submitClone} loading={cloneSaving} disabled={!cloneFile || !cloneName.trim()} icon={<Upload className="h-4 w-4" />}>
+            <Button onClick={submitClone} loading={cloneSaving} disabled={!cloneFile || !cloneName.trim() || !cloneConsent} icon={<Upload className="h-4 w-4" />}>
               {cloneSaving ? "Cloning…" : "Clone voice"}
             </Button>
           </div>
@@ -662,6 +665,18 @@ export function Studio() {
               className="w-full resize-y rounded-input border border-gray-700 bg-gray-900 px-3.5 py-2.5 text-sm text-white placeholder-gray-500 transition-colors focus:border-blue-500"
             />
           </div>
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-input border border-gray-800 bg-gray-900/50 px-3.5 py-3 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={cloneConsent}
+              onChange={(e) => setCloneConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-blue-500"
+            />
+            <span>
+              This is my voice, or I have the speaker's explicit permission to clone it. Cloning someone's voice
+              without consent may be illegal where you live.
+            </span>
+          </label>
         </div>
       </Modal>
 

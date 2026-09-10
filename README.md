@@ -208,11 +208,20 @@ An optional sidecar in [`voiceclone/`](voiceclone/README.md) runs
 [OmniVoice](https://github.com/k2-fsa/OmniVoice) (zero-shot voice cloning,
 600+ languages) next to the app. Upload a 3–10 s reference clip in the
 Studio's **Cloned voices** tab, generate with your cloned voice, and the audio
-flows through the exact same subtitles + video pipeline. Reuse is instant —
-cloned voices are saved as profiles. Set `VOICECLONE_URL` in `server/.env`
-(pointing at the running sidecar, default `http://localhost:8100`) to enable
-it; quickstart, GPU/CPU notes, and API details are in
-[voiceclone/README.md](voiceclone/README.md).
+flows through the exact same subtitles + video pipeline.
+
+- **Multi-user safe.** Cloned voices are owned per-user by this API (reference
+  clips under `<dataDir>/voice-clips/<userId>/`); the sidecar is stateless and
+  only ever sees "one clip + one text" per request.
+- **Runs anywhere.** Localhost next to the API, or free/always-on options —
+  Hugging Face Space (free CPU), Oracle Cloud Always Free VM, or your home PC
+  behind a free Cloudflare Tunnel. See
+  [voiceclone/README.md](voiceclone/README.md#4-free-hosting-no-home-pc-required).
+  Set `VOICECLONE_TOKEN` on both ends whenever it's not localhost.
+- **Degrades gracefully.** Unset/offline sidecar → the UI hides the tab.
+- **Controllable cost.** Same character quota as neural voices, plus
+  `VOICECLONE_MIN_PLAN` (default `FREE`) if you want to reserve cloning for
+  paying tiers.
 
 The Node API proxies it under `/api/v1/tts/clone*`: quota accounting and auth
 are identical to `/tts/synthesize`. OmniVoice doesn't emit word timings, so

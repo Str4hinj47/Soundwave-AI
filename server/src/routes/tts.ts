@@ -6,7 +6,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
 import { usageLimiter, uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
-import { PLANS } from "../lib/plans.js";
+import { PLANS, type Plan } from "../lib/plans.js";
+import { config } from "../config.js";
 import { getVoice } from "../lib/voices.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 import {
@@ -110,8 +111,21 @@ router.post("/synthesize", requireAuth, usageLimiter, validate({ body: synthesiz
 });
 
 // ── Voice cloning (OmniVoice sidecar) ───────────────────────────────────────
-// All routes degrade gracefully when VOICECLONE_URL is unset: /clone/status
-// reports it and the UI hides the feature.
+// Cloned voices are owned per-user by THIS API (reference clips stored under
+// <dataDir>/voice-clips/<userId>/); the sidecar itself stays stateless so it
+// can run on ephemeral free hosting. Everything degrades gracefully when
+// VOICECLONE_URL is unset: /clone/status reports it and the UI hides the
+// feature.
+
+const PLAN_RANK: Record<Plan, number> = { FREE: 0, PRO: 1, ENTERPRISE: 2 };
+
+/** Plan gate for voice cloning (config: VOICECLONE_MIN_PLAN, default FREE). */
+function assertClonePlan(user: { plan: Plan }): void {
+  const min = (config.voiceCloneMinPlan in PLAN_RANK ? config.voiceCloneMinPlan : "FREE") as Plan;
+  if (PLAN_RANK[user.plan] < PLAN_RANK[min]) {
+    throw new ApiError(403, "PLAN_REQUIRED", `Voice cloning requires the ${min} plan or higher. Upgrade to use cloned voices.`);
+  }
+}
 
 router.get("/clone/status", requireAuth, async (_req, res, next) => {
   try {
@@ -122,10 +136,10 @@ router.get("/clone/status", requireAuth, async (_req, res, next) => {
   }
 });
 
-router.get("/clone/profiles", requireAuth, async (_req, res, next) => {
+router.get("/clone/profiles", requireAuth, async (req, res, next) => {
   try {
     assertConfigured();
-    res.json({ profiles: await listCloneProfiles() });
+    res.json({ profiles: await listCloneProfiles(req.user!.id) });
   } catch (e) {
     next(e);
   }
@@ -136,18 +150,21 @@ const refUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 const createProfileSchema = z.object({
   name: z.string().min(1).max(80),
   refText: z.string().max(2000).optional(),
+  // "true" when the user confirmed they have rights to clone the voice.
+  consent: z.string().optional(),
 });
 
 router.post("/clone/profiles", requireAuth, uploadLimiter, refUpload.single("file"), async (req, res, next) => {
   try {
     assertConfigured();
+    assertClonePlan(req.user!);
     if (!req.file) throw new ApiError(400, "NO_FILE", "Attach a reference audio clip (3–10s of clean speech).");
     const parsed = createProfileSchema.safeParse(req.body);
     if (!parsed.success) throw new ApiError(400, "VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid profile data.");
     if (!sniffAudio(req.file.buffer)) {
       throw new ApiError(400, "INVALID_FILE", "The reference clip must be a WAV, MP3, FLAC, OGG, or M4A audio file.");
     }
-    const profile = await createCloneProfile({
+    const profile = await createCloneProfile(req.user!.id, {
       name: parsed.data.name.trim(),
       audio: req.file.buffer,
       filename: req.file.originalname || "reference.wav",
@@ -163,7 +180,7 @@ router.post("/clone/profiles", requireAuth, uploadLimiter, refUpload.single("fil
 router.delete("/clone/profiles/:id", requireAuth, async (req, res, next) => {
   try {
     assertConfigured();
-    await deleteCloneProfile(req.params.id ?? "");
+    await deleteCloneProfile(req.user!.id, req.params.id ?? "");
     res.status(204).end();
   } catch (e) {
     next(e);
@@ -177,10 +194,11 @@ const cloneSchema = z.object({
 });
 
 // Cloned-voice synthesis — same response shape as /synthesize (MP3 base64 +
-// word timings), same quota accounting.
+// word timings), same quota accounting. Only the owner's voices can be used.
 router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema }), async (req, res, next) => {
   try {
     assertConfigured();
+    assertClonePlan(req.user!);
     const { text, profileId, speed } = req.body as z.infer<typeof cloneSchema>;
 
     const quota = await getQuotaFor(req.user!.id);
@@ -189,7 +207,7 @@ router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema })
       throw new ApiError(403, "QUOTA_EXCEEDED", "You've reached your monthly character limit. Upgrade to Pro for more.");
     }
 
-    const result = await synthesizeClone({ text, profileId, speed });
+    const result = await synthesizeClone(req.user!.id, { text, profileId, speed });
 
     const store = await getStore();
     await store.addUsageLog({

@@ -2,11 +2,18 @@
 
 A small FastAPI service that runs [OmniVoice](https://github.com/k2-fsa/OmniVoice)
 (zero-shot voice cloning, 600+ languages) next to the Soundwave AI backend.
-The Node API proxies to it (`POST /api/v1/tts/clone`, `/profiles`); you never
-call this service directly from the browser.
+The Node API proxies to it (`POST /api/v1/tts/clone`, `/clone/profiles`); you
+never call this service directly from the browser.
 
-It holds the model in memory — start it **once** and leave it running beside
-`server` and `frontend`, in its own terminal.
+It holds the model in memory and is **stateless**: each generation request
+carries the reference clip with it (`POST /clone/ephemeral`), so cloned voices
+are owned per-user by the Node API and can survive this service restarting on
+free/ephemeral hosting. (A standalone `/profiles` + `/clone` CRUD API still
+exists for direct, non-Soundwave use.)
+
+When `VOICECLONE_URL` points at anything other than localhost, set
+`VOICECLONE_TOKEN` **on both sides** — the sidecar then requires
+`Authorization: Bearer <token>` on every endpoint except `/health`.
 
 ---
 
@@ -76,30 +83,89 @@ the feature off (the UI hides it automatically).
 
 - **Apple Silicon:** default torch wheels + `OMNIVOICE_DEVICE=mps`.
 
-## 4. Environment variables
+## 4. Free hosting (no home PC required)
+
+You built this on your own PC — but you don't need your PC on 24/7 to offer
+cloning on the live site. Free options, in order of practicality:
+
+### A) Hugging Face Spaces — free CPU, sleeps when idle
+
+A Docker Space runs this folder as-is on a free 2-vCPU / 16 GB machine.
+Expect ~1–3 min cold start when it has been idle (the model is baked into
+the image, so no re-download) and several seconds per generation — fine for
+a personal site.
+
+1. [Create a new Space](https://huggingface.co/new-space) → **SDK: Docker**, any name, visibility *public* (private Spaces need HF auth that our proxy doesn't use; the token below is your real protection).
+2. Copy the `voiceclone/` folder somewhere, where it becomes the Space repo:
+   - rename `Space.README.md` → `README.md` (HF requires its front-matter),
+   - `git init && git add -A && git commit -m init`,
+   - `git remote add hf https://huggingface.co/spaces/<you>/<space>` and push.
+3. In the Space → **Settings → Variables and secrets** → add secret `VOICECLONE_TOKEN` (long random string).
+4. In your API's `.env`: `VOICECLONE_URL=https://<you>-<space>.hf.space` and the same `VOICECLONE_TOKEN`.
+
+### B) Oracle Cloud "Always Free" ARM VM — truly always on, $0
+
+A free Ampere A1 VM (up to 4 cores / 24 GB RAM) runs the container image
+permanently. Signup needs a card for identity (never charged); ARM capacity
+can be out of stock at busy times — retry or pick another region.
+
+Setup once the VM is up (Ubuntu):
+```bash
+curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER  # log back in
+docker build -t voiceclone ./voiceclone
+docker run -d --restart unless-stopped -p 8100:7860 \
+  -e VOICECLONE_TOKEN=<shared-secret> voiceclone
+```
+Then `VOICECLONE_URL=http://<vm-ip>:8100` (+ the token). Cleanest: put the VM
+and your API host on a free [Tailscale](https://tailscale.com) network so the
+port isn't internet-facing at all.
+
+### C) Your home PC, when it's on — Cloudflare Tunnel (free)
+
+The app already **hides the cloned voices automatically** whenever the
+sidecar is unreachable, so this "sometimes available" pattern works fine:
+
+```powershell
+winget install cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:8100
+```
+Set `VOICECLONE_URL` to the `trycloudflare.com` URL it prints (+ token) on
+your deployed API. Cloning works while your PC runs; the Studio politely
+explains it's offline otherwise. Zero cost either way.
+
+## 5. Environment variables
 
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `OMNIVOICE_MODEL` | `k2-fsa/OmniVoice` | HF model id or local path |
 | `OMNIVOICE_DEVICE` | `cpu` | `cpu`, `cuda:0`, `mps`, `xpu` |
 | `OMNIVOICE_DTYPE` | `float32` on CPU, else `float16` | model precision |
-| `VOICECLONE_HOST` / `VOICECLONE_PORT` | `127.0.0.1` / `8100` | bind address |
-| `VOICECLONE_PROFILES_DIR` | `./profiles` | where cloned voices live |
+| `VOICECLONE_TOKEN` | — (no auth) | REQUIRED on any non-localhost deployment; must match the Node API |
+| `VOICECLONE_HOST` / `VOICECLONE_PORT` | `127.0.0.1` / `8100` | bind address (main.py path; the Dockerfile uses `$PORT`) |
+| `VOICECLONE_PROFILES_DIR` | `./profiles` | standalone `/profiles` CRUD storage (not used by the Node API) |
 | `OMNIVOICE_MOCK` | — | `1` = no model, sine-wave output (dev/tests, no downloads) |
 
-## 5. Notes & tips
+Node API side (`.env`): `VOICECLONE_URL`, `VOICECLONE_TOKEN`,
+`VOICECLONE_TIMEOUT_MS`, and `VOICECLONE_MIN_PLAN` (`FREE` default — set `PRO`
+to reserve cloning for paying users if the GPU costs you money).
+
+## 6. Notes & tips
 
 - **Reference clip:** 3–10 s of clean, single-speaker speech, same language as
   your target text. Longer clips slow inference and can hurt quality.
+- **Per request cost:** because the service is stateless, each generation
+  re-embeds the reference clip (and re-transcribes it with Whisper if no
+  transcript was given). Both are small compared to the actual synthesis;
+  providing the transcript text when creating the voice removes the
+  transcription cost entirely.
 - **Word timings:** OmniVoice returns audio only. The Node API derives evenly
   weighted word timings from the text + duration so the subtitle editor still
   auto-populates cues; nudge cue boundaries by hand for perfect sync.
 - **Concurrency:** one generation at a time per sidecar (the model is held on
-  one device under a lock). Run more sidecars on different ports for parallel
-  traffic.
+  one device under a lock). Run more replicas for parallel traffic.
 - The service binds to `127.0.0.1` by default — only local processes can use
-  your GPU/CPU time. Pass `--host 0.0.0.0` only if the Node API runs on
-  another machine (put it behind auth in that case).
+  your GPU/CPU time. Expose it beyond localhost **only with `VOICECLONE_TOKEN`
+  set** (the Dockerfile binds `0.0.0.0`).
 
 ### Testing without a GPU/model
 

@@ -1,11 +1,18 @@
+import fsp from "node:fs/promises";
+import path from "node:path";
+import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { config, resolveFfmpegPath } from "../config.js";
 import { ApiError } from "../middleware/error.js";
 
-// ── OmniVoice sidecar client ────────────────────────────────────────────────
-// The actual cloning happens in the Python service (voiceclone/) which holds
-// the model in memory. Everything here is a thin, well-behaved proxy with
-// timeouts and friendly errors.
+// ── OmniVoice sidecar client + per-user cloned-voice storage ────────────────
+// Cloning happens in the Python service (voiceclone/), which is STATELESS for
+// our purposes: the Node API owns each user's cloned voices (reference clips +
+// names, stored under <dataDir>/voice-clips/<userId>/) and sends the clip
+// along with every generation request. That keeps cloned voices scoped to
+// their owner, and lets the sidecar run on ephemeral free hosting
+// (Hugging Face Space, Oracle Free Tier, a tunnel to a home PC) — nothing
+// needs to persist there.
 
 export interface CloneProfile {
   id: string;
@@ -14,12 +21,21 @@ export interface CloneProfile {
   hasRefText: boolean;
 }
 
+interface ProfileMeta extends CloneProfile {
+  refText?: string;
+  ext: string;
+}
+
 export function voiceCloneConfigured(): boolean {
   return config.voiceCloneUrl.length > 0;
 }
 
 function base(): string {
   return config.voiceCloneUrl.replace(/\/+$/, "");
+}
+
+function authHeaders(): Record<string, string> {
+  return config.voiceCloneToken ? { Authorization: `Bearer ${config.voiceCloneToken}` } : {};
 }
 
 class SidecarError extends Error {
@@ -34,41 +50,29 @@ async function sidecarFetch(path: string, init: RequestInit = {}, timeoutMs = 15
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(`${base()}${path}`, { ...init, signal: controller.signal });
+    const headers = { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) };
+    return await fetch(`${base()}${path}`, { ...init, headers, signal: controller.signal });
   } catch (e) {
     const err = e as Error;
     if (err.name === "AbortError") {
-      throw new SidecarError(504, "The voice-cloning service took too long to respond. Try shorter text, or give it more time (CPU generation is slow).");
+      throw new SidecarError(504, "The voice-cloning service took too long to respond. Try shorter text, shorter reference audio, or give the service more time (CPU generation is slow).");
     }
     throw new SidecarError(
       503,
-      "The voice-cloning service isn't reachable. Start it (see voiceclone/README.md: `uvicorn server:app --port 8100`) and set VOICECLONE_URL.",
+      "The voice-cloning service isn't reachable. Start it (see voiceclone/README.md) and set VOICECLONE_URL — the feature hides itself automatically while it's down.",
     );
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function sidecarJson<T>(path: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<T> {
-  const res = await sidecarFetch(path, init, timeoutMs);
-  if (!res.ok) {
-    let detail = `Voice-clone service error (${res.status})`;
-    try {
-      const body = (await res.json()) as { detail?: string };
-      if (typeof body.detail === "string") detail = body.detail;
-    } catch {
-      /* keep default */
-    }
-    throw new SidecarError(res.status === 404 ? 404 : 502, detail);
-  }
-  return (await res.json()) as T;
-}
-
 function toApiError(e: unknown): ApiError {
+  if (e instanceof ApiError) return e;
   if (e instanceof SidecarError) {
     if (e.status === 503) return new ApiError(503, "VOICECLONE_UNAVAILABLE", e.message);
     if (e.status === 504) return new ApiError(504, "VOICECLONE_TIMEOUT", e.message);
-    if (e.status === 404) return new ApiError(404, "VOICE_PROFILE_NOT_FOUND", e.message);
+    if (e.status === 401) return new ApiError(502, "VOICECLONE_AUTH", "Voice-clone service rejected our token — VOICECLONE_TOKEN must match on the API and the sidecar.");
+    if (e.status === 400) return new ApiError(400, "VALIDATION_ERROR", e.message);
     return new ApiError(502, "VOICECLONE_ERROR", e.message);
   }
   return new ApiError(502, "VOICECLONE_ERROR", (e as Error)?.message ?? "Voice cloning failed.");
@@ -94,40 +98,84 @@ export async function probeVoiceClone(): Promise<boolean> {
   }
 }
 
-export async function listCloneProfiles(): Promise<CloneProfile[]> {
+// ── Per-user profile storage (files on local disk) ──────────────────────────
+
+const AUDIO_EXT = [".wav", ".mp3", ".flac", ".ogg", ".m4a"] as const;
+
+function userDir(userId: string): string {
+  // userId is a server-generated id (uuid-ish); sanitize defensively anyway.
+  const safe = userId.replace(/[^a-zA-Z0-9_-]/g, "");
+  return path.join(config.dataDir, "voice-clips", safe);
+}
+
+function indexPath(userId: string): string {
+  return path.join(userDir(userId), "index.json");
+}
+
+async function readIndex(userId: string): Promise<ProfileMeta[]> {
   try {
-    return await sidecarJson<CloneProfile[]>("/profiles");
-  } catch (e) {
-    throw toApiError(e);
+    return JSON.parse(await fsp.readFile(indexPath(userId), "utf8")) as ProfileMeta[];
+  } catch {
+    return [];
   }
 }
 
-export async function createCloneProfile(input: {
+async function writeIndex(userId: string, items: ProfileMeta[]): Promise<void> {
+  await fsp.mkdir(userDir(userId), { recursive: true });
+  await fsp.writeFile(indexPath(userId), JSON.stringify(items, null, 2));
+}
+
+export async function listCloneProfiles(userId: string): Promise<CloneProfile[]> {
+  const items = await readIndex(userId);
+  return items.map(({ id, name, createdAt, hasRefText }) => ({ id, name, createdAt, hasRefText }));
+}
+
+export async function createCloneProfile(userId: string, input: {
   name: string;
   audio: Buffer;
   filename: string;
   mimeType: string;
   refText?: string;
 }): Promise<CloneProfile> {
-  try {
-    const fd = new FormData();
-    fd.append("file", new Blob([new Uint8Array(input.audio)], { type: input.mimeType }), input.filename);
-    fd.append("name", input.name);
-    if (input.refText) fd.append("refText", input.refText);
-    // Prompt creation runs Whisper when no transcript is given — generous timeout.
-    return await sidecarJson<CloneProfile>("/profiles", { method: "POST", body: fd }, 300_000);
-  } catch (e) {
-    throw toApiError(e);
-  }
+  const id = crypto.randomUUID();
+  const ext = extFor(input.filename);
+  const meta: ProfileMeta = {
+    id,
+    name: input.name,
+    createdAt: new Date().toISOString(),
+    hasRefText: Boolean(input.refText?.trim()),
+    refText: input.refText?.trim() || undefined,
+    ext,
+  };
+  await fsp.mkdir(userDir(userId), { recursive: true });
+  await fsp.writeFile(path.join(userDir(userId), `${id}${ext}`), input.audio);
+  const items = await readIndex(userId);
+  items.push(meta);
+  await writeIndex(userId, items);
+  const { id: pid, name, createdAt, hasRefText } = meta;
+  return { id: pid, name, createdAt, hasRefText };
 }
 
-export async function deleteCloneProfile(id: string): Promise<void> {
-  try {
-    await sidecarJson<unknown>(`/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
-  } catch (e) {
-    throw toApiError(e);
-  }
+async function loadProfile(userId: string, profileId: string): Promise<ProfileMeta> {
+  if (!/^[0-9a-fA-F-]{10,64}$/.test(profileId))
+    throw new ApiError(404, "VOICE_PROFILE_NOT_FOUND", "Voice profile not found — it doesn't belong to this account.");
+  const meta = (await readIndex(userId)).find((p) => p.id === profileId);
+  if (!meta) throw new ApiError(404, "VOICE_PROFILE_NOT_FOUND", "Voice profile not found — it doesn't belong to this account.");
+  return meta;
 }
+
+export async function deleteCloneProfile(userId: string, profileId: string): Promise<void> {
+  const meta = await loadProfile(userId, profileId);
+  await writeIndex(userId, (await readIndex(userId)).filter((p) => p.id !== profileId));
+  await fsp.rm(path.join(userDir(userId), `${meta.id}${meta.ext}`), { force: true });
+}
+
+function extFor(filename: string): string {
+  const lower = filename.toLowerCase();
+  return AUDIO_EXT.find((e) => lower.endsWith(e)) ?? ".wav";
+}
+
+// ── Generation ──────────────────────────────────────────────────────────────
 
 export interface CloneSynthResult {
   audioBase64: string;
@@ -136,22 +184,29 @@ export interface CloneSynthResult {
   wordTimings: { word: string; start: number; end: number }[];
 }
 
-export async function synthesizeClone(input: {
+export async function synthesizeClone(userId: string, input: {
   text: string;
   profileId: string;
   speed?: number;
 }): Promise<CloneSynthResult> {
+  const meta = await loadProfile(userId, input.profileId);
+  const clipPath = path.join(userDir(userId), `${meta.id}${meta.ext}`);
+  let clip: Buffer;
+  try {
+    clip = await fsp.readFile(clipPath);
+  } catch {
+    throw new ApiError(404, "VOICE_PROFILE_NOT_FOUND", "The reference clip for this voice is missing — recreate the voice.");
+  }
+
+  const fd = new FormData();
+  fd.append("file", new Blob([new Uint8Array(clip)], { type: inputMime(meta.ext) }), `reference${meta.ext}`);
+  fd.append("text", input.text);
+  if (meta.refText) fd.append("refText", meta.refText);
+  if (input.speed != null) fd.append("speed", String(input.speed));
+
   let res: Response;
   try {
-    res = await sidecarFetch(
-      "/clone",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: input.text, profileId: input.profileId, ...(input.speed != null ? { speed: input.speed } : {}) }),
-      },
-      config.voiceCloneTimeoutMs,
-    );
+    res = await sidecarFetch("/clone/ephemeral", { method: "POST", body: fd }, config.voiceCloneTimeoutMs);
   } catch (e) {
     throw toApiError(e);
   }
@@ -163,7 +218,7 @@ export async function synthesizeClone(input: {
     } catch {
       /* keep default */
     }
-    throw toApiError(new SidecarError(res.status === 404 ? 404 : 502, detail));
+    throw toApiError(new SidecarError(res.status, detail));
   }
 
   const wav = Buffer.from(await res.arrayBuffer());
@@ -178,6 +233,16 @@ export async function synthesizeClone(input: {
     // auto-cueing keeps working (mirrors the client-side estimator).
     wordTimings: estimateWordTimings(input.text, duration),
   };
+}
+
+function inputMime(ext: string): string {
+  switch (ext) {
+    case ".mp3": return "audio/mpeg";
+    case ".flac": return "audio/flac";
+    case ".ogg": return "audio/ogg";
+    case ".m4a": return "audio/mp4";
+    default: return "audio/wav";
+  }
 }
 
 /** WAV (stdin) → MP3 (stdout) via ffmpeg pipes — no temp files. */

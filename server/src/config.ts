@@ -42,6 +42,12 @@ export const config = {
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
   // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
   voiceCloneUrl: str("VOICECLONE_URL", ""),
+  // Shared secret for the sidecar — REQUIRED when VOICECLONE_URL is a public
+  // URL (Hugging Face Space, tunnel, remote GPU host). Must match the
+  // sidecar's own VOICECLONE_TOKEN.
+  voiceCloneToken: str("VOICECLONE_TOKEN", ""),
+  // Minimum plan allowed to clone/generate with cloned voices.
+  voiceCloneMinPlan: str("VOICECLONE_MIN_PLAN", "FREE"),
   voiceCloneTimeoutMs: int("VOICECLONE_TIMEOUT_MS", 600_000), // CPU cloning is slow
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),

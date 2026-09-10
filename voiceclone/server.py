@@ -21,12 +21,13 @@ import io
 import json
 import math
 import os
+import secrets
 import threading
 import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -58,6 +59,48 @@ if not MOCK:
     except Exception as e:  # noqa: BLE001 — surface a clean startup failure
         print(f"[voiceclone] FATAL: failed to load OmniVoice: {e}", flush=True)
         raise
+
+
+def _build_prompt(ref_path: Path, ref_text: str | None):
+    """Create a VoiceClonePrompt from a reference clip (Whisper ASR when no transcript)."""
+    with model_lock:
+        return model.create_voice_clone_prompt(
+            ref_audio=str(ref_path),
+            **({"ref_text": ref_text} if ref_text and ref_text.strip() else {}),
+        )
+
+
+def _render(req: "CloneRequest", prompt) -> "tuple[bytes, float]":
+    kwargs: dict = {"voice_clone_prompt": prompt}
+    if req.speed is not None:
+        kwargs["speed"] = req.speed
+    if req.numStep is not None:
+        kwargs["num_step"] = req.numStep
+    try:
+        with model_lock:
+            audio = model.generate(text=req.text, **kwargs)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Generation failed: {e}") from e
+    samples = audio[0]
+    duration = len(samples) / SAMPLE_RATE
+    buf = io.BytesIO()
+    import soundfile as sf
+
+    sf.write(buf, samples, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+    return buf.getvalue(), duration
+
+
+# ── API-token guard (set VOICECLONE_TOKEN when the service is on a public URL) ─
+API_TOKEN = os.environ.get("VOICECLONE_TOKEN", "").strip()
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    if not API_TOKEN:
+        return  # no token configured → local/trusted-network mode
+    prefix = "bearer "
+    token = authorization[len(prefix):] if authorization and authorization.lower().startswith(prefix) else None
+    if not token or not secrets.compare_digest(token, API_TOKEN):
+        raise HTTPException(401, "Invalid or missing bearer token.")
 
 # ── Profile index ────────────────────────────────────────────────────────────
 index_lock = threading.Lock()
@@ -93,7 +136,7 @@ def health() -> dict:
     return {"ok": True, "model_loaded": MOCK or model is not None, "device": "mock" if MOCK else DEVICE, "mock": MOCK}
 
 
-@app.get("/profiles")
+@app.get("/profiles", dependencies=[Depends(require_token)])
 def list_profiles() -> list[dict]:
     return [
         {"id": p["id"], "name": p["name"], "createdAt": p["createdAt"], "hasRefText": bool(p.get("refText"))}
@@ -101,7 +144,7 @@ def list_profiles() -> list[dict]:
     ]
 
 
-@app.post("/profiles", status_code=201)
+@app.post("/profiles", status_code=201, dependencies=[Depends(require_token)])
 async def create_profile(
     file: UploadFile = File(...),
     name: str = Form(...),
@@ -125,14 +168,10 @@ async def create_profile(
         prompt_path.write_bytes(b"mock-prompt")
     else:
         try:
-            from omnivoice import OmniVoice  # noqa: F401  (model already loaded)
-
-            with model_lock:
-                prompt = model.create_voice_clone_prompt(
-                    ref_audio=str(ref_path),
-                    **({"ref_text": refText} if refText and refText.strip() else {}),
-                )
-                prompt.save(str(prompt_path))
+            _build_prompt(ref_path, refText).save(str(prompt_path))
+        except HTTPException:
+            ref_path.unlink(missing_ok=True)
+            raise
         except Exception as e:  # noqa: BLE001
             ref_path.unlink(missing_ok=True)
             raise HTTPException(500, f"Failed to clone this reference clip: {e}") from e
@@ -149,7 +188,7 @@ async def create_profile(
     return {"id": profile_id, "name": entry["name"], "createdAt": entry["createdAt"], "hasRefText": bool(entry["refText"])}
 
 
-@app.delete("/profiles/{profile_id}")
+@app.delete("/profiles/{profile_id}", dependencies=[Depends(require_token)])
 def delete_profile(profile_id: str) -> dict:
     if _get_profile(profile_id) is None:
         raise HTTPException(404, "Voice profile not found.")
@@ -166,7 +205,7 @@ class CloneRequest(BaseModel):
     numStep: int | None = Field(default=None, ge=4, le=64)
 
 
-@app.post("/clone")
+@app.post("/clone", dependencies=[Depends(require_token)])
 def clone(req: CloneRequest) -> Response:
     profile = _get_profile(req.profileId)
     if profile is None:
@@ -180,24 +219,54 @@ def clone(req: CloneRequest) -> Response:
         prompt_path = PROFILES_DIR / f"{req.profileId}.pt"
         if not prompt_path.exists():
             raise HTTPException(404, "Voice prompt file is missing — recreate this profile.")
-        kwargs: dict = {"voice_clone_prompt": VoiceClonePrompt.load(str(prompt_path))}
-        if req.speed is not None:
-            kwargs["speed"] = req.speed
-        if req.numStep is not None:
-            kwargs["num_step"] = req.numStep
+        wav, duration = _render(req, VoiceClonePrompt.load(str(prompt_path)))
+    return _wav_response(wav, duration)
+
+
+# Stateless variant: the reference clip is sent inline with each request —
+# no profiles stored in the sidecar. This is what the Soundwave Node API uses,
+# so cloned voices are owned per-user by the API and this service can run on
+# ephemeral free hosting without persistence.
+@app.post("/clone/ephemeral", dependencies=[Depends(require_token)])
+async def clone_ephemeral(
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    refText: str | None = Form(None),
+    speed: float | None = Form(None),
+    numStep: int | None = Form(None),
+) -> Response:
+    if not text or len(text) > 10_000:
+        raise HTTPException(400, "Text is required (max 10,000 chars).")
+    data = await file.read()
+    if len(data) < 1000 or len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "The reference clip must be between 1 KB and 25 MB.")
+
+    if MOCK:
+        wav, duration = _mock_wav(text)
+    else:
+        import tempfile
+
+        fd, tmp = tempfile.mkstemp(suffix=_ext_for(file.filename))
         try:
-            with model_lock:
-                audio = model.generate(text=req.text, **kwargs)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            req = CloneRequest(
+                text=text,
+                profileId="ephemeral",
+                speed=speed if speed is None else min(2.0, max(0.5, speed)),
+                numStep=numStep if numStep is None else min(64, max(4, numStep)),
+            )
+            wav, duration = _render(req, _build_prompt(Path(tmp), refText))
+        except HTTPException:
+            raise
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(500, f"Generation failed: {e}") from e
-        samples = audio[0]
-        duration = len(samples) / SAMPLE_RATE
-        buf = io.BytesIO()
-        import soundfile as sf
+            raise HTTPException(500, f"Failed to clone this reference clip: {e}") from e
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+    return _wav_response(wav, duration)
 
-        sf.write(buf, samples, SAMPLE_RATE, format="WAV", subtype="PCM_16")
-        wav = buf.getvalue()
 
+def _wav_response(wav: bytes, duration: float) -> Response:
     return Response(
         content=wav,
         media_type="audio/wav",
