@@ -289,6 +289,12 @@ router.post("/resend-verification", requireAuth, async (req, res, next) => {
 });
 
 // ── OAuth (Google) — authorization-code flow ────────────────────────────────
+// Public capability check — lets the auth UI hide the Google button when
+// OAuth isn't configured instead of redirecting users to an error page.
+router.get("/providers", (_req, res) => {
+  res.json({ providers: { google: oauthEnabled("google") } });
+});
+
 //  1. GET /oauth/:provider            → 302 to the provider with a state cookie
 //  2. GET /oauth/:provider/callback   → verify state, exchange code, sign in
 

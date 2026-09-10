@@ -13,6 +13,7 @@ import { http } from "../lib/api";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { GoogleIcon } from "../components/GoogleIcon";
+import { useOAuthProviders } from "../hooks/useOAuthProviders";
 import type { UserProfile } from "../lib/types";
 
 const schema = z
@@ -47,6 +48,7 @@ export function SignUp() {
   const [serverError, setServerError] = useState("");
   const { setUser } = useAuth();
   const navigate = useNavigate();
+  const oauth = useOAuthProviders();
 
   const {
     register,
@@ -97,17 +99,23 @@ export function SignUp() {
       <h1 className="text-2xl font-bold text-white">Create your account</h1>
       <p className="mt-1 text-sm text-gray-400">Start generating voice content in seconds.</p>
 
-      <div className="mt-6">
-        <Button variant="outline" type="button" fullWidth onClick={startOAuth}>
-          <GoogleIcon className="h-5 w-5" /> Continue with Google
-        </Button>
-      </div>
+      {/* OAuth button only renders when the server has Google configured —
+          otherwise it would dead-end at a "not available" page. */}
+      {oauth?.google && (
+        <>
+          <div className="mt-6">
+            <Button variant="outline" type="button" fullWidth onClick={startOAuth}>
+              <GoogleIcon className="h-5 w-5" /> Continue with Google
+            </Button>
+          </div>
 
-      <div className="my-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-gray-800" />
-        <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-        <span className="h-px flex-1 bg-gray-800" />
-      </div>
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-gray-800" />
+            <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
+            <span className="h-px flex-1 bg-gray-800" />
+          </div>
+        </>
+      )}
 
       <motion.form onSubmit={handleSubmit(onSubmit)} noValidate animate={isSubmitted && Object.keys(errors).length > 0 ? { x: [0, -6, 6, -4, 4, 0] } : {}} transition={{ duration: 0.4 }} className="space-y-4">
         <TextField label="Full Name" type="text" autoComplete="name" placeholder="Ada Lovelace" error={errors.name?.message} {...register("name")} />

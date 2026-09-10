@@ -25,6 +25,12 @@ beforeAll(async () => {
 });
 
 describe("OAuth flow", () => {
+  it("reports provider availability so the UI can hide unconfigured buttons", async () => {
+    const res = await request(app).get("/api/v1/auth/providers");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ providers: { google: false } }); // no creds in the test env
+  });
+
   it("redirects to not_configured when no credentials are set", async () => {
     const res = await request(app).get("/api/v1/auth/oauth/google");
     expect(res.status).toBe(302);
