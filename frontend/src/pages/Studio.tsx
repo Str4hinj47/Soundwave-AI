@@ -4,6 +4,7 @@ import {
   Captions,
   Download,
   Film,
+  FolderOpen,
   Gauge,
   Mic,
   Pause,
@@ -225,6 +226,22 @@ export function Studio() {
   };
 
   const download = async () => {
+    if (!tts.audioBlob) return;
+    // If the generated audio is already in the requested format (Edge/cloned
+    // voices are MP3, the offline voice is WAV), download it as-is — faster,
+    // lossless, and doesn't depend on client-side encoders.
+    const byMime: Record<string, string> = {
+      "audio/mpeg": "mp3",
+      "audio/mp3": "mp3",
+      "audio/wav": "wav",
+      "audio/x-wav": "wav",
+      "audio/wave": "wav",
+      "audio/ogg": "ogg",
+    };
+    if (byMime[tts.audioBlob.type] === format) {
+      downloadBlob(tts.audioBlob, `soundwave-${studio.voiceId}-${Date.now()}.${format}`);
+      return;
+    }
     if (!tts.audioBuffer) return;
     setEncoding(true);
     try {
@@ -323,6 +340,9 @@ export function Studio() {
           <p className="text-sm text-gray-400">Generate professional voice audio with Microsoft Neural voices.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" icon={<FolderOpen className="h-4 w-4" />} onClick={() => navigate("/projects")}>
+            Saved projects
+          </Button>
           <Badge tone="green" dot>Microsoft Neural</Badge>
           {tts.engine === "clone" && <Badge tone="violet">OmniVoice clone</Badge>}
           {tts.engine === "offline" && <Badge tone="amber">Demo fallback</Badge>}

@@ -19,6 +19,7 @@ import { SubtitleEditor } from "./pages/SubtitleEditor";
 import { VideoCompositor } from "./pages/VideoCompositor";
 import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
+import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
 import { NotFound } from "./pages/NotFound";
 
@@ -170,6 +171,16 @@ export default function App() {
             <RequireAuth>
               <AppShell>
                 <Settings />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/help"
+          element={
+            <RequireAuth>
+              <AppShell>
+                <Help />
               </AppShell>
             </RequireAuth>
           }

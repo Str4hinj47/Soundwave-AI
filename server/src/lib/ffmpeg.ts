@@ -17,6 +17,9 @@ export interface ExportSettings {
   audioVolume?: number; // 0..1
   fadeIn?: number; // seconds
   fadeOut?: number; // seconds
+  /** How long the output runs (seconds). Defaults to the audio length when
+   *  set by the route; the video input is looped/truncated to match. */
+  duration?: number;
 }
 
 export interface SubtitleStyleInput {
@@ -274,7 +277,16 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
 
     const vf = `${scaleFilter},subtitles=${assPath}`;
 
-    const args: string[] = ["-y", "-hide_banner", "-loglevel", "error", "-i", videoPath, "-i", audioPath];
+    // How long the output runs: explicit duration (audio length or the
+    // user's chosen end), else the subtitle timeline end, else 10s.
+    const outDuration =
+      settings.duration && settings.duration > 0
+        ? settings.duration
+        : params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
+
+    // -stream_loop -1: a background clip shorter than the voice loops until
+    // the output length is reached, so the voiceover is never cut off.
+    const args: string[] = ["-y", "-hide_banner", "-loglevel", "error", "-stream_loop", "-1", "-i", videoPath, "-i", audioPath];
 
     // Audio chain: volume + fades (applied only when specified).
     const afParts: string[] = [];
@@ -285,9 +297,7 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
       afParts.push(`afade=t=in:st=0:d=${clamp(settings.fadeIn, 0, 30).toFixed(2)}`);
     }
     if (settings.fadeOut && settings.fadeOut > 0) {
-      // Compute a fallback duration from subtitles; exact end handled by -shortest.
-      const total = params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
-      const st = Math.max(0, total - settings.fadeOut);
+      const st = Math.max(0, outDuration - settings.fadeOut);
       afParts.push(`afade=t=out:st=${st.toFixed(2)}:d=${clamp(settings.fadeOut, 0, 30).toFixed(2)}`);
     }
 
@@ -305,7 +315,8 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
       args.push("-c:v", "libvpx-vp9", "-crf", String(crf), "-b:v", "0", "-cpu-used", String(cpu), "-row-mt", "1", "-c:a", "libopus", "-b:a", "160k");
     }
 
-    args.push("-r", String(fps), "-shortest", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", outputPath);
+    // -t decides the end (min of audio; video loops or truncates to fit).
+    args.push("-r", String(fps), "-t", outDuration.toFixed(3), "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", outputPath);
 
     const ffmpeg = resolveFfmpegPath();
     const child = spawn(ffmpeg, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -315,8 +326,7 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
       const txt = d.toString();
       const dm = txt.match(/out_time_ms=(\d+)/);
       if (!duration) {
-        // determine duration lazily from first out_time reporting? use probe already done by caller; fallback 1
-        duration = params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
+        duration = settings.duration && settings.duration > 0 ? settings.duration : params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
       }
       if (dm) {
         const ms = parseInt(dm[1]!, 10) / 1000;

@@ -6,6 +6,9 @@ import {
   FileVideo,
   Monitor,
   Music,
+  Pause,
+  Play,
+  Scissors,
   Smartphone,
   Trash2,
   Upload,
@@ -16,7 +19,7 @@ import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
 import { cn } from "../lib/cn";
-import { formatBytes } from "../lib/format";
+import { formatBytes, formatDuration } from "../lib/format";
 import { decodeAudioBlob } from "../lib/audio";
 import { Waveform } from "../components/Waveform";
 import { Button } from "../components/ui/Button";
@@ -24,6 +27,7 @@ import { Select } from "../components/ui/Select";
 import { Slider } from "../components/ui/Slider";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Badge } from "../components/ui/Badge";
+import { Toggle } from "../components/ui/Toggle";
 import { ColorPicker } from "../components/ui/ColorPicker";
 import { subtitleStyleToCss, subtitlePosition } from "../lib/subtitleStyle";
 import { PLANS, type Plan } from "../lib/plans";
@@ -78,6 +82,7 @@ export function VideoCompositor() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState<string>("");
+  const [exportError, setExportError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -85,9 +90,115 @@ export function VideoCompositor() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewW, setPreviewW] = useState(0);
 
+  // ── Preview transport (play/pause with the actual voiceover audible) ──────
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const rafRef = useRef<number>(0);
+  const [playing, setPlaying] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // ── Video length: auto-end at voiceover end (default) or a manual cut ─────
+  const [fitToVoice, setFitToVoice] = useState(true);
+  const [trimEnd, setTrimEnd] = useState(0); // 0 = natural end
+
   const cues: SubtitleCue[] = studio.cues;
   const style = studio.subtitleStyle;
-  const duration = studio.audioBuffer?.duration ?? studio.lastDuration;
+  const audioDuration = studio.audioBuffer?.duration ?? studio.lastDuration;
+  const hasAudio = studio.audioBlob != null;
+  const naturalMax = Math.max(audioDuration, videoDuration, 1);
+  /** How long the composed video runs on the timeline/export. */
+  const timelineEnd = fitToVoice
+    ? Math.max(audioDuration, 0.1)
+    : trimEnd > 0
+      ? Math.min(trimEnd, naturalMax)
+      : naturalMax;
+  // Back-compat alias used by the timeline rendering below.
+  const duration = timelineEnd;
+
+  // Object URL for voiceover playback in the preview.
+  useEffect(() => {
+    if (!studio.audioBlob) {
+      setAudioUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(studio.audioBlob);
+    setAudioUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setAudioUrl(null);
+    };
+  }, [studio.audioBlob]);
+
+  // Preview volume follows the export volume slider.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = Math.min(1, Math.max(0, audioVolume / 100));
+  }, [audioVolume]);
+
+  const stopRaf = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+  };
+
+  const pausePreview = useCallback(() => {
+    audioRef.current?.pause();
+    const v = videoRef.current;
+    if (v) v.pause();
+    stopRaf();
+    setPlaying(false);
+  }, []);
+
+  const playPreview = useCallback(() => {
+    const a = audioRef.current;
+    const v = videoRef.current;
+    if (!a?.currentSrc && !v?.src) return;
+
+    // If we're at (or past) the end, restart from the beginning.
+    if (timelineEnd > 0 && currentTime >= timelineEnd - 0.05) {
+      setCurrentTime(0);
+      if (a) a.currentTime = 0;
+      if (v) v.currentTime = 0;
+    }
+    if (a?.currentSrc) void a.play().catch(() => undefined);
+    if (v?.src) void v.play().catch(() => undefined);
+    setPlaying(true);
+
+    stopRaf();
+    const tick = () => {
+      // The voiceover is the master clock; fall back to the video element.
+      const t = a?.currentSrc && !a.paused ? a.currentTime : v ? v.currentTime : 0;
+      setCurrentTime(t);
+      if (timelineEnd > 0 && t >= timelineEnd) {
+        pausePreview();
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [currentTime, pausePreview, timelineEnd]);
+
+  // Sync elements when the user seeks (waveform click) or time jumps.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v && Math.abs(v.currentTime - currentTime) > 0.25) v.currentTime = currentTime;
+    const a = audioRef.current;
+    if (a && a.currentSrc && (a.paused || !playing) && Math.abs(a.currentTime - currentTime) > 0.25) {
+      a.currentTime = currentTime;
+    }
+  }, [currentTime, playing]);
+
+  // Stop when the voiceover ends naturally.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) a.onended = () => pausePreview();
+    return stopRaf;
+  }, [pausePreview, audioUrl]);
+
+  // Reset transport when the audio/video source changes.
+  useEffect(() => {
+    pausePreview();
+    setCurrentTime(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioUrl, videoUrl]);
 
   // Measure the preview box so subtitle px values scale with its real width.
   // Exports are laid out against a 1280-unit reference, so the rendered text
@@ -210,7 +321,9 @@ export function VideoCompositor() {
     setExporting(true);
     setExportProgress(0);
     setExportStatus("Uploading audio…");
+    setExportError(null);
     setDownloadUrl(null);
+    pausePreview();
     try {
       // 1. Upload client-generated audio for FFmpeg compositing (the only upload).
       const afd = new FormData();
@@ -218,7 +331,7 @@ export function VideoCompositor() {
       const audioRes = await http.upload<{ fileKey: string }>("/upload/audio", afd);
 
       setExportStatus("Starting export…");
-      // 2. Start the export job.
+      // 2. Start the export job. Not sending videoEnd = "end with the voice".
       const start = await http.post<{ jobId: string }>("/export/video", {
         videoFileKey,
         audioFileKey: audioRes.fileKey,
@@ -233,6 +346,7 @@ export function VideoCompositor() {
           audioVolume: audioVolume / 100,
           fadeIn,
           fadeOut,
+          ...(!fitToVoice && trimEnd > 0 ? { videoEnd: Math.min(trimEnd, naturalMax) } : {}),
         },
       });
 
@@ -265,6 +379,7 @@ export function VideoCompositor() {
       toast.success("Export complete", "Your video is ready to download.");
     } catch (e) {
       setExportStatus("FAILED");
+      setExportError((e as Error).message);
       toast.error("Export failed", (e as Error).message);
     } finally {
       setExporting(false);
@@ -302,10 +417,20 @@ export function VideoCompositor() {
               style={{ aspectRatio: aspect === "9:16" ? "9 / 16" : "16 / 9" }}
             >
               {videoUrl ? (
-                <video ref={videoRef} src={videoUrl} className="h-full w-full object-contain" muted playsInline />
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="h-full w-full object-contain"
+                  muted
+                  playsInline
+                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  onEnded={() => !hasAudio && pausePreview()}
+                />
               ) : (
                 <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
               )}
+              {/* Voiceover playback for the preview — the master clock. */}
+              {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" preload="auto" />}
               {activeCue && (
                 <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition({ ...style, margin: style.margin * k }) }}>
                   <div
@@ -330,6 +455,33 @@ export function VideoCompositor() {
                   <span className="flex items-center gap-2 text-sm"><FileVideo className="h-5 w-5" /> No video — solid background</span>
                 </div>
               )}
+            </div>
+
+            {/* Transport controls */}
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => (playing ? pausePreview() : playPreview())}
+                disabled={!audioUrl && !videoUrl}
+                aria-label={playing ? "Pause preview" : "Play preview"}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-glow transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+              >
+                {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-sm tabular-nums text-white">
+                  {formatDuration(Math.min(currentTime, timelineEnd))}
+                  <span className="text-gray-500"> / {formatDuration(timelineEnd)}</span>
+                </p>
+                <p className="text-xs text-gray-500">
+                  {!audioUrl && !videoUrl
+                    ? "Generate a voiceover to preview playback"
+                    : `${playing ? "Previewing" : "Preview"} with voice + subtitles${!fitToVoice && trimEnd > 0 ? ` · ends at ${formatDuration(Math.min(trimEnd, naturalMax))}` : " · ends at voice end"}`}
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => { pausePreview(); setCurrentTime(0); }} disabled={!audioUrl && !videoUrl}>
+                Back to start
+              </Button>
             </div>
 
             {/* Timeline */}
@@ -502,6 +654,45 @@ export function VideoCompositor() {
                   </p>
                 )}
               </div>
+
+              {/* Length — how long the finished video runs */}
+              <div className="rounded-card border border-gray-800 bg-gray-900/50 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-gray-200">
+                      <Scissors className="h-4 w-4 text-blue-400" /> End video with the voice
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {hasAudio
+                        ? `Both video and subtitles stop at ${formatDuration(audioDuration)} — right when the voiceover finishes.`
+                        : "Generate a voiceover to enable length options."}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={fitToVoice}
+                    onChange={(v) => setFitToVoice(v)}
+                    disabled={!hasAudio}
+                    label="End video with the voice"
+                  />
+                </div>
+                {!fitToVoice && (
+                  <div className="mt-3 border-t border-gray-800 pt-3">
+                    <Slider
+                      label="End video at"
+                      value={trimEnd > 0 ? trimEnd : naturalMax}
+                      onChange={(v) => setTrimEnd(Math.min(v, naturalMax))}
+                      min={0.5}
+                      max={Math.max(naturalMax, 1)}
+                      step={0.5}
+                      format={(v) => `${formatDuration(v)}${Math.abs(v - naturalMax) < 0.01 ? " (video end)" : ""}`}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Cuts the video early (e.g. let the voice end, then stop). Footage shorter than the voice loops automatically.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="mb-1.5 block text-sm text-gray-300">Resolution</label>
                 <Select
@@ -553,6 +744,12 @@ export function VideoCompositor() {
               <div className="mt-4">
                 <ProgressBar value={exportProgress} tone="default" label="Export progress" />
                 <p className="mt-2 text-center text-sm text-gray-400">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
+              </div>
+            )}
+            {exportError && !exporting && (
+              <div className="mt-4 rounded-input border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-relaxed text-red-200">
+                <p className="font-semibold text-red-300">Export failed</p>
+                <p className="mt-0.5 break-words">{exportError}</p>
               </div>
             )}
             {downloadUrl && !exporting && (

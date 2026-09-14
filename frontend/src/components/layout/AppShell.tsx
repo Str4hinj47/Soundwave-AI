@@ -128,13 +128,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
 
-          <a
-            href="mailto:support@soundwave.ai"
-            className="mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-gray-800 hover:text-white"
+          <NavLink
+            to="/help"
+            className={({ isActive }) =>
+              cn(
+                "mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                isActive ? "bg-blue-500/10 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
+              )
+            }
           >
             <HelpCircle className="h-5 w-5" />
             Help & Support
-          </a>
+          </NavLink>
         </div>
       </nav>
 

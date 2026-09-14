@@ -9,7 +9,7 @@ import { ApiError } from "../middleware/error.js";
 import { getStore } from "../lib/store.js";
 import { PLANS, dimensionsFor, resolutionAllowed, type ResolutionKey } from "../lib/plans.js";
 import { runFfmpegExport, probeMedia, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { filePath } from "./upload.js";
 import { config } from "../config.js";
 
@@ -39,9 +39,42 @@ const exportSchema = z.object({
     audioVolume: z.number().min(0).max(2).optional(),
     fadeIn: z.number().min(0).max(30).optional(),
     fadeOut: z.number().min(0).max(30).optional(),
+    // Optional: cut the video at this many seconds. When omitted the export
+    // ends exactly when the voiceover does.
+    videoEnd: z.number().min(0.1).max(7200).optional(),
   }),
   projectId: z.string().nullable().default(null),
 });
+
+// ── FFmpeg availability (cached) ────────────────────────────────────────────
+// Failing fast with an actionable message beats a puzzling FAILED job — the
+// number-one cause of "export doesn't work" on a fresh Windows install.
+let ffmpegCheck: { ok: boolean; path: string } | null = null;
+
+function ffmpegAvailable(): { ok: boolean; path: string } {
+  if (ffmpegCheck) return ffmpegCheck;
+  const p = resolveFfmpegPath();
+  try {
+    const r = spawnSync(p, ["-version"], { stdio: "ignore" });
+    ffmpegCheck = { ok: r.status === 0, path: p };
+  } catch {
+    ffmpegCheck = { ok: false, path: p };
+  }
+  return ffmpegCheck;
+}
+
+function assertFfmpeg(): void {
+  const c = ffmpegAvailable();
+  if (!c.ok) {
+    throw new ApiError(
+      503,
+      "FFMPEG_UNAVAILABLE",
+      process.platform === "win32"
+        ? "FFmpeg wasn't found on this computer. Install it once with `winget install ffmpeg` in PowerShell, then restart the server (a new terminal is opened so PATH refreshes), and export will work."
+        : `FFmpeg wasn't found on this server (looked for "${c.path}"). Install it (e.g. \`sudo apt install ffmpeg\`) or set FFMPEG_PATH, then restart.`,
+    );
+  }
+}
 
 function isVideoAllowed(plan: "FREE" | "PRO" | "ENTERPRISE", res: ResolutionKey): boolean {
   return resolutionAllowed(plan, res);
@@ -50,6 +83,7 @@ function isVideoAllowed(plan: "FREE" | "PRO" | "ENTERPRISE", res: ResolutionKey)
 // ── Start export job ────────────────────────────────────────────────────────
 router.post("/video", requireAuth, validate({ body: exportSchema }), async (req, res, next) => {
   try {
+    assertFfmpeg();
     const body = req.body as z.infer<typeof exportSchema>;
     const store = await getStore();
     const plan = PLANS[req.user!.plan];
@@ -80,9 +114,17 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
     } else {
       const audioProbe = await probeMedia(audioPath).catch(() => null);
       const subtitleEnd = body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0);
-      const seconds = Math.min(3600, Math.max(1, Math.ceil((audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
+      const seconds = Math.min(3600, Math.max(1, Math.ceil((body.exportSettings.videoEnd ?? audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
       videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user!.id);
     }
+
+    // How long the output runs: the user's chosen end if given, else exactly
+    // as long as the voiceover (resolved here; the video loops or truncates).
+    const audioProbe = await probeMedia(audioPath).catch(() => null);
+    const outDuration =
+      body.exportSettings.videoEnd ??
+      (audioProbe?.duration && audioProbe.duration > 0 ? audioProbe.duration : undefined) ??
+      (body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0) || 10);
 
     const settings: ExportSettings = {
       resolution: dims,
@@ -93,6 +135,7 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
       audioVolume: body.exportSettings.audioVolume,
       fadeIn: body.exportSettings.fadeIn,
       fadeOut: body.exportSettings.fadeOut,
+      duration: outDuration > 0 ? outDuration : undefined,
     };
 
     const job = await store.createJob({
@@ -160,11 +203,6 @@ async function processJob(
 
   let lastPct = 2;
   try {
-    // Probe durations for accurate progress.
-    const probe = await probeMedia(params.videoPath).catch(() => ({ duration: 0, width: 0, height: 0, hasVideo: true, hasAudio: false }));
-    const total = Math.max(probe.duration, params.subtitles.reduce((m, c) => Math.max(m, c.end), 0), 1);
-    void total;
-
     await runFfmpegExport({
       videoPath: params.videoPath,
       audioPath: params.audioPath,
@@ -188,7 +226,7 @@ async function processJob(
   } catch (e) {
     const message = (e as Error)?.message ?? "Export failed";
     await store.updateJob(jobId, { status: "FAILED", errorMessage: message.slice(0, 400), completedAt: new Date().toISOString() });
-    emitJob(jobId, { status: "FAILED", error: "EXPORT_FAILED" });
+    emitJob(jobId, { status: "FAILED", error: message.slice(0, 400) });
   } finally {
     // Clean up temp inputs (the compositing inputs, not the final output).
     try {
