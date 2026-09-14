@@ -242,7 +242,7 @@ export class JsonStore implements DataStore {
       passwordResetExpires: null,
       name,
       avatarUrl: null,
-      plan: "FREE",
+      plan: config.defaultSignupPlan,
       stripeCustomerId: null,
       stripeSubscriptionId: null,
       charactersUsedThisMonth: 0,

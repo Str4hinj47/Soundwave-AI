@@ -49,6 +49,12 @@ export const config = {
   // Minimum plan allowed to clone/generate with cloned voices.
   voiceCloneMinPlan: str("VOICECLONE_MIN_PLAN", "FREE"),
   voiceCloneTimeoutMs: int("VOICECLONE_TIMEOUT_MS", 600_000), // CPU cloning is slow
+  // Plan assigned to NEW accounts. Keep FREE for any production deployment;
+  // bump to ENTERPRISE locally to test everything (4K export, full quota).
+  defaultSignupPlan: ((): "FREE" | "PRO" | "ENTERPRISE" => {
+    const v = str("DEFAULT_SIGNUP_PLAN", "FREE").toUpperCase();
+    return v === "PRO" || v === "ENTERPRISE" ? v : "FREE";
+  })(),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;
@@ -83,6 +89,15 @@ export function validateConfig(): void {
     if (config.jwtRefreshSecret === defaultRefresh) {
       throw new Error("JWT_REFRESH_SECRET is using the default value. Please set a custom secret in development.");
     }
+  }
+
+  // Non-FREE default plans are for local testing only — yell very loudly if
+  // this ever reaches a production boot.
+  if (config.isProd && config.defaultSignupPlan !== "FREE") {
+    console.error(
+      "[soundwave] ⚠⚠⚠  DEFAULT_SIGNUP_PLAN=" + config.defaultSignupPlan +
+      " — new accounts get a paid plan for free. This should NEVER be set in production; remove it before publishing.",
+    );
   }
 }
 

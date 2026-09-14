@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { config } from "../config.js";
 import type {
   DataStore,
   StoredApiKey,
@@ -55,6 +56,7 @@ export class PrismaStore implements DataStore {
         emailVerificationToken: input.emailVerificationToken ?? null,
         emailVerificationExpires: s2d(input.emailVerificationExpires),
         characterResetDate: new Date(),
+        plan: input.plan ?? config.defaultSignupPlan,
       },
     });
     return mapUser(u);

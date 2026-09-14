@@ -77,6 +77,15 @@ describe("voice-clone helpers", () => {
   });
 });
 
+describe("config", () => {
+  it("defaults new accounts to FREE unless DEFAULT_SIGNUP_PLAN is set", async () => {
+    // Guard for the local-testing switch: the shipped default must stay FREE
+    // (env is unset in the test environment, mirroring a fresh .env.example).
+    const { config } = await import("../src/config.js");
+    expect(config.defaultSignupPlan).toBe("FREE");
+  });
+});
+
 describe("ASS subtitle generation", () => {
   it("produces a valid ASS document with styles and events", () => {
     const ass = buildAss(
