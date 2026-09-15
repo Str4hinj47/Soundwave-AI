@@ -5,12 +5,15 @@ import { config } from "../config.js";
 // ── HTTP security headers ───────────────────────────────────────────────────
 // TTS is server-side (Microsoft Neural voices), so no WebAssembly, no Web
 // Workers, and no model CDN are required on the client — the CSP is tight.
+// We allow 'unsafe-inline' for script-src because index.html contains a tiny
+// theme-resolution snippet that must run before first paint to avoid FOUC.
+// It's a static, same-origin snippet with no user input.
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'"],
-      "style-src": ["'self'", "https://fonts.googleapis.com"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       "font-src": ["'self'", "https://fonts.gstatic.com"],
       "img-src": ["'self'", "data:", "blob:"],
       "media-src": ["'self'", "blob:"],
@@ -46,16 +49,7 @@ export const generalLimiter = rateLimit({
   limit: 120,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Try to get user ID from auth cookies for per-user limiting
-    const cookies = req.headers.cookie ?? "";
-    const m = cookies.match(/(?:^|;\s*)access_token=([^;]*)/);
-    if (m && m[1]) {
-      // User is authenticated - key by user identifier (token prefix)
-      return `user:${m[1].substring(0, 16)}`;
-    }
-    return trustIp(req);
-  },
+  keyGenerator: (req) => trustIp(req),
   message: { error: { code: "RATE_LIMITED", message: "Too many requests. Please slow down." } },
 });
 

@@ -196,14 +196,19 @@ export function Projects() {
 }
 
 function ProjectGridCard({ project, selected, onSelect }: { project: ProjectMeta; selected: boolean; onSelect: () => void }) {
+  const open = () => {
+    try { localStorage.setItem("soundwave:last_project_id", project.id); } catch {}
+    const to = project.type === "SUBTITLE" ? "/studio/subtitles" : project.type === "VIDEO" ? "/studio/video" : "/studio";
+    window.location.assign(to);
+  };
   return (
-    <div className={cn("rounded-card border bg-surface p-4 transition-all", selected ? "border-accent" : "border-line hover:border-line-strong")}>
+    <div className={cn("rounded-card border bg-surface p-4 transition-all cursor-pointer", selected ? "border-accent" : "border-line hover:border-line-emphasis")} onClick={open}>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-fg">{project.title}</p>
           <p className="text-xs text-faint">{formatDate(project.createdAt)}</p>
         </div>
-        <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="mt-0.5 h-4 w-4 accent-accent" />
+        <input type="checkbox" checked={selected} onChange={(e) => { e.stopPropagation(); onSelect(); }} onClick={(e) => e.stopPropagation()} aria-label={`Select ${project.title}`} className="mt-0.5 h-4 w-4 accent-accent" />
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Badge tone="blue">{project.type}</Badge>
@@ -216,9 +221,14 @@ function ProjectGridCard({ project, selected, onSelect }: { project: ProjectMeta
 }
 
 function ProjectListRow({ project, selected, onSelect }: { project: ProjectMeta; selected: boolean; onSelect: () => void }) {
+  const open = () => {
+    try { localStorage.setItem("soundwave:last_project_id", project.id); } catch {}
+    const to = project.type === "SUBTITLE" ? "/studio/subtitles" : project.type === "VIDEO" ? "/studio/video" : "/studio";
+    window.location.assign(to);
+  };
   return (
-    <div className={cn("flex items-center gap-3 border-b border-line px-4 py-3 last:border-0", selected && "bg-accent/5")}>
-      <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="h-4 w-4 accent-accent" />
+    <div className={cn("flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 cursor-pointer hover:bg-tint/50", selected && "bg-accent/5")} onClick={open}>
+      <input type="checkbox" checked={selected} onChange={(e) => { e.stopPropagation(); onSelect(); }} onClick={(e) => e.stopPropagation()} aria-label={`Select ${project.title}`} className="h-4 w-4 accent-accent" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-fg">{project.title}</p>
         <p className="truncate text-xs text-faint">{formatDate(project.createdAt)}</p>

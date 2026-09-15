@@ -4,8 +4,7 @@ import { ApiError } from "../middleware/error.js";
 
 const router = Router();
 
-// Voice metadata list (NOT model weights — those are fetched by the browser
-// directly from the Hugging Face CDN).
+// Voice metadata list — Microsoft Neural voices synthesized server-side.
 router.get("/", (_req, res) => {
   res.json({ voices: VOICES });
 });

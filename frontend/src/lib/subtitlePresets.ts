@@ -179,7 +179,7 @@ export const FONT_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export const GOOGLE_FONTS_LINK = `https://fonts.googleapis.com/css2?${FONT_OPTIONS.map(
-  (f) => `family=${f.value.replace(/ /g, "+")}:wght@100;300;400;500;600;700;800;900`,
+  (f) => `family=${f.value.replace(/ /g, "+")}:wght@400;500;600;700`,
 ).join("&")}&display=swap`;
 
 export const COLOR_SWATCHES = [

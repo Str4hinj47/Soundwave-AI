@@ -38,6 +38,7 @@ const exportSchema = z.object({
     audioVolume: z.number().min(0).max(2).optional(),
     fadeIn: z.number().min(0).max(30).optional(),
     fadeOut: z.number().min(0).max(30).optional(),
+    bgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   }),
   projectId: z.string().nullable().default(null),
 });
@@ -68,11 +69,13 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
 
     // Background: solid color if no video uploaded.
     let videoPath: string;
+    let isTempBg = false;
     if (body.videoFileKey) {
       videoPath = filePath(body.videoFileKey);
       if (!fs.existsSync(videoPath)) throw new ApiError(400, "VIDEO_NOT_FOUND", "The video file could not be found. Please re-upload.");
     } else {
-      videoPath = await generateColorVideo(body.exportSettings.resolution, req.user!.id);
+      videoPath = await generateColorVideo(body.exportSettings.resolution, req.user!.id, body.exportSettings.bgColor);
+      isTempBg = true;
     }
 
     const settings: ExportSettings = {
@@ -104,6 +107,7 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
       subtitles: body.subtitleData as SubtitleCueInput[],
       subtitleStyle: body.subtitleStyle as SubtitleStyleInput,
       settings,
+      isTempBg,
     });
 
     res.status(202).json({ jobId: job.id, status: "QUEUED" });
@@ -112,19 +116,31 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
   }
 });
 
-async function generateColorVideo(resolution: ResolutionKey, userId: string): Promise<string> {
+async function generateColorVideo(resolution: ResolutionKey, userId: string, bgColor?: string): Promise<string> {
   const dir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, `${userId}-bg-${Date.now()}.mp4`);
   const { width, height } = RESOLUTIONS[resolution];
-  // lavfi color source → 1s loop; the export ends at audio length via -shortest.
+  const color = (bgColor ?? "#0A0F1C").replace("#", "0x");
+  // Generate a short color clip (60s) — the final export uses -shortest to trim to audio length.
   await new Promise<void>((resolve, reject) => {
     const child = spawn(resolveFfmpegPath(), [
-      "-y", "-f", "lavfi", "-i", `color=c=0x0A0F1C:s=${width}x${height}:d=3600:r=30`,
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", "3600", out,
+      "-y", "-f", "lavfi", "-i", `color=c=${color}:s=${width}x${height}:d=60:r=30`,
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", "60", out,
     ]);
-    child.on("error", reject);
-    child.on("close", (code: number) => (code === 0 ? resolve() : reject(new Error("Background generation failed"))));
+    const timeout = setTimeout(() => {
+      try { child.kill("SIGKILL"); } catch { /* ignore */ }
+      reject(new Error("Background video generation timed out"));
+    }, 60_000);
+    child.on("error", (e) => {
+      clearTimeout(timeout);
+      reject(e);
+    });
+    child.on("close", (code: number) => {
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else reject(new Error("Background generation failed"));
+    });
   });
   return out;
 }
@@ -137,6 +153,7 @@ async function processJob(
     subtitles: SubtitleCueInput[];
     subtitleStyle: SubtitleStyleInput;
     settings: ExportSettings;
+    isTempBg?: boolean;
   },
 ): Promise<void> {
   const store = await getStore();
@@ -178,11 +195,24 @@ async function processJob(
   } catch (e) {
     const message = (e as Error)?.message ?? "Export failed";
     await store.updateJob(jobId, { status: "FAILED", errorMessage: message.slice(0, 400), completedAt: new Date().toISOString() });
-    emitJob(jobId, { status: "FAILED", error: "EXPORT_FAILED" });
+    emitJob(jobId, { status: "FAILED", error: message.slice(0, 400) });
   } finally {
     // Clean up temp inputs (the compositing inputs, not the final output).
+    // Keep uploaded video files (user may re-export), but delete temp bg and uploaded audio after use.
     try {
-      if (params.videoPath.includes("-bg-")) fs.unlinkSync(params.videoPath);
+      if (params.isTempBg) fs.unlinkSync(params.videoPath);
+    } catch { /* ignore */ }
+    try {
+      // Audio files are single-use export artifacts — clean up after 5 min to allow retries.
+      // We delete immediately here but the upload endpoint's tmp is already moved.
+      // The audio file itself should be kept briefly; delete now for disk hygiene.
+      // If it's in uploads root (not jobs), delete it.
+      if (params.audioPath.includes(config.uploadsDir) && !params.audioPath.includes("/jobs/")) {
+        // Delay deletion slightly to allow debugging, but attempt cleanup.
+        setTimeout(() => {
+          try { fs.unlinkSync(params.audioPath); } catch { /* ignore */ }
+        }, 5 * 60 * 1000).unref?.();
+      }
     } catch { /* ignore */ }
   }
 }
@@ -221,26 +251,35 @@ router.get("/jobs/:jobId/events", requireAuth, async (req, res, next) => {
     const job = await store.getJob(req.params.jobId ?? "", req.user!.id);
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
 
-    res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
 
-    const send = (data: Record<string, unknown>) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    const send = (data: Record<string, unknown>) => {
+      try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+    };
     send({ status: job.status, progress: job.progress, outputUrl: job.outputUrl });
+
+    if (job.status === "COMPLETED" || job.status === "FAILED") {
+      res.end();
+      return;
+    }
 
     const onUpdate = (payload: Record<string, unknown>) => {
       send(payload);
       if (payload.status === "COMPLETED" || payload.status === "FAILED") {
         jobEvents.removeListener(job.id, onUpdate);
-        res.end();
+        try { res.end(); } catch { /* ignore */ }
       }
     };
     jobEvents.on(job.id, onUpdate);
 
     req.on("close", () => jobEvents.removeListener(job.id, onUpdate));
-    // Heartbeat.
-    const hb = setInterval(() => res.write(`: hb\n\n`), 15000);
+    const hb = setInterval(() => {
+      try { res.write(`: hb\n\n`); } catch { clearInterval(hb); }
+    }, 15000);
     res.on("close", () => clearInterval(hb));
   } catch (e) {
     next(e);

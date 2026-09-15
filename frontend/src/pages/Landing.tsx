@@ -290,9 +290,9 @@ export function Landing() {
             ))}
           </div>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm">
-            <Badge tone="green" dot>On-device TTS</Badge>
+            <Badge tone="green" dot>Neural TTS</Badge>
             <span className="text-faint">→</span>
-            <Badge tone="gray">No server round-trip</Badge>
+            <Badge tone="gray">Microsoft voices, secure cloud</Badge>
             <span className="mx-3 hidden text-faint sm:inline">|</span>
             <Badge tone="amber" dot>Export path only</Badge>
             <span className="text-faint">→</span>
@@ -310,7 +310,7 @@ export function Landing() {
       <section className="border-t border-line py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h2 className="text-3xl font-semibold tracking-snug text-fg sm:text-4xl">Simple Pricing</h2>
+            <h2 className="text-3xl font-semibold tracking-snug text-fg sm:text-4xl\">Simple Pricing</h2>
             <p className="mx-auto mt-3 max-w-xl text-muted">
               Start free. Upgrade when you need more characters, higher resolutions, and cloud sync.
             </p>
@@ -370,36 +370,44 @@ export function Landing() {
             <div className="col-span-2 md:col-span-1">
               <Logo />
               <p className="mt-4 max-w-xs text-sm text-faint">
-                Text-to-speech, subtitles, and video export — running privately in your browser.
+                Professional text-to-speech with Microsoft Neural voices, custom subtitles, and video export — secure, fast, no setup.
               </p>
             </div>
-            {[
-              { title: "Product", links: ["Features", "Voices", "Pricing", "Studio"] },
-              { title: "Company", links: ["About", "Blog", "Careers", "Contact"] },
-              { title: "Legal", links: ["Privacy Policy", "Terms of Service", "Security"] },
-            ].map((col) => (
-              <div key={col.title}>
-                <h4 className="text-sm font-semibold text-fg">{col.title}</h4>
-                <ul className="mt-4 space-y-2.5">
-                  {col.links.map((l) => (
-                    <li key={l}>
-                      <a href="#" className="text-sm text-muted transition-colors hover:text-fg">
-                        {l}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <div>
+              <h4 className="text-sm font-semibold text-fg">Product</h4>
+              <ul className="mt-4 space-y-2.5">
+                <li><a href="#features" className="text-sm text-muted transition-colors hover:text-fg">Features</a></li>
+                <li><a href="#voices" className="text-sm text-muted transition-colors hover:text-fg">Voices</a></li>
+                <li><Link to="/pricing" className="text-sm text-muted transition-colors hover:text-fg">Pricing</Link></li>
+                <li><Link to="/studio" className="text-sm text-muted transition-colors hover:text-fg">Studio</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-fg">Company</h4>
+              <ul className="mt-4 space-y-2.5">
+                <li><Link to="/pricing" className="text-sm text-muted transition-colors hover:text-fg">About</Link></li>
+                <li><a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-muted transition-colors hover:text-fg">Blog</a></li>
+                <li><a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-muted transition-colors hover:text-fg">Careers</a></li>
+                <li><a href="mailto:hello@soundwave.ai" className="text-sm text-muted transition-colors hover:text-fg">Contact</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-fg">Legal</h4>
+              <ul className="mt-4 space-y-2.5">
+                <li><a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-muted transition-colors hover:text-fg">Privacy Policy</a></li>
+                <li><a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-muted transition-colors hover:text-fg">Terms of Service</a></li>
+                <li><a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-muted transition-colors hover:text-fg">Security</a></li>
+              </ul>
+            </div>
           </div>
           <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-line pt-8 sm:flex-row">
             <p className="text-sm text-faint">© 2026 Soundwave AI. All rights reserved.</p>
             <div className="flex items-center gap-4 text-faint">
-              <a href="#" aria-label="Twitter" className="transition-colors hover:text-fg"><Twitter className="h-5 w-5" /></a>
-              <a href="#" aria-label="GitHub" className="transition-colors hover:text-fg"><Github className="h-5 w-5" /></a>
-              <a href="#" aria-label="LinkedIn" className="transition-colors hover:text-fg"><Linkedin className="h-5 w-5" /></a>
+              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="transition-colors hover:text-fg"><Twitter className="h-5 w-5" /></a>
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" aria-label="GitHub" className="transition-colors hover:text-fg"><Github className="h-5 w-5" /></a>
+              <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="transition-colors hover:text-fg"><Linkedin className="h-5 w-5" /></a>
               <a href="mailto:hello@soundwave.ai" aria-label="Email" className="transition-colors hover:text-fg"><Mail className="h-5 w-5" /></a>
-              <a href="#" aria-label="Website" className="transition-colors hover:text-fg"><Globe className="h-5 w-5" /></a>
+              <Link to="/" aria-label="Website" className="transition-colors hover:text-fg"><Globe className="h-5 w-5" /></Link>
             </div>
           </div>
         </div>
@@ -407,4 +415,3 @@ export function Landing() {
     </div>
   );
 }
-

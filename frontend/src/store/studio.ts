@@ -120,14 +120,25 @@ export const useStudio = create<StudioState>((set) => ({
   addHistory: (r) => set((s) => ({ history: [r, ...s.history].slice(0, 50) })),
   removeHistory: (id) => set((s) => ({ history: s.history.filter((h) => h.id !== id) })),
   reset: () =>
-    set({
-      audioBuffer: null,
-      audioBlob: null,
-      text: "",
-      wordTimings: [],
-      cues: [],
-      activeCueId: null,
-      lastDuration: 0,
-      video: initialVideo,
+    set((s) => {
+      // Revoke any lingering object URLs to avoid leaks.
+      if (s.video.url) {
+        try { URL.revokeObjectURL(s.video.url); } catch { /* ignore */ }
+      }
+      return {
+        audioBuffer: null,
+        audioBlob: null,
+        text: "",
+        voiceId: "en-US-JennyNeural",
+        voiceSettings: { speed: 1.0, pitch: 0, volume: 100 },
+        wordTimings: [],
+        cues: [],
+        subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
+        activeCueId: null,
+        lastDuration: 0,
+        projectName: "Untitled Project",
+        video: initialVideo,
+        history: [],
+      };
     }),
 }));

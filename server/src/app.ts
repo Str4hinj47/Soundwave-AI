@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { config } from "./config.js";
 import { generalLimiter, securityHeaders } from "./lib/security.js";
-import { errorHandler, notFoundHandler } from "./middleware/error.js";
+import { errorHandler, notFoundHandler, requestIdMiddleware } from "./middleware/error.js";
 import authRoutes from "./routes/auth.js";
 import voiceRoutes from "./routes/voices.js";
 import ttsRoutes from "./routes/tts.js";
@@ -22,18 +22,22 @@ export function createApp() {
   app.set("trust proxy", 1);
 
   // CORS — restrict to configured origins in production; permissive in dev.
+  // In production, if CORS_ORIGINS is not set, only same-origin and non-browser
+  // (no Origin header) requests are allowed — never wildcard.
   app.use(
     cors({
       origin: (origin, cb) => {
         if (!origin) return cb(null, true);
         if (!config.isProd) return cb(null, true);
-        if (config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) return cb(null, true);
+        if (config.corsOrigins.length > 0 && config.corsOrigins.includes(origin)) return cb(null, true);
+        if (config.corsOrigins.length === 0 && origin === config.appUrl) return cb(null, true);
         return cb(new Error("Not allowed by CORS"));
       },
       credentials: true,
     }),
   );
 
+  app.use(requestIdMiddleware);
   app.use(securityHeaders);
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());

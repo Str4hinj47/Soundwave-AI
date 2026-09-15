@@ -62,11 +62,14 @@ export function verifyRefreshToken(token: string): RefreshClaims | null {
 }
 
 // ── Cookies ─────────────────────────────────────────────────────────────────
+// Use SameSite=Lax so top-level navigations (OAuth callbacks, normal links)
+// carry the cookies, while still mitigating CSRF. Strict would break OAuth
+// and silent refresh after cross-site navigation.
 export function cookieOpts(ttlMs: number) {
   return {
     httpOnly: true,
     secure: config.isProd || config.appUrl.startsWith("https"),
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
     path: "/",
     maxAge: ttlMs,
   };
@@ -83,15 +86,20 @@ export function setAuthCookies(
   res.cookie("csrf_token", csrfToken, {
     httpOnly: false,
     secure: config.isProd || config.appUrl.startsWith("https"),
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
 
 export function clearAuthCookies(res: Response): void {
+  const base = {
+    path: "/",
+    secure: config.isProd || config.appUrl.startsWith("https"),
+    sameSite: "lax" as const,
+  };
   for (const name of ["access_token", "refresh_token", "csrf_token"]) {
-    res.clearCookie(name, { path: "/" });
+    res.clearCookie(name, base);
   }
 }
 

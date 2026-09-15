@@ -60,23 +60,34 @@ function hit(key: string, limit: number, windowMs: number): { ok: boolean; retry
   const c = counter.get(key);
   if (!c || now - c.windowStart > windowMs) {
     counter.set(key, { count: 1, windowStart: now });
+    // Opportunistic cleanup of stale entries on every new window.
+    if (counter.size > 500) {
+      const cutoff = now - windowMs * 2;
+      for (const [k, v] of counter) {
+        if (v.windowStart < cutoff) counter.delete(k);
+      }
+    }
     return { ok: true, retryAfter: 0 };
   }
   c.count += 1;
   if (c.count > limit) {
     return { ok: false, retryAfter: Math.ceil((c.windowStart + windowMs - now) / 1000) };
   }
-  // Clean up stale entries every 1000 hits to prevent memory leak
-  if (counter.size > 10000) {
-    const cutoff = now - windowMs * 2;
-    for (const [k, v] of counter) {
-      if (v.windowStart < cutoff) counter.delete(k);
-    }
-  }
   return { ok: true, retryAfter: 0 };
 }
 
-const failedLogins = new Map<string, number>();
+const failedLogins = new Map<string, { count: number; firstAt: number }>();
+// Cleanup failed logins every 15 minutes to prevent memory leak.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of failedLogins) {
+    if (now - v.firstAt > 15 * 60 * 1000) failedLogins.delete(k);
+  }
+  // Also clean counter.
+  for (const [k, v] of counter) {
+    if (now - v.windowStart > 60 * 60 * 1000) counter.delete(k);
+  }
+}, 5 * 60 * 1000).unref?.();
 
 // ── Sign up ─────────────────────────────────────────────────────────────────
 router.post("/signup", authSignupLimiter, validate({ body: signupSchema }), async (req, res, next) => {
@@ -116,13 +127,16 @@ router.post("/signin", authLoginLimiter, validate({ body: signinSchema }), async
     if (!user || !user.passwordHash) {
       throw new ApiError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
     }
-    if ((failedLogins.get(user.id) ?? 0) >= 5) {
-      throw new ApiError(403, "CAPTCHA_REQUIRED", "Too many failed attempts. Please complete the CAPTCHA.");
+    const failEntry = failedLogins.get(user.id);
+    if (failEntry && failEntry.count >= 5) {
+      throw new ApiError(403, "CAPTCHA_REQUIRED", "Too many failed attempts. Please try again in 15 minutes.");
     }
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
-      failedLogins.set(user.id, (failedLogins.get(user.id) ?? 0) + 1);
-      const remaining = 5 - (failedLogins.get(user.id) ?? 0);
+      const prev = failedLogins.get(user.id);
+      const count = (prev?.count ?? 0) + 1;
+      failedLogins.set(user.id, { count, firstAt: prev?.firstAt ?? Date.now() });
+      const remaining = 5 - count;
       throw new ApiError(401, "INVALID_CREDENTIALS", remaining > 0 ? `Invalid email or password. ${remaining} attempts remaining.` : "Invalid email or password.");
     }
     failedLogins.delete(user.id);
@@ -227,10 +241,11 @@ router.post("/forgot-password", authLoginLimiter, validate({ body: forgotSchema 
       });
       // Invalidate all existing sessions for this user to prevent token reuse
       await store.deleteAllSessionsForUser(user.id);
-      clearAuthCookies(res);
       await sendMail(passwordResetEmail(user.email, user.name, token));
     }
     // Always success — prevents user enumeration.
+    // Do NOT clear cookies for the requester — that would log out an attacker
+    // who guessed an email, or log out a user who typed someone else's email.
     res.json({ ok: true, message: "If an account exists for that email, a reset link has been sent." });
   } catch (e) {
     next(e);
@@ -364,7 +379,7 @@ router.get("/oauth/:provider/callback", async (req, res, next) => {
       user = await store.createUser({
         name: profile.name,
         email: profile.email,
-        emailVerified: false, // OAuth-verified email requires verification unless explicitly trusted
+        emailVerified: true, // OAuth provider has verified the email
         avatarUrl: profile.avatarUrl,
         passwordHash: null,
       });

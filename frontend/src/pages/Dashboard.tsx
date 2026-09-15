@@ -133,7 +133,7 @@ export function Dashboard() {
             <EmptyState
               icon={<Mic className="h-8 w-8" />}
               title="Create your first project"
-              description="Generate your first voice clip — it takes seconds and runs entirely in your browser."
+              description="Generate your first voice clip — it takes seconds with Microsoft Neural voices, no setup required."
               action={
                 <Link
                   to="/studio"
@@ -147,7 +147,20 @@ export function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.slice(0, 6).map((p) => (
-              <ProjectCard key={p.id} project={p} onOpen={() => navigate("/studio")} onDelete={() => setProjects((prev) => prev.filter((x) => x.id !== p.id))} />
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onOpen={() => {
+                  // Persist selected project id so Studio can load it, then navigate.
+                  try {
+                    localStorage.setItem("soundwave:last_project_id", p.id);
+                  } catch { /* ignore */ }
+                  if (p.type === "SUBTITLE") navigate("/studio/subtitles");
+                  else if (p.type === "VIDEO") navigate("/studio/video");
+                  else navigate("/studio");
+                }}
+                onDelete={() => setProjects((prev) => prev.filter((x) => x.id !== p.id))}
+              />
             ))}
           </div>
         )}

@@ -9,8 +9,8 @@ import { sha256 } from "../lib/auth.js";
 
 const router = Router();
 
-// Enterprise only. API keys grant access to VIDEO EXPORT endpoints only —
-// TTS generation is always client-side.
+// Enterprise only. API keys grant access to video-export endpoints.
+// TTS generation is server-side Microsoft Neural voices.
 router.use(requireAuth, requirePlan("ENTERPRISE"));
 
 router.get("/", async (_req, res, next) => {

@@ -80,6 +80,15 @@ export function VideoCompositor() {
 
   const maxResolutionIdx = RES_ORDER.indexOf(planDef.maxResolution as Resolution);
 
+  // Revoke object URLs on unmount / replacement to avoid leaks.
+  useEffect(() => {
+    return () => {
+      if (videoUrl) {
+        try { URL.revokeObjectURL(videoUrl); } catch { /* ignore */ }
+      }
+    };
+  }, [videoUrl]);
+
   const onFile = useCallback(
     async (file: File) => {
       if (!/video\/(mp4|webm|quicktime)|\.(mp4|mov|webm|avi)$/i.test(file.type + " " + file.name)) {
@@ -96,6 +105,10 @@ export function VideoCompositor() {
         fd.append("file", file);
         const res = await http.upload<{ fileKey: string }>("/upload/video", fd);
         setVideoFileKey(res.fileKey);
+        // Revoke previous URL before creating a new one.
+        if (videoUrl) {
+          try { URL.revokeObjectURL(videoUrl); } catch { /* ignore */ }
+        }
         const url = URL.createObjectURL(file);
         setVideoUrl(url);
         setVideoName(file.name);
@@ -107,7 +120,7 @@ export function VideoCompositor() {
         setUploading(false);
       }
     },
-    [planDef.maxVideoMb, studio],
+    [planDef.maxVideoMb, studio, videoUrl],
   );
 
   const onDrop = (e: React.DragEvent) => {
@@ -117,6 +130,9 @@ export function VideoCompositor() {
   };
 
   const clearVideo = () => {
+    if (videoUrl) {
+      try { URL.revokeObjectURL(videoUrl); } catch { /* ignore */ }
+    }
     setVideoUrl(null);
     setVideoName(null);
     setVideoFileKey(null);
@@ -164,12 +180,14 @@ export function VideoCompositor() {
           audioVolume: audioVolume / 100,
           fadeIn,
           fadeOut,
+          bgColor: videoFileKey ? undefined : bgColor,
         },
       });
 
       // 3. Stream progress via SSE (no polling).
+      // EventSource must include credentials so auth cookies are sent.
       await new Promise<void>((resolve, reject) => {
-        const es = new EventSource(`/api/v1/export/jobs/${start.jobId}/events`);
+        const es = new EventSource(`/api/v1/export/jobs/${start.jobId}/events`, { withCredentials: true } as EventSourceInit);
         es.onmessage = (ev) => {
           try {
             const data = JSON.parse(ev.data) as { status: string; progress: number; outputUrl?: string; error?: string };

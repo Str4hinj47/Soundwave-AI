@@ -80,11 +80,12 @@ function hexToAss(hex: string, opacityPct: number): string {
 
 function assTime(seconds: number): string {
   const s = clamp(seconds, 0, 359999);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const cs = Math.round((sec - Math.floor(sec)) * 100);
-  return `${h}:${String(m).padStart(2, "0")}:${String(Math.floor(sec)).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+  const totalCs = Math.round(s * 100);
+  const h = Math.floor(totalCs / 360000);
+  const m = Math.floor((totalCs % 360000) / 6000);
+  const sec = Math.floor((totalCs % 6000) / 100);
+  const cs = totalCs % 100;
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
 }
 
 function escAss(text: string): string {
@@ -92,7 +93,13 @@ function escAss(text: string): string {
     .replace(/\r/g, "")
     .replace(/\n/g, "\\N")
     .replace(/\{/g, "｛")
-    .replace(/\}/g, "｝");
+    .replace(/\}/g, "｝")
+    .replace(/\u0000/g, "");
+}
+
+function sanitizeFont(name: string): string {
+  // ASS header is comma-delimited; strip commas and control chars.
+  return (name || "Inter").replace(/[,\r\n]/g, "").trim().slice(0, 80) || "Inter";
 }
 
 function alignmentFor(h: SubtitleStyleInput["hAlign"], v: SubtitleStyleInput["vAlign"]): number {
@@ -135,7 +142,7 @@ export function buildAss(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${style.fontFamily ?? "Inter"},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
+    `Style: Default,${sanitizeFont(style.fontFamily ?? "Inter")},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
     `Style: Watermark,Inter,${Math.max(16, Math.round(28 * scale))},${hexToAss("#FFFFFF", 55)},${hexToAss("#FFFFFF", 55)},${hexToAss("#000000", 0)},${hexToAss("#000000", 0)},0,0,0,0,100,100,0,0,1,1,0,9,20,20,20,1`,
     "",
     "[Events]",
@@ -248,6 +255,13 @@ export function probeMedia(filePath: string): Promise<ProbeResult> {
   });
 }
 
+function escapeFilterPath(p: string): string {
+  // Escape for ffmpeg filtergraph: backslash, colon, single-quote need escaping.
+  // Use single-quoted path inside filter and escape ' as \'\'' and \ as \\.
+  // Simpler: escape colon and backslash and wrap in single quotes with proper escaping.
+  return p.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "'\\''");
+}
+
 export function runFfmpegExport(params: ExportParams): Promise<void> {
   return new Promise((resolve, reject) => {
     const { videoPath, audioPath, outputPath, settings, onProgress } = params;
@@ -264,7 +278,7 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
       "utf8",
     );
 
-    const vf = `${scaleFilter},subtitles=${assPath}`;
+    const vf = `${scaleFilter},subtitles='${escapeFilterPath(assPath)}'`;
 
     const args: string[] = ["-y", "-hide_banner", "-loglevel", "error", "-i", videoPath, "-i", audioPath];
 

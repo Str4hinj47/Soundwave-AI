@@ -123,7 +123,12 @@ function ProfileTab() {
 
   const deleteAccount = async () => {
     try {
-      await http.del("/user/account", { password: deletePass });
+      // Try POST endpoint first (DELETE with body can be stripped by proxies).
+      try {
+        await http.post("/user/delete-account", { password: deletePass });
+      } catch {
+        await http.del("/user/account", { password: deletePass });
+      }
       toast.success("Account deleted", "We'll keep your data for 30 days in case you change your mind.");
       await loadSession();
     } catch (e) {
@@ -300,15 +305,21 @@ function PreferencesTab() {
 
   const downloadData = async () => {
     try {
-      const res = await fetch("/api/v1/user/data-export", { credentials: "include" });
+      const csrf = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
+      const res = await fetch("/api/v1/user/data-export", {
+        credentials: "include",
+        headers: csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {},
+      });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "soundwave-data.json";
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
       toast.error("Export failed", (e as Error).message);
     }

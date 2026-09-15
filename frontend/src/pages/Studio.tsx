@@ -77,6 +77,44 @@ export function Studio() {
   useEffect(() => {
     const preset = params.get("voice");
     if (preset && DEFAULT_VOICES.some((v) => v.id === preset)) studio.setVoiceId(preset);
+
+    // Load project if navigated from Dashboard/Projects via localStorage last_project_id.
+    const lastId = (() => {
+      try { return localStorage.getItem("soundwave:last_project_id"); } catch { return null; }
+    })();
+    if (lastId) {
+      try { localStorage.removeItem("soundwave:last_project_id"); } catch { /* ignore */ }
+      void (async () => {
+        try {
+          // Try cloud first.
+          const cloud = await http.get<{ project: ProjectMeta }>(`/projects/${lastId}`).then(r => r.project).catch(() => null);
+          if (cloud) {
+            studio.setText(cloud.textContent ?? "");
+            studio.setVoiceId(cloud.voiceId ?? studio.voiceId);
+            if (cloud.voiceSettings) studio.setVoiceSettings(cloud.voiceSettings as any);
+            studio.setProjectName(cloud.title ?? "Untitled Project");
+            if (cloud.subtitleData && Array.isArray(cloud.subtitleData)) {
+              studio.setCues(cloud.subtitleData as any);
+            }
+            toast.success("Project loaded", cloud.title);
+            return;
+          }
+          // Fallback to local.
+          const { listLocalProjects } = await import("../lib/localProjects");
+          const locals = await listLocalProjects();
+          const local = locals.find(p => p.id === lastId);
+          if (local) {
+            studio.setText(local.textContent ?? "");
+            studio.setVoiceId(local.voiceId ?? studio.voiceId);
+            if (local.voiceSettings) studio.setVoiceSettings(local.voiceSettings as any);
+            studio.setProjectName(local.title ?? "Untitled Project");
+            toast.success("Project loaded", local.title);
+          }
+        } catch {
+          // Ignore load errors.
+        }
+      })();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -127,7 +127,7 @@ export class PrismaStore implements DataStore {
   }
   async listSessionsForUser(userId: string): Promise<StoredSession[]> {
     const rows = await this.prisma.session.findMany({ where: { userId } });
-    return rows.map(mapSession);
+    return (rows as any[]).map(mapSession);
   }
 
   // projects ─────────────────────────────────────────────────────────────────
@@ -141,8 +141,8 @@ export class PrismaStore implements DataStore {
         voiceId: p.voiceId,
         voiceSettings: p.voiceSettings as object,
         characterCount: p.characterCount,
-        subtitleData: p.subtitleData == null ? undefined : (p.subtitleData as Prisma.InputJsonValue),
-        subtitleStyle: p.subtitleStyle == null ? undefined : (p.subtitleStyle as Prisma.InputJsonValue),
+        subtitleData: p.subtitleData == null ? undefined : (p.subtitleData as any),
+        subtitleStyle: p.subtitleStyle == null ? undefined : (p.subtitleStyle as any),
         videoBackgroundUrl: p.videoBackgroundUrl,
         audioUrl: p.audioUrl,
         exportedVideoUrl: p.exportedVideoUrl,
@@ -162,7 +162,7 @@ export class PrismaStore implements DataStore {
       where: { userId, deletedAt: null },
       orderBy: { updatedAt: "desc" },
     });
-    return rows.map(mapProject);
+    return (rows as any[]).map(mapProject);
   }
   async updateProject(id: string, userId: string, patch: Partial<StoredProject>): Promise<StoredProject | null> {
     const p = await this.prisma.project.updateMany({
@@ -173,10 +173,10 @@ export class PrismaStore implements DataStore {
         ...(patch.voiceId !== undefined ? { voiceId: patch.voiceId } : {}),
         ...(patch.voiceSettings !== undefined ? { voiceSettings: patch.voiceSettings as object } : {}),
         ...(patch.subtitleData !== undefined
-          ? { subtitleData: patch.subtitleData === null ? Prisma.JsonNull : (patch.subtitleData as Prisma.InputJsonValue) }
+          ? { subtitleData: patch.subtitleData === null ? (Prisma as any).DbNull ?? null : (patch.subtitleData as any) }
           : {}),
         ...(patch.subtitleStyle !== undefined
-          ? { subtitleStyle: patch.subtitleStyle === null ? Prisma.JsonNull : (patch.subtitleStyle as Prisma.InputJsonValue) }
+          ? { subtitleStyle: patch.subtitleStyle === null ? (Prisma as any).DbNull ?? null : (patch.subtitleStyle as any) }
           : {}),
         ...(patch.videoBackgroundUrl !== undefined ? { videoBackgroundUrl: patch.videoBackgroundUrl } : {}),
         ...(patch.audioUrl !== undefined ? { audioUrl: patch.audioUrl } : {}),
@@ -217,13 +217,13 @@ export class PrismaStore implements DataStore {
       createdAt: row.createdAt.toISOString(),
     };
   }
-  async listUsageLogs(userId: string, limit = 100): Promise<StoredUsageLog[]> {
+  async listUsageLogs(userId: string, limit: number = 100): Promise<StoredUsageLog[]> {
     const rows = await this.prisma.tTSUsageLog.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
       take: limit,
     });
-    return rows.map((r) => ({
+    return (rows as any[]).map((r: any) => ({
       id: r.id,
       userId: r.userId,
       characterCount: r.characterCount,
@@ -275,7 +275,7 @@ export class PrismaStore implements DataStore {
   }
   async listJobs(userId: string): Promise<StoredExportJob[]> {
     const rows = await this.prisma.exportJob.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
-    return rows.map(mapJob);
+    return (rows as any[]).map(mapJob);
   }
   async countJobsSince(userId: string, since: number): Promise<number> {
     return this.prisma.exportJob.count({
@@ -290,19 +290,20 @@ export class PrismaStore implements DataStore {
         userId: k.userId,
         name: k.name,
         keyHash: k.keyHash,
+        prefix: k.prefix,
         lastUsedAt: s2d(k.lastUsedAt),
         expiresAt: s2d(k.expiresAt),
       },
     });
-    return { ...mapApiKey(row), prefix: k.prefix };
+    return { ...mapApiKey(row), prefix: (row as any).prefix || k.prefix };
   }
   async listApiKeys(userId: string): Promise<StoredApiKey[]> {
     const rows = await this.prisma.apiKey.findMany({ where: { userId, revokedAt: null } });
-    return rows.map((r) => ({ ...mapApiKey(r), prefix: r.keyHash.slice(0, 8) }));
+    return (rows as any[]).map((r: any) => ({ ...mapApiKey(r), prefix: (r as any).prefix || r.keyHash.slice(0, 11) }));
   }
   async findApiKeyByHash(hash: string): Promise<StoredApiKey | null> {
     const k = await this.prisma.apiKey.findFirst({ where: { keyHash: hash, revokedAt: null } });
-    return k ? { ...mapApiKey(k), prefix: k.keyHash.slice(0, 8) } : null;
+    return k ? { ...mapApiKey(k), prefix: (k as any).prefix || k.keyHash.slice(0, 11) } : null;
   }
   async updateApiKey(id: string, patch: Partial<StoredApiKey>): Promise<void> {
     await this.prisma.apiKey.update({
@@ -330,7 +331,7 @@ export class PrismaStore implements DataStore {
   }
   async listInvoices(userId: string): Promise<StoredInvoice[]> {
     const rows = await this.prisma.invoice.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
-    return rows.map(mapInvoice);
+    return (rows as any[]).map(mapInvoice);
   }
 }
 

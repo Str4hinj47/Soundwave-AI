@@ -23,7 +23,7 @@ export const config = {
   jwtRefreshSecret: str("JWT_REFRESH_SECRET", "dev-refresh-secret-change-me"),
   jwtAccessTtl: str("JWT_ACCESS_TTL", "15m"),
   jwtRefreshTtl: str("JWT_REFRESH_TTL", "7d"),
-  corsOrigins: (env.CORS_ORIGINS ?? "")
+  corsOrigins: (env.CORS_ORIGINS ?? env.APP_URL ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
@@ -44,17 +44,11 @@ const REQUIRED_PROD = [
   "JWT_ACCESS_SECRET",
   "JWT_REFRESH_SECRET",
   "DATABASE_URL",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
 ];
 
-const REQUIRED_DEV = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
+const REQUIRED_DEV: string[] = [];
 
-/** Validate config — crash in dev if JWT secrets are using defaults. */
+/** Validate config — crash in prod if critical secrets are missing, warn in dev. */
 export function validateConfig(): void {
   const required = config.isProd ? REQUIRED_PROD : REQUIRED_DEV;
   const missing = required.filter((k) => !env[k] || env[k]!.length === 0);
@@ -62,15 +56,17 @@ export function validateConfig(): void {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
 
-  // In development, ensure JWT secrets are not the default values
+  // In development, warn if using default JWT secrets but don't crash — allow zero-config demo.
   if (!config.isProd) {
     const defaultAccess = "dev-access-secret-change-me";
     const defaultRefresh = "dev-refresh-secret-change-me";
-    if (config.jwtAccessSecret === defaultAccess) {
-      throw new Error("JWT_ACCESS_SECRET is using the default value. Please set a custom secret in development.");
+    if (config.jwtAccessSecret === defaultAccess || config.jwtRefreshSecret === defaultRefresh) {
+      console.warn("[soundwave] WARNING: Using default JWT secrets in development. Set JWT_ACCESS_SECRET and JWT_REFRESH_SECRET in .env for better security.");
     }
-    if (config.jwtRefreshSecret === defaultRefresh) {
-      throw new Error("JWT_REFRESH_SECRET is using the default value. Please set a custom secret in development.");
+  } else {
+    // In production, ensure secrets are not defaults and are strong.
+    if (config.jwtAccessSecret.length < 32 || config.jwtRefreshSecret.length < 32) {
+      throw new Error("JWT secrets must be at least 32 characters in production.");
     }
   }
 }

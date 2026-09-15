@@ -105,8 +105,9 @@ function synthesizeOffline(req: SynthRequest): SynthResult {
 
   // Base pitch per voice — male lower, female higher; slight per-voice variation.
   const seed = hashStr(voiceId);
-  const isMale = /^[ab]m/.test(voiceId);
-  const baseF0 = (isMale ? 95 : 175) + (seed % 60);
+  const lower = voiceId.toLowerCase();
+  const isMale = lower.includes("christopher") || lower.includes("guy") || lower.includes("ryan") || lower.includes("-guy") || lower.includes("-ryan") || lower.includes("male");
+  const baseF0 = (isMale ? 95 : 175) + (seed % 40);
   const pitchFactor = Math.pow(2, (settings.pitch ?? 0) / 100);
   const f0 = baseF0 * pitchFactor;
   const speed = clamp(settings.speed ?? 1, 0.5, 2);

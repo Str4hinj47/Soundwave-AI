@@ -8,7 +8,7 @@ export interface PlanDefinition {
   characterLimit: number;
   maxVideoMb: number;
   exportsPerHour: number;
-  maxResolution: "720p" | "1080p" | "4K";
+  maxResolution: "720p" | "1080p" | "1440p" | "4K";
   watermark: boolean;
   cloudSave: boolean;
   maxProjects: number;

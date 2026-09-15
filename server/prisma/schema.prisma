@@ -151,6 +151,7 @@ model ApiKey {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   keyHash    String // store hashed, display prefix only
+  prefix     String    @default("") // first 11 chars of raw key for display
   lastUsedAt DateTime?
   expiresAt  DateTime?
   createdAt  DateTime  @default(now())

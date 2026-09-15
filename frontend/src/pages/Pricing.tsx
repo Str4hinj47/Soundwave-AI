@@ -28,15 +28,15 @@ const FEATURES: FeatureRow[] = [
 const FAQS = [
   {
     q: "Why is the character limit higher than other TTS tools?",
-    a: "Microsoft Neural voices are generated on our servers with no model downloads or GPU required on your device, so the cost per character stays low and we pass that on to you.",
+    a: "Microsoft Neural voices are generated securely on our servers with no model downloads or GPU required on your device, so the cost per character stays low and we pass that on to you.",
   },
   {
-    q: "Does my audio ever leave my device?",
-    a: "For TTS generation, never. Audio is synthesized entirely in your browser. The only time audio touches our servers is if you explicitly initiate a video export, where FFmpeg composites it with your background video and subtitles.",
+    q: "Where is my audio generated?",
+    a: "Audio is synthesized on our servers using Microsoft Neural voices (24 kHz MP3). Your text is used only to synthesize the audio and is never stored. Audio is streamed back to your browser for download, and only uploaded again if you explicitly initiate a video export where FFmpeg composites it with your background video and subtitles.",
   },
   {
     q: "What happens if I exceed my character limit?",
-    a: "Generation is paused until the next billing cycle, or you can upgrade your plan to continue immediately. The limit is enforced server-side via usage reports — your text itself is never sent to us.",
+    a: "Generation is paused until the next billing cycle, or you can upgrade your plan to continue immediately. The limit is enforced server-side before synthesis.",
   },
   {
     q: "Do I need to install or download anything?",
@@ -94,7 +94,7 @@ export function Pricing() {
         <div className="text-center">
           <h1 className="text-4xl font-semibold text-fg sm:text-5xl">Simple, honest pricing</h1>
           <p className="mx-auto mt-4 max-w-xl text-muted">
-            TTS runs on your device, so we charge for the things that cost us: storage, video rendering, and features.
+            We run Microsoft Neural voices on our servers — no setup for you. You pay for characters, storage, video rendering, and pro features.
           </p>
 
           <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-line-strong bg-surface p-1">

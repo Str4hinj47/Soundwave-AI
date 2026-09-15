@@ -7,6 +7,10 @@ const DB_VERSION = 1;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB not available"));
+      return;
+    }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -14,6 +18,12 @@ function openDb(): Promise<IDBDatabase> {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+    req.onblocked = () => {
+      // If blocked, try to resolve with existing connection after short delay.
+      setTimeout(() => {
+        try { resolve(req.result); } catch { reject(req.error); }
+      }, 100);
+    };
   });
 }
 

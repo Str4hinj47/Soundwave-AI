@@ -64,7 +64,7 @@ router.put("/password", requireAuth, validate({ body: passwordSchema }), async (
 });
 
 const deleteSchema = z.object({ password: z.string().min(1).max(100) });
-router.delete("/account", requireAuth, validate({ body: deleteSchema }), async (req, res, next) => {
+async function handleDeleteAccount(req: any, res: any, next: any) {
   try {
     const { password } = req.body as z.infer<typeof deleteSchema>;
     const store = await getStore();
@@ -77,7 +77,9 @@ router.delete("/account", requireAuth, validate({ body: deleteSchema }), async (
   } catch (e) {
     next(e);
   }
-});
+}
+router.delete("/account", requireAuth, validate({ body: deleteSchema }), handleDeleteAccount);
+router.post("/delete-account", requireAuth, validate({ body: deleteSchema }), handleDeleteAccount);
 
 router.get("/usage", requireAuth, async (req, res, next) => {
   try {
@@ -133,11 +135,14 @@ router.get("/data-export", requireAuth, async (req, res, next) => {
 // ── Avatar serving (Content-Disposition: inline) ────────────────────────────
 router.get("/avatar/:key", requireAuth, (req, res, next) => {
   const key = req.params.key ?? "";
-  if (!/^[0-9a-f-]{36}\.[a-z0-9]+$/.test(key)) return next(new ApiError(400, "INVALID_FILE", "Invalid avatar reference."));
+  if (!/^[0-9a-f-]{36}\.(png|jpg|jpeg|webp)$/.test(key)) return next(new ApiError(400, "INVALID_FILE", "Invalid avatar reference."));
   const p = path.join(config.uploadsDir, key);
   if (!fs.existsSync(p)) return next(new ApiError(404, "NOT_FOUND", "Avatar not found."));
-  res.setHeader("Content-Type", "image/png");
+  const ext = path.extname(key).toLowerCase();
+  const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : ext === ".webp" ? "image/webp" : "image/png";
+  res.setHeader("Content-Type", mime);
   res.setHeader("Content-Disposition", "inline");
+  res.setHeader("Cache-Control", "public, max-age=86400");
   fs.createReadStream(p).pipe(res);
 });
 

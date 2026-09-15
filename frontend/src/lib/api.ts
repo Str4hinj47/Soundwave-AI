@@ -21,8 +21,13 @@ export class ApiRequestError extends Error {
 }
 
 function readCookie(name: string): string | null {
-  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]!) : null;
+  try {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${escaped}=([^;]*)`));
+    return m ? decodeURIComponent(m[1]!) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function parseError(res: Response): Promise<ApiRequestError> {
@@ -46,9 +51,13 @@ let refreshing: Promise<boolean> | null = null;
 
 async function refreshSession(): Promise<boolean> {
   if (!refreshing) {
+    const headers: Record<string, string> = {};
+    const csrf = readCookie("csrf_token");
+    if (csrf) headers["X-CSRF-Token"] = csrf;
     refreshing = fetch(`${BASE}/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      headers,
     })
       .then((r) => r.ok)
       .catch(() => false)

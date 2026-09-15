@@ -14,6 +14,10 @@ export default defineConfig({
         target: process.env.API_PROXY_TARGET || "http://localhost:4000",
         changeOrigin: true,
       },
+      "/voice-samples": {
+        target: process.env.API_PROXY_TARGET || "http://localhost:4000",
+        changeOrigin: true,
+      },
     },
   },
   build: {

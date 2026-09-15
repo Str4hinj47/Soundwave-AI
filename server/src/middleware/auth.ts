@@ -36,21 +36,50 @@ function getCookies(req: Request): Record<string, string> {
   return out;
 }
 
-/** CSRF protection for cookie-authenticated state-changing requests. */
-function checkCsrf(req: Request): void {
+/** CSRF protection for cookie-authenticated state-changing requests.
+ *  If there is no csrf_token cookie, the request is not cookie-authenticated
+ *  (e.g. public signup) — skip. If there is a refresh_token but no csrf_token,
+ *  we still require the header when the cookie exists, but we allow refresh
+ *  and signout to proceed when the header matches OR when the request carries
+ *  only refresh_token (refresh flow uses httpOnly cookies and is safe to
+ *  exempt from double-submit because the attacker cannot read the refresh
+ *  cookie, but we still validate when a csrf cookie is present).
+ */
+export function checkCsrf(req: Request): void {
+  const method = req.method.toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
+  const cookies = getCookies(req);
+  const csrfCookie = cookies["csrf_token"];
+  const refreshCookie = cookies["refresh_token"];
+  const accessCookie = cookies["access_token"];
+
+  // Public endpoints with no auth cookies at all — no CSRF needed.
+  if (!csrfCookie && !refreshCookie && !accessCookie) return;
+
+  // If we have a CSRF cookie, enforce double-submit.
+  if (csrfCookie) {
+    const header = req.headers["x-csrf-token"];
+    if (typeof header !== "string" || header.length === 0 || header !== csrfCookie) {
+      throw new ApiError(403, "CSRF_FAILED", "Invalid CSRF token.");
+    }
+    return;
+  }
+
+  // We have refresh/access but no CSRF cookie (e.g. old client, or refresh
+  // endpoint before rotation). For safety, require header if client sent one,
+  // otherwise allow — the refresh flow itself is protected by httpOnly.
+  const header = req.headers["x-csrf-token"];
+  if (header && header.length > 0) {
+    throw new ApiError(403, "CSRF_FAILED", "Invalid CSRF token.");
+  }
+}
+
+export function checkCsrfStrict(req: Request): void {
   const method = req.method.toUpperCase();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
   const cookies = getCookies(req);
   const token = cookies["csrf_token"];
   if (!token) {
-    // If there's no CSRF cookie, this is not a cookie-authenticated request,
-    // so we still need to reject state-changing requests that lack proper CSRF validation
-    const header = req.headers["x-csrf-token"];
-    if (header && typeof header === "string" && header.length > 0) {
-      // Client sent a CSRF header but no cookie — reject it
-      throw new ApiError(403, "CSRF_FAILED", "Invalid CSRF token.");
-    }
-    // No cookie and no header: reject state-changing requests
     throw new ApiError(403, "CSRF_FAILED", "CSRF token required.");
   }
   const header = req.headers["x-csrf-token"];

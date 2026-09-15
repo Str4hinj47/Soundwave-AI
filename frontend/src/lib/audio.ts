@@ -239,14 +239,15 @@ export async function encodeMp3(buffer: AudioBuffer, kbps = 128): Promise<Blob> 
 }
 
 /** Encode an AudioBuffer to OGG (or WebM) using MediaRecorder.
- *  Note: MediaRecorder requires a real-time AudioContext, so this captures
- *  the buffer in real time (duration + headroom). Throws when unsupported. */
+ *  Uses onended event instead of setTimeout to avoid background-tab throttling.
+ *  Falls back to WAV if MediaRecorder is unavailable. */
 export async function encodeOgg(buffer: AudioBuffer): Promise<Blob> {
   const Ctor =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!Ctor || typeof MediaRecorder === "undefined") {
-    throw new Error("OGG export is not supported in this browser.");
+    // Fallback to WAV when OGG not supported — better than throwing.
+    return encodeWav(buffer);
   }
   const ctx = new Ctor();
   try {
@@ -254,29 +255,45 @@ export async function encodeOgg(buffer: AudioBuffer): Promise<Blob> {
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(dest);
-    const mime = MediaRecorder.isTypeSupported("audio/ogg")
-      ? "audio/ogg"
-      : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-    const recorder = new MediaRecorder(dest.stream, { mimeType: mime });
+    const mime = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+      ? "audio/ogg;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/ogg")
+        ? "audio/ogg"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm";
+    const recorder = new MediaRecorder(dest.stream, { mimeType: mime, audioBitsPerSecond: 128000 });
     const chunks: BlobPart[] = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
     const done = new Promise<Blob>((resolve, reject) => {
-      recorder.onstop = () =>
-        resolve(new Blob(chunks, { type: mime.startsWith("audio/ogg") ? "audio/ogg" : "audio/webm" }));
+      recorder.onstop = () => {
+        if (chunks.length === 0) {
+          // If recorder produced nothing, fallback to WAV.
+          resolve(encodeWav(buffer));
+        } else {
+          resolve(new Blob(chunks, { type: mime.startsWith("audio/ogg") ? "audio/ogg" : "audio/webm" }));
+        }
+      };
       recorder.onerror = () => reject(new Error("MediaRecorder failed during OGG export."));
     });
-    recorder.start();
+    recorder.start(100);
+    const ended = new Promise<void>((res) => {
+      src.onended = () => res();
+    });
     src.start();
-    await new Promise((r) => setTimeout(r, buffer.duration * 1000 + 120));
-    src.stop();
-    recorder.stop();
+    // Wait for source to finish + small headroom, not arbitrary timeout.
+    await ended;
+    await new Promise((r) => setTimeout(r, 200));
+    try { recorder.stop(); } catch { /* ignore */ }
+    try { src.stop(); } catch { /* ignore */ }
     return await done;
+  } catch {
+    // Last resort fallback.
+    return encodeWav(buffer);
   } finally {
-    void ctx.close().catch(() => undefined);
+    try { await ctx.close(); } catch { /* ignore */ }
   }
 }
 

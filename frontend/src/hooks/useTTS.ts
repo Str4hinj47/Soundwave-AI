@@ -45,11 +45,13 @@ export interface UseTTS {
 }
 
 /** Studio inserts <break time="500ms"/> tags; the edge-tts API escapes all
- *  markup, so convert pauses to punctuation and drop any other tags. */
+ *  markup, so convert pauses to punctuation and drop SSML-like tags.
+ *  Preserve non-tag uses like "<3" or "a < b" by only stripping tags that
+ *  start with a letter or slash and end with >. */
 export function cleanTextForTTS(text: string): string {
   return text
     .replace(/<break[^>]*\/?>/gi, ", ")
-    .replace(/<[^>]*>/g, "")
+    .replace(/<\/?[a-z][^>]*>/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
