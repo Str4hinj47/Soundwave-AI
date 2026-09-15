@@ -1,7 +1,28 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import path from "node:path";
 
 const env = process.env;
+
+/**
+ * Dev convenience: a fresh clone has no `server/.env` (it is git-ignored), so
+ * `npm run dev` used to crash on the missing JWT secrets. In development we
+ * mint throwaway secrets instead — sessions only survive the process, and a
+ * warning points at `.env.example` for persistent logins. Production keeps the
+ * strict REQUIRED_PROD validation below.
+ */
+if ((env.NODE_ENV ?? "development") !== "production") {
+  for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const) {
+    if (!env[key] || env[key]!.length === 0) {
+      env[key] = `ephemeral-${crypto.randomBytes(24).toString("hex")}`;
+      console.warn(
+        `[soundwave] ${key} is not set — generated an ephemeral dev secret. ` +
+          "Sessions reset on every restart; copy server/.env.example to server/.env " +
+          "and set your own values to keep logins across restarts.",
+      );
+    }
+  }
+}
 
 function str(key: string, fallback: string): string {
   return env[key] && env[key]!.length > 0 ? env[key]! : fallback;

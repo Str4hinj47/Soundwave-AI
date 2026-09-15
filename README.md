@@ -44,10 +44,18 @@ soundwave-ai/
 # 1. Backend
 cd server
 npm install
-cp .env.example .env          # edit JWT_SECRET, APP_URL
-npm run prisma:generate       # optional — used only with a Postgres DSN
+cp .env.example .env          # Windows cmd:  copy .env.example .env
+                              # then replace the two JWT_*_SECRET placeholders
+                              # with your own random values
 npm run dev                   # http://localhost:4000
+```
 
+No `.env` at all? In development the server still boots: it mints ephemeral
+JWT secrets and prints a warning (logins reset on every restart). Create a
+`.env` as above for persistent sessions. `npm run prisma:generate` is only
+needed when you point `DATABASE_URL` at Postgres.
+
+```bash
 # 2. Frontend (separate terminal)
 cd frontend
 npm install
