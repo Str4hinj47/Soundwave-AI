@@ -188,11 +188,11 @@ export function SubtitleEditor() {
   return (
     <div className="mx-auto max-w-7xl">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-card border border-gray-800 bg-panel px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface px-4 py-3">
         <input
           value={studio.projectName}
           onChange={(e) => studio.setProjectName(e.target.value)}
-          className="min-w-0 max-w-[200px] flex-1 rounded-input border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-white transition-colors hover:border-gray-700 focus:border-blue-500"
+          className="min-w-0 max-w-[200px] flex-1 rounded-input border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-fg transition-colors hover:border-line-strong focus:border-accent"
           aria-label="Project name"
         />
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -206,13 +206,13 @@ export function SubtitleEditor() {
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
         {/* Center: preview + cue list */}
         <div className="min-w-0 space-y-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Preview <span className="text-gray-500">(16:9)</span></p>
+              <p className="text-sm font-medium text-fg-soft">Preview <span className="text-faint">(16:9)</span></p>
               <button
                 onClick={() => setShowGrid((g) => !g)}
                 aria-pressed={showGrid}
-                className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", showGrid ? "bg-blue-500/20 text-blue-300" : "text-gray-400 hover:text-white")}
+                className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", showGrid ? "bg-accent/20 text-accent" : "text-muted hover:text-fg")}
               >
                 <Grid3X3 className="h-4 w-4" /> Grid
               </button>
@@ -262,7 +262,7 @@ export function SubtitleEditor() {
                   </div>
                 </motion.div>
               ) : (
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-gray-600">
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-[rgba(255,255,255,0.55)]">
                   {cues.length === 0 ? "No subtitle shown — add a cue below" : "No cue at this time"}
                 </div>
               )}
@@ -271,24 +271,24 @@ export function SubtitleEditor() {
             <div className="mt-4">
               <AudioPlayer ref={playerRef} audioBuffer={studio.audioBuffer} onTimeUpdate={setCurrentTime} />
               {!studio.audioBuffer && (
-                <p className="mt-2 text-sm text-gray-500">
-                  No audio loaded. <button onClick={() => navigate("/studio")} className="text-blue-400 hover:text-blue-300">Generate audio first</button>.
+                <p className="mt-2 text-sm text-faint">
+                  No audio loaded. <button onClick={() => navigate("/studio")} className="text-accent hover:text-accent-strong">Generate audio first</button>.
                 </p>
               )}
             </div>
           </div>
 
           {/* Cue list */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Subtitle Segments</p>
+              <p className="text-sm font-medium text-fg-soft">Subtitle Segments</p>
               <div className="flex gap-2">
                 <Button size="sm" variant="subtle" onClick={autoGenerate}>Auto-generate</Button>
                 <Button size="sm" variant="subtle" onClick={addCue} icon={<Plus className="h-4 w-4" />}>Add</Button>
               </div>
             </div>
             {cues.length === 0 ? (
-              <p className="py-6 text-center text-sm text-gray-500">No segments yet. Auto-generate from your audio, or add one manually.</p>
+              <p className="py-6 text-center text-sm text-faint">No segments yet. Auto-generate from your audio, or add one manually.</p>
             ) : (
               <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
                 {cues.map((c) => {
@@ -296,7 +296,7 @@ export function SubtitleEditor() {
                   return (
                     <li
                       key={c.id}
-                      className={cn("rounded-card border p-3 transition-colors", active ? "border-blue-500/60 bg-blue-500/5" : "border-gray-800 hover:border-gray-700")}
+                      className={cn("rounded-card border p-3 transition-colors", active ? "border-accent/60 bg-accent/5" : "border-line hover:border-line-strong")}
                       onClick={() => playerRef.current?.seek(c.start)}
                     >
                       <div className="flex flex-wrap items-center gap-2">
@@ -306,28 +306,28 @@ export function SubtitleEditor() {
                           min="0"
                           value={round2(c.start)}
                           onChange={(e) => updateCue(c.id, { start: parseFloat(e.target.value) || 0 })}
-                          className="w-20 rounded-input border border-gray-700 bg-gray-900 px-2 py-1 font-mono text-sm text-white"
+                          className="w-20 rounded-input border border-line-strong bg-sunken px-2 py-1 font-mono text-sm text-fg"
                           aria-label="Start time"
                         />
-                        <ArrowDown className="h-3.5 w-3.5 rotate-90 text-gray-600" />
+                        <ArrowDown className="h-3.5 w-3.5 rotate-90 text-faint" />
                         <input
                           type="number"
                           step="0.1"
                           min="0"
                           value={round2(c.end)}
                           onChange={(e) => updateCue(c.id, { end: parseFloat(e.target.value) || 0 })}
-                          className="w-20 rounded-input border border-gray-700 bg-gray-900 px-2 py-1 font-mono text-sm text-white"
+                          className="w-20 rounded-input border border-line-strong bg-sunken px-2 py-1 font-mono text-sm text-fg"
                           aria-label="End time"
                         />
-                        <span className="font-mono text-xs text-gray-500">sec</span>
-                        <button onClick={() => removeCue(c.id)} aria-label="Delete segment" className="ml-auto rounded p-1 text-gray-500 hover:text-red-400">
+                        <span className="font-mono text-xs text-faint">sec</span>
+                        <button onClick={() => removeCue(c.id)} aria-label="Delete segment" className="ml-auto rounded p-1 text-faint hover:text-danger">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                       <input
                         value={c.text}
                         onChange={(e) => updateCue(c.id, { text: e.target.value })}
-                        className="mt-2 w-full min-w-0 rounded-input border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white [overflow-wrap:break-word] focus:border-blue-500"
+                        className="mt-2 w-full min-w-0 rounded-input border border-line-strong bg-sunken px-3 py-2 text-sm text-fg [overflow-wrap:break-word] focus:border-accent"
                         aria-label="Subtitle text"
                       />
                     </li>
@@ -340,8 +340,8 @@ export function SubtitleEditor() {
 
         {/* Right: styling panel */}
         <div className="min-w-0 space-y-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-3 text-sm font-medium text-gray-300">Preset Styles</p>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <p className="mb-3 text-sm font-medium text-fg-soft">Preset Styles</p>
             <Select
               value=""
               placeholder="Apply a preset…"
@@ -384,7 +384,7 @@ export function SubtitleEditor() {
 
           <StyleGroup title="Outline / Stroke">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-300">Enable outline</span>
+              <span className="text-sm text-fg-soft">Enable outline</span>
               <Toggle checked={style.strokeEnabled} onChange={(v) => setStyle({ strokeEnabled: v })} label="Enable outline" />
             </div>
             {style.strokeEnabled && (
@@ -397,7 +397,7 @@ export function SubtitleEditor() {
 
           <StyleGroup title="Shadow">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-300">Enable shadow</span>
+              <span className="text-sm text-fg-soft">Enable shadow</span>
               <Toggle checked={style.shadowEnabled} onChange={(v) => setStyle({ shadowEnabled: v })} label="Enable shadow" />
             </div>
             {style.shadowEnabled && (
@@ -426,7 +426,7 @@ export function SubtitleEditor() {
               />
             </div>
             <Slider label="Margin from edges" value={style.margin} onChange={(v) => setStyle({ margin: v })} min={0} max={100} format={(v) => `${v}px`} />
-            <p className="text-xs text-gray-500">Tip: drag the subtitle in the preview to set a custom position.</p>
+            <p className="text-xs text-faint">Tip: drag the subtitle in the preview to set a custom position.</p>
           </StyleGroup>
 
           <StyleGroup title="Animation">
@@ -455,9 +455,9 @@ export function SubtitleEditor() {
             <Slider label="Animation duration" value={style.animDuration} onChange={(v) => setStyle({ animDuration: v })} min={100} max={2000} step={50} format={(v) => `${v}ms`} />
           </StyleGroup>
 
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Reset</p>
+              <p className="text-sm font-medium text-fg-soft">Reset</p>
               <Badge tone="gray">{cues.length} cues</Badge>
             </div>
             <Button
@@ -477,8 +477,8 @@ export function SubtitleEditor() {
 
 function StyleGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-5">
-      <p className="mb-4 text-sm font-semibold text-white">{title}</p>
+    <div className="rounded-card border border-line bg-surface p-5">
+      <p className="mb-4 text-sm font-semibold text-fg">{title}</p>
       <div className="space-y-4">{children}</div>
     </div>
   );
@@ -490,7 +490,7 @@ function ToolbarBtn({ onClick, disabled, label, children }: { onClick: () => voi
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-9 w-9 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:opacity-40"
+      className="flex h-9 w-9 items-center justify-center rounded-md text-fg-soft transition-colors hover:bg-tint hover:text-fg disabled:opacity-40"
     >
       {children}
     </button>

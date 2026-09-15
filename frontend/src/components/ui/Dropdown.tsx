@@ -50,7 +50,7 @@ export function Dropdown({ trigger, items, align = "right", label }: DropdownPro
             role="menu"
             aria-label={label}
             className={cn(
-              "absolute z-20 mt-2 w-56 overflow-hidden rounded-card border border-gray-700 bg-panel py-1 shadow-2xl",
+              "absolute z-20 mt-2 w-56 overflow-hidden rounded-card border border-line bg-raised py-1 shadow-pop",
               align === "right" ? "right-0" : "left-0",
             )}
           >
@@ -64,8 +64,8 @@ export function Dropdown({ trigger, items, align = "right", label }: DropdownPro
                   item.onClick?.();
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-gray-800 disabled:opacity-40",
-                  item.danger ? "text-red-400" : "text-gray-200",
+                  "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-tint disabled:opacity-40",
+                  item.danger ? "text-danger" : "text-fg-soft",
                 )}
               >
                 {item.icon && <span className="shrink-0">{item.icon}</span>}

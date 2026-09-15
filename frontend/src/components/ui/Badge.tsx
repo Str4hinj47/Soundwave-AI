@@ -1,16 +1,29 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-type Tone = "blue" | "violet" | "green" | "red" | "amber" | "gray" | "gradient";
+type Tone =
+  | "accent"
+  | "blue"
+  | "violet"
+  | "green"
+  | "red"
+  | "amber"
+  | "gray"
+  | "gradient";
 
+/**
+ * Quiet, low-contrast chips: a 10% tint of the token colour plus a hairline
+ * border. "blue"/"gradient" are kept as aliases so existing call sites work.
+ */
 const tones: Record<Tone, string> = {
-  blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-  violet: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  green: "bg-success/15 text-emerald-300 border-success/30",
-  red: "bg-danger/15 text-red-300 border-danger/30",
-  amber: "bg-warning/15 text-amber-300 border-warning/30",
-  gray: "bg-gray-700/40 text-gray-300 border-gray-600/40",
-  gradient: "bg-gradient-to-r from-blue-500 to-violet-500 text-white border-transparent",
+  accent: "bg-accent/10 text-accent border-accent/25",
+  blue: "bg-accent/10 text-accent border-accent/25",
+  violet: "bg-secondary/15 text-secondary border-secondary/25",
+  green: "bg-success/15 text-success border-success/25",
+  red: "bg-danger/15 text-danger border-danger/25",
+  amber: "bg-warning/15 text-warning border-warning/25",
+  gray: "bg-tint text-muted border-line",
+  gradient: "bg-accent/10 text-accent border-accent/25",
 };
 
 export function Badge({
@@ -32,7 +45,7 @@ export function Badge({
         className,
       )}
     >
-      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />}
+      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />}
       {children}
     </span>
   );

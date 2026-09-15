@@ -1,19 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#3B82F6"/>
-      <stop offset="1" stop-color="#8B5CF6"/>
-    </linearGradient>
-  </defs>
-  <rect x="2" y="2" width="44" height="44" rx="11" fill="#0A0F1C"/>
-  <rect x="2" y="2" width="44" height="44" rx="11" stroke="url(#g)" stroke-width="2"/>
-  <g stroke="url(#g)" stroke-width="3" stroke-linecap="round">
-    <path d="M8 20v8"/>
-    <path d="M14 14v20"/>
-    <path d="M20 9v30"/>
-    <path d="M26 17v14"/>
-    <path d="M32 12v24"/>
-    <path d="M38 16v16"/>
+  <style>
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #F7F6F2; }
+      .bar { stroke: #4F6D8A; }
+      .ring { stroke: #D1CEC5; }
+      .dot { fill: #796F85; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #16191D; }
+      .bar { stroke: #8AA3BB; }
+      .ring { stroke: #2D333A; }
+      .dot { fill: #9E95A8; }
+    }
+  </style>
+  <rect class="bg" x="2" y="2" width="44" height="44" rx="12"/>
+  <rect class="ring" x="2.75" y="2.75" width="42.5" height="42.5" rx="11.25" stroke-width="1.5"/>
+  <g class="bar" stroke-width="2.5" stroke-linecap="round">
+    <path d="M11 21v6"/>
+    <path d="M16.6 16.5v15"/>
+    <path d="M22.2 12.5v23"/>
+    <path d="M27.8 19v10"/>
+    <path d="M33.4 15v18"/>
+    <path d="M39 20v8"/>
   </g>
-  <circle cx="40" cy="9" r="3" fill="#8B5CF6"/>
 </svg>

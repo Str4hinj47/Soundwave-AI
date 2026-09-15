@@ -1,18 +1,78 @@
 /** @type {import('tailwindcss').Config} */
+
+/**
+ * Every colour below is a reference to a CSS custom property defined in
+ * `src/index.css` for both themes (`[data-theme="dark"]` / `[data-theme="light"]`).
+ * Because the variables hold raw RGB channels, Tailwind's opacity modifiers
+ * (`bg-accent/10`, `border-line/60`, …) keep working.
+ */
+const token = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        navy: "#0A0F1C",
-        panel: "#111827",
-        accent: {
-          DEFAULT: "#3B82F6",
-          violet: "#8B5CF6",
+        // ── Surfaces ──────────────────────────────────────────────────────
+        canvas: token("canvas"), // page background
+        surface: token("surface"), // cards, panels, sidebar
+        raised: token("raised"), // sticky headers, popovers
+        sunken: token("sunken"), // inputs, wells
+
+        // ── Lines ─────────────────────────────────────────────────────────
+        line: {
+          DEFAULT: token("line"),
+          strong: token("line-strong"),
+          emphasis: token("line-emphasis"),
         },
-        success: "#10B981",
-        danger: "#EF4444",
-        warning: "#F59E0B",
+
+        // ── Subtle fills (hover states, tracks, off-states) ───────────────
+        tint: {
+          DEFAULT: token("tint"),
+          strong: token("tint-strong"),
+        },
+
+        // ── Text ──────────────────────────────────────────────────────────
+        fg: {
+          DEFAULT: token("fg"),
+          soft: token("fg-soft"),
+        },
+        muted: token("muted"),
+        faint: token("faint"),
+
+        // ── Brand ─────────────────────────────────────────────────────────
+        accent: {
+          DEFAULT: token("accent"),
+          strong: token("accent-strong"),
+          ink: token("accent-ink"),
+        },
+        secondary: token("secondary"),
+
+        // ── Status ────────────────────────────────────────────────────────
+        success: token("success"),
+        danger: token("danger"),
+        warning: token("warning"),
+        info: token("accent"),
+
+        // ── Neutral ramp (theme aware: text shades invert, surface shades
+        //    stay light-on-light / dark-on-dark) ────────────────────────────
+        gray: {
+          50: token("gray-50"),
+          100: token("gray-100"),
+          200: token("gray-200"),
+          300: token("gray-300"),
+          400: token("gray-400"),
+          500: token("gray-500"),
+          600: token("gray-600"),
+          700: token("gray-700"),
+          800: token("gray-800"),
+          900: token("gray-900"),
+          950: token("gray-950"),
+        },
+
+        // ── Legacy aliases (kept so older markup keeps working) ───────────
+        navy: token("canvas"),
+        panel: token("surface"),
       },
       fontFamily: {
         sans: [
@@ -42,21 +102,30 @@ export default {
         lg: ["18px", "28px"],
         xl: ["20px", "28px"],
         "2xl": ["24px", "32px"],
-        "3xl": ["30px", "36px"],
+        "3xl": ["30px", "38px"],
         "4xl": ["36px", "44px"],
-        "5xl": ["48px", "56px"],
-        "6xl": ["60px", "68px"],
+        "5xl": ["46px", "54px"],
+        "6xl": ["56px", "64px"],
+      },
+      letterSpacing: {
+        snug: "-0.015em",
       },
       borderRadius: {
-        card: "8px",
-        btn: "6px",
-        input: "4px",
+        card: "12px",
+        btn: "8px",
+        input: "8px",
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 40px -8px rgba(59,130,246,.35)",
+        // Soft, low-contrast elevation — no coloured glow anywhere.
+        card: "0 1px 2px rgb(var(--c-shadow) / 0.04), 0 6px 20px -14px rgb(var(--c-shadow) / 0.16)",
+        pop: "0 1px 2px rgb(var(--c-shadow) / 0.05), 0 18px 40px -20px rgb(var(--c-shadow) / 0.30)",
+        inset: "inset 0 1px 2px rgb(var(--c-shadow) / 0.06)",
+        glow: "0 1px 2px rgb(var(--c-shadow) / 0.05), 0 10px 30px -18px rgb(var(--c-shadow) / 0.28)",
         "glow-violet":
-          "0 0 0 1px rgba(139,92,246,.35), 0 8px 40px -8px rgba(139,92,246,.35)",
-        card: "0 1px 2px rgba(0,0,0,.5), 0 8px 24px -12px rgba(0,0,0,.6)",
+          "0 1px 2px rgb(var(--c-shadow) / 0.05), 0 10px 30px -18px rgb(var(--c-shadow) / 0.28)",
+      },
+      transitionTimingFunction: {
+        calm: "cubic-bezier(0.4, 0, 0.2, 1)",
       },
       keyframes: {
         "fade-in": {
@@ -83,9 +152,9 @@ export default {
       animation: {
         "fade-in": "fade-in .3s ease-in-out",
         shimmer: "shimmer 1.6s linear infinite",
-        eq1: "eq1 1.1s ease-in-out infinite",
-        eq2: "eq2 0.9s ease-in-out infinite",
-        eq3: "eq3 1.3s ease-in-out infinite",
+        eq1: "eq1 1.6s ease-in-out infinite",
+        eq2: "eq2 1.4s ease-in-out infinite",
+        eq3: "eq3 1.8s ease-in-out infinite",
       },
     },
   },

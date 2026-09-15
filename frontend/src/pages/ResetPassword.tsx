@@ -51,17 +51,17 @@ export function ResetPassword() {
 
   if (!token) {
     return (
-      <AuthLayout footer={<Link to="/signin" className="text-blue-400 hover:text-blue-300">← Back to sign in</Link>}>
-        <h1 className="text-2xl font-bold text-white">Invalid link</h1>
-        <p className="mt-2 text-sm text-gray-400">This reset link is missing a token. Please request a new one.</p>
+      <AuthLayout footer={<Link to="/signin" className="text-accent hover:text-accent-strong">← Back to sign in</Link>}>
+        <h1 className="text-2xl font-semibold text-fg">Invalid link</h1>
+        <p className="mt-2 text-sm text-muted">This reset link is missing a token. Please request a new one.</p>
       </AuthLayout>
     );
   }
 
   return (
-    <AuthLayout footer={<Link to="/signin" className="text-blue-400 hover:text-blue-300">← Back to sign in</Link>}>
-      <h1 className="text-2xl font-bold text-white">Set a new password</h1>
-      <p className="mt-1 text-sm text-gray-400">Your new password must be at least 8 characters with upper, lower, number, and special characters.</p>
+    <AuthLayout footer={<Link to="/signin" className="text-accent hover:text-accent-strong">← Back to sign in</Link>}>
+      <h1 className="text-2xl font-semibold text-fg">Set a new password</h1>
+      <p className="mt-1 text-sm text-muted">Your new password must be at least 8 characters with upper, lower, number, and special characters.</p>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="mt-6 space-y-4">
         <TextField
           label="New Password"
@@ -69,7 +69,7 @@ export function ResetPassword() {
           autoComplete="new-password"
           error={errors.password?.message}
           rightSlot={
-            <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? "Hide password" : "Show password"} className="text-faint hover:text-fg-soft">
               {show ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           }
@@ -82,7 +82,7 @@ export function ResetPassword() {
           error={errors.confirm?.message}
           {...register("confirm")}
         />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
           Reset Password
         </Button>

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { tokenColor } from "../lib/themeTokens";
+import { useTheme } from "../store/theme";
 
 interface WaveformProps {
   audioBuffer: AudioBuffer | null;
@@ -19,10 +21,14 @@ export function Waveform({
   duration,
   onSeek,
   height = 72,
-  progressColor = "rgba(139,92,246,0.9)",
-  idleColor = "rgba(148,163,184,0.45)",
+  progressColor,
+  idleColor,
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Colours follow the active theme unless the caller overrides them.
+  const theme = useTheme((s) => s.theme);
+  const playedColor = progressColor ?? tokenColor("accent", theme === "dark" ? 0.95 : 0.9);
+  const restColor = idleColor ?? tokenColor("muted", theme === "dark" ? 0.32 : 0.38);
   const [dragging, setDragging] = useState(false);
   const bufferRef = useRef<AudioBuffer | null>(null);
   const peaksRef = useRef<number[]>([]);
@@ -70,7 +76,7 @@ export function Waveform({
     const pks = peaksRef.current;
     if (pks.length === 0) {
       // Flat baseline.
-      ctx.fillStyle = "rgba(148,163,184,0.2)";
+      ctx.fillStyle = tokenColor("line-strong", 0.7);
       ctx.fillRect(0, h / 2 - 1, w, 2);
     } else {
       const step = w / pks.length;
@@ -80,7 +86,7 @@ export function Waveform({
         const x = i * step;
         const barH = Math.max(1, (pks[i] ?? 0) * (h - 6));
         const isPlayed = i / pks.length <= progress;
-        ctx.fillStyle = isPlayed ? progressColor : idleColor;
+        ctx.fillStyle = isPlayed ? playedColor : restColor;
         ctx.fillRect(x, (h - barH) / 2, barW, barH);
       }
     }
@@ -89,10 +95,10 @@ export function Waveform({
     const dur = durationRef.current;
     if (dur > 0) {
       const x = (Math.min(1, Math.max(0, currentTime / dur))) * w;
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = tokenColor("fg", theme === "dark" ? 0.75 : 0.55);
       ctx.fillRect(x - 1, 0, 2, h);
     }
-  }, [currentTime, progressColor, idleColor]);
+  }, [currentTime, playedColor, restColor, theme]);
 
   useEffect(() => {
     draw();

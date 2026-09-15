@@ -199,14 +199,14 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
 
   if (!audioBuffer) {
     return (
-      <div className="flex h-40 items-center justify-center rounded-card border border-gray-800 bg-panel text-sm text-gray-500">
+      <div className="flex h-40 items-center justify-center rounded-card border border-line bg-surface text-sm text-faint">
         Generate audio to see the player
       </div>
     );
   }
 
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-4">
+    <div className="rounded-card border border-line bg-surface p-4">
       <div className="mb-3">
         <Waveform audioBuffer={audioBuffer} currentTime={currentTime} duration={duration} onSeek={seek} />
       </div>
@@ -215,23 +215,23 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
         <button
           onClick={() => (playing ? pause() : play())}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-glow transition-all duration-200 hover:scale-105"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition-colors duration-200 hover:bg-accent-strong"
         >
           {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
         </button>
         <button
           onClick={() => seek(0)}
           aria-label="Restart"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-tint hover:text-fg"
         >
           <RotateCcw className="h-4 w-4" />
         </button>
-        <span className="min-w-0 shrink-0 font-mono text-sm tabular-nums text-gray-300">
-          {formatDuration(currentTime)} <span className="text-gray-600">/</span> {formatDuration(duration)}
+        <span className="min-w-0 shrink-0 font-mono text-sm tabular-nums text-fg-soft">
+          {formatDuration(currentTime)} <span className="text-faint">/</span> {formatDuration(duration)}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden items-center gap-1 rounded-md bg-gray-800/80 p-0.5 sm:flex">
+          <div className="hidden items-center gap-1 rounded-md bg-tint/80 p-0.5 sm:flex">
             {RATES.map((r) => (
               <button
                 key={r}
@@ -239,7 +239,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
                 aria-label={`Playback speed ${r}x`}
                 aria-pressed={rate === r}
                 className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
-                  rate === r ? "bg-blue-500/30 text-white" : "text-gray-400 hover:text-white"
+                  rate === r ? "bg-accent/30 text-fg" : "text-muted hover:text-fg"
                 }`}
               >
                 {r}x
@@ -247,7 +247,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
             ))}
           </div>
 
-          <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-white">
+          <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="shrink-0 rounded p-1.5 text-muted transition-colors hover:text-fg">
             {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
           <div className="hidden w-24 md:block">
@@ -258,7 +258,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
             <button
               onClick={onDownload}
               aria-label="Download audio"
-              className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-btn border border-gray-600 px-3 text-sm text-gray-200 transition-all duration-200 hover:border-blue-500/60 hover:text-white"
+              className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-btn border border-line-emphasis px-3 text-sm text-fg-soft transition-all duration-200 hover:border-accent/60 hover:text-fg"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Download</span>

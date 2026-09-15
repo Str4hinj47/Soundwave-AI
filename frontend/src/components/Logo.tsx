@@ -6,6 +6,10 @@ interface LogoProps {
   wordmarkClassName?: string;
 }
 
+/**
+ * Monochrome wordmark: a hairline tile with six calm waveform bars.
+ * Colours come from the active theme tokens, so it adapts to light/dark.
+ */
 export function LogoMark({ className }: { className?: string }) {
   return (
     <svg
@@ -14,23 +18,23 @@ export function LogoMark({ className }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        <linearGradient id="sw-logo-g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3B82F6" />
-          <stop offset="1" stopColor="#8B5CF6" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="44" height="44" rx="11" fill="#0A0F1C" />
-      <rect x="2" y="2" width="44" height="44" rx="11" fill="none" stroke="url(#sw-logo-g)" strokeWidth="2" />
-      <g stroke="url(#sw-logo-g)" strokeWidth="3" strokeLinecap="round">
-        <path d="M9 20v8" />
-        <path d="M15 14v20" />
-        <path d="M21 9v30" />
-        <path d="M27 17v14" />
-        <path d="M33 12v24" />
-        <path d="M39 16v16" />
+      <rect
+        x="2.75"
+        y="2.75"
+        width="42.5"
+        height="42.5"
+        rx="11.25"
+        className="fill-surface stroke-line"
+        strokeWidth="1.5"
+      />
+      <g className="stroke-accent" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M11 21v6" />
+        <path d="M16.6 16.5v15" />
+        <path d="M22.2 12.5v23" />
+        <path d="M27.8 19v10" />
+        <path d="M33.4 15v18" />
+        <path d="M39 20v8" />
       </g>
-      <circle cx="40" cy="9" r="3" fill="#8B5CF6" />
     </svg>
   );
 }
@@ -42,11 +46,11 @@ export function Logo({ className, withWordmark = true, wordmarkClassName }: Logo
       {withWordmark && (
         <span
           className={cn(
-            "text-lg font-bold tracking-tight text-white whitespace-nowrap",
+            "text-lg font-semibold tracking-snug text-fg whitespace-nowrap",
             wordmarkClassName,
           )}
         >
-          Soundwave <span className="text-gradient">AI</span>
+          Soundwave <span className="font-medium text-accent">AI</span>
         </span>
       )}
     </span>

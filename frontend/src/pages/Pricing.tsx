@@ -49,9 +49,9 @@ const FAQS = [
 ];
 
 function Cell({ value }: { value: string | boolean }) {
-  if (value === false) return <Minus className="mx-auto h-4 w-4 text-gray-600" />;
+  if (value === false) return <Minus className="mx-auto h-4 w-4 text-faint" />;
   if (value === true) return <Check className="mx-auto h-5 w-5 text-success" />;
-  return <span className="text-sm text-gray-300">{value}</span>;
+  return <span className="text-sm text-fg-soft">{value}</span>;
 }
 
 export function Pricing() {
@@ -88,27 +88,27 @@ export function Pricing() {
   ];
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className="min-h-screen bg-canvas">
       <Navbar />
       <div className="mx-auto max-w-6xl px-4 pb-24 pt-32 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold text-white sm:text-5xl">Simple, honest pricing</h1>
-          <p className="mx-auto mt-4 max-w-xl text-gray-400">
+          <h1 className="text-4xl font-semibold text-fg sm:text-5xl">Simple, honest pricing</h1>
+          <p className="mx-auto mt-4 max-w-xl text-muted">
             TTS runs on your device, so we charge for the things that cost us: storage, video rendering, and features.
           </p>
 
-          <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-gray-700 bg-panel p-1">
+          <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-line-strong bg-surface p-1">
             <button
               onClick={() => setAnnual(false)}
-              className={cn("rounded-full px-4 py-1.5 text-sm font-medium transition-all", !annual ? "bg-gray-800 text-white" : "text-gray-400")}
+              className={cn("rounded-full px-4 py-1.5 text-sm font-medium transition-all", !annual ? "bg-tint text-fg" : "text-muted")}
             >
               Monthly
             </button>
             <button
               onClick={() => setAnnual(true)}
-              className={cn("rounded-full px-4 py-1.5 text-sm font-medium transition-all", annual ? "bg-gray-800 text-white" : "text-gray-400")}
+              className={cn("rounded-full px-4 py-1.5 text-sm font-medium transition-all", annual ? "bg-tint text-fg" : "text-muted")}
             >
-              Annual <span className="text-emerald-400">−20%</span>
+              Annual <span className="text-success">−20%</span>
             </button>
           </div>
         </div>
@@ -122,36 +122,36 @@ export function Pricing() {
                 className={cn(
                   "relative rounded-card border p-7",
                   p.highlight
-                    ? "border-transparent bg-panel shadow-glow lg:scale-105"
-                    : "border-gray-800 bg-panel",
+                    ? "border-line bg-surface shadow-card"
+                    : "border-line bg-surface",
                 )}
               >
                 {p.badge && (
                   <div
                     className={cn(
-                      "absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-semibold text-white",
-                      p.highlight ? "bg-gradient-to-r from-blue-500 to-violet-500" : "bg-gray-700",
+                      "absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-medium tracking-wide",
+                      p.highlight ? "bg-accent text-accent-ink" : "bg-tint text-fg-soft",
                     )}
                   >
                     {p.badge}
                   </div>
                 )}
-                <p className="text-lg font-semibold text-white">{p.name}</p>
-                <p className="mt-1 min-h-[2.5rem] text-sm text-gray-400">{p.desc}</p>
+                <p className="text-lg font-semibold text-fg">{p.name}</p>
+                <p className="mt-1 min-h-[2.5rem] text-sm text-muted">{p.desc}</p>
                 <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-5xl font-bold text-white">${price.toFixed(price % 1 === 0 ? 0 : 2)}</span>
-                  <span className="text-gray-500">/month</span>
+                  <span className="text-5xl font-semibold tracking-snug text-fg">${price.toFixed(price % 1 === 0 ? 0 : 2)}</span>
+                  <span className="text-faint">/month</span>
                 </div>
                 {annual && p.monthly > 0 && (
-                  <p className="mt-1 text-xs text-emerald-400">Billed annually (${(price * 12).toFixed(0)}/yr)</p>
+                  <p className="mt-1 text-xs text-success">Billed annually (${(price * 12).toFixed(0)}/yr)</p>
                 )}
                 <Link
                   to={p.to}
                   className={cn(
                     "mt-6 inline-flex h-11 w-full items-center justify-center rounded-btn font-semibold transition-all duration-200",
                     p.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white hover:from-blue-400 hover:to-violet-400"
-                      : "border border-gray-600 text-gray-200 hover:border-blue-500/70 hover:text-white",
+                      ? "bg-accent text-accent-ink hover:bg-accent-strong"
+                      : "border border-line-emphasis text-fg-soft hover:border-accent/70 hover:text-fg",
                   )}
                 >
                   {p.cta}
@@ -162,22 +162,22 @@ export function Pricing() {
         </div>
 
         {/* Feature comparison */}
-        <div className="mt-16 overflow-x-auto rounded-card border border-gray-800 bg-panel">
+        <div className="mt-16 overflow-x-auto rounded-card border border-line bg-surface">
           <table className="w-full min-w-[640px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="px-5 py-4 text-sm font-medium text-gray-400">Feature</th>
+              <tr className="border-b border-line">
+                <th className="px-5 py-4 text-sm font-medium text-muted">Feature</th>
                 {["Free", "Pro", "Enterprise"].map((n) => (
-                  <th key={n} className="px-5 py-4 text-center text-sm font-semibold text-white">{n}</th>
+                  <th key={n} className="px-5 py-4 text-center text-sm font-semibold text-fg">{n}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {FEATURES.map((f) => (
-                <tr key={f.label} className="border-b border-gray-800/60 last:border-0">
-                  <td className="px-5 py-3.5 text-sm text-gray-300">{f.label}</td>
+                <tr key={f.label} className="border-b border-line/60 last:border-0">
+                  <td className="px-5 py-3.5 text-sm text-fg-soft">{f.label}</td>
                   <td className="px-5 py-3.5 text-center"><Cell value={f.free} /></td>
-                  <td className="px-5 py-3.5 text-center bg-blue-500/5"><Cell value={f.pro} /></td>
+                  <td className="px-5 py-3.5 text-center bg-accent/5"><Cell value={f.pro} /></td>
                   <td className="px-5 py-3.5 text-center"><Cell value={f.enterprise} /></td>
                 </tr>
               ))}
@@ -187,7 +187,7 @@ export function Pricing() {
 
         {/* FAQ */}
         <div className="mx-auto mt-16 max-w-3xl">
-          <h2 className="text-center text-3xl font-bold text-white">Frequently asked questions</h2>
+          <h2 className="text-center text-3xl font-semibold text-fg">Frequently asked questions</h2>
           <div className="mt-8 space-y-3">
             {FAQS.map((f) => (
               <FaqItem key={f.q} q={f.q} a={f.a} />
@@ -202,14 +202,14 @@ export function Pricing() {
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-card border border-gray-800 bg-panel">
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
       >
-        <span className="font-medium text-white">{q}</span>
-        <ChevronDown className={cn("h-5 w-5 shrink-0 text-gray-400 transition-transform duration-200", open && "rotate-180")} />
+        <span className="font-medium text-fg">{q}</span>
+        <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted transition-transform duration-200", open && "rotate-180")} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -219,7 +219,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <p className="px-5 pb-4 text-sm leading-relaxed text-gray-400">{a}</p>
+            <p className="px-5 pb-4 text-sm leading-relaxed text-muted">{a}</p>
           </motion.div>
         )}
       </AnimatePresence>

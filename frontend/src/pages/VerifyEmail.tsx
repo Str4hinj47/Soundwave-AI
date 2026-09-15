@@ -29,27 +29,27 @@ export function VerifyEmail() {
   }, [token]);
 
   return (
-    <AuthLayout footer={<Link to="/dashboard" className="text-blue-400 hover:text-blue-300">Go to dashboard →</Link>}>
+    <AuthLayout footer={<Link to="/dashboard" className="text-accent hover:text-accent-strong">Go to dashboard →</Link>}>
       <div className="flex flex-col items-center py-4 text-center">
         {state === "loading" && (
           <>
-            <Spinner className="h-10 w-10 text-blue-400" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Verifying your email…</h1>
-            <p className="mt-2 text-sm text-gray-400">This should only take a moment.</p>
+            <Spinner className="h-10 w-10 text-accent" />
+            <h1 className="mt-4 text-2xl font-semibold text-fg">Verifying your email…</h1>
+            <p className="mt-2 text-sm text-muted">This should only take a moment.</p>
           </>
         )}
         {state === "success" && (
           <>
             <CheckCircle2 className="h-12 w-12 text-success" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Email verified</h1>
-            <p className="mt-2 text-sm text-gray-400">Thanks! Your account is now fully verified.</p>
+            <h1 className="mt-4 text-2xl font-semibold text-fg">Email verified</h1>
+            <p className="mt-2 text-sm text-muted">Thanks! Your account is now fully verified.</p>
           </>
         )}
         {state === "error" && (
           <>
             <XCircle className="h-12 w-12 text-danger" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Verification failed</h1>
-            <p className="mt-2 text-sm text-gray-400">{message || "This link is invalid or has expired."}</p>
+            <h1 className="mt-4 text-2xl font-semibold text-fg">Verification failed</h1>
+            <p className="mt-2 text-sm text-muted">{message || "This link is invalid or has expired."}</p>
           </>
         )}
       </div>

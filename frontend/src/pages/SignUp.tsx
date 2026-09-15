@@ -85,7 +85,7 @@ export function SignUp() {
       footer={
         <p>
           Already have an account?{" "}
-          <Link to="/signin" className="text-blue-400 hover:text-blue-300">
+          <Link to="/signin" className="text-accent hover:text-accent-strong">
             Sign in
           </Link>
         </p>
@@ -94,8 +94,8 @@ export function SignUp() {
       <div className="mb-6 flex justify-center lg:hidden">
         <Logo withWordmark={false} />
       </div>
-      <h1 className="text-2xl font-bold text-white">Create your account</h1>
-      <p className="mt-1 text-sm text-gray-400">Start generating voice content in seconds.</p>
+      <h1 className="text-2xl font-semibold text-fg">Create your account</h1>
+      <p className="mt-1 text-sm text-muted">Start generating voice content in seconds.</p>
 
       <div className="mt-6 grid grid-cols-1 gap-3">
         <Button variant="outline" type="button" onClick={() => startOAuth("google")}>
@@ -107,9 +107,9 @@ export function SignUp() {
       </div>
 
       <div className="my-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-gray-800" />
-        <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-        <span className="h-px flex-1 bg-gray-800" />
+        <span className="h-px flex-1 bg-line" />
+        <span className="text-xs uppercase tracking-wide text-faint">or</span>
+        <span className="h-px flex-1 bg-line" />
       </div>
 
       <motion.form onSubmit={handleSubmit(onSubmit)} noValidate animate={isSubmitted && Object.keys(errors).length > 0 ? { x: [0, -6, 6, -4, 4, 0] } : {}} transition={{ duration: 0.4 }} className="space-y-4">
@@ -125,7 +125,7 @@ export function SignUp() {
             placeholder="••••••••"
             error={errors.password?.message}
             rightSlot={
-              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-faint hover:text-fg-soft">
                 {showPass ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             }
@@ -135,8 +135,8 @@ export function SignUp() {
             {checks.map((c) => {
               const ok = c.test(password);
               return (
-                <li key={c.label} className={`flex items-center gap-1.5 text-xs ${ok ? "text-emerald-400" : "text-gray-500"}`}>
-                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400" : "bg-gray-600"}`} />
+                <li key={c.label} className={`flex items-center gap-1.5 text-xs ${ok ? "text-success" : "text-faint"}`}>
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-success" : "bg-tint-strong"}`} />
                   {c.label}
                 </li>
               );
@@ -151,24 +151,24 @@ export function SignUp() {
           placeholder="••••••••"
           error={errors.confirm?.message}
           rightSlot={
-            <button type="button" onClick={() => setShowConfirm((s) => !s)} aria-label={showConfirm ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => setShowConfirm((s) => !s)} aria-label={showConfirm ? "Hide password" : "Show password"} className="text-faint hover:text-fg-soft">
               {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           }
           {...register("confirm")}
         />
 
-        <label className="flex items-start gap-2.5 text-sm text-gray-300">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-900 accent-blue-500" {...register("terms")} />
+        <label className="flex items-start gap-2.5 text-sm text-fg-soft">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-line-emphasis bg-sunken accent-accent" {...register("terms")} />
           <span className="min-w-0">
             I agree to the{" "}
-            <a href="#" className="text-blue-400 hover:text-blue-300">Terms of Service</a> and{" "}
-            <a href="#" className="text-blue-400 hover:text-blue-300">Privacy Policy</a>
+            <a href="#" className="text-accent hover:text-accent-strong">Terms of Service</a> and{" "}
+            <a href="#" className="text-accent hover:text-accent-strong">Privacy Policy</a>
           </span>
         </label>
-        {errors.terms && <p className="text-sm text-red-400">{errors.terms.message}</p>}
+        {errors.terms && <p className="text-sm text-danger">{errors.terms.message}</p>}
 
-        {serverError && <p className="text-sm text-red-400" role="alert">{serverError}</p>}
+        {serverError && <p className="text-sm text-danger" role="alert">{serverError}</p>}
 
         <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
           Create Account

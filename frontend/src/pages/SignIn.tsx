@@ -64,7 +64,7 @@ export function SignIn() {
       footer={
         <p>
           Don't have an account?{" "}
-          <Link to="/signup" className="text-blue-400 hover:text-blue-300">
+          <Link to="/signup" className="text-accent hover:text-accent-strong">
             Sign up
           </Link>
         </p>
@@ -73,8 +73,8 @@ export function SignIn() {
       <div className="mb-6 flex justify-center lg:hidden">
         <Logo withWordmark={false} />
       </div>
-      <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-      <p className="mt-1 text-sm text-gray-400">Sign in to continue to your studio.</p>
+      <h1 className="text-2xl font-semibold text-fg">Welcome back</h1>
+      <p className="mt-1 text-sm text-muted">Sign in to continue to your studio.</p>
 
       <div className="mt-6 grid grid-cols-1 gap-3">
         <Button variant="outline" type="button" onClick={() => startOAuth("google")}>
@@ -86,9 +86,9 @@ export function SignIn() {
       </div>
 
       <div className="my-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-gray-800" />
-        <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-        <span className="h-px flex-1 bg-gray-800" />
+        <span className="h-px flex-1 bg-line" />
+        <span className="text-xs uppercase tracking-wide text-faint">or</span>
+        <span className="h-px flex-1 bg-line" />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -102,24 +102,24 @@ export function SignIn() {
             placeholder="••••••••"
             error={errors.password?.message}
             rightSlot={
-              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-faint hover:text-fg-soft">
                 {showPass ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             }
             {...register("password")}
           />
           <div className="mt-1.5 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-300">
-              <input type="checkbox" className="h-4 w-4 rounded border-gray-600 bg-gray-900 accent-blue-500" {...register("remember")} />
+            <label className="flex items-center gap-2 text-sm text-fg-soft">
+              <input type="checkbox" className="h-4 w-4 rounded border-line-emphasis bg-sunken accent-accent" {...register("remember")} />
               Remember me
             </label>
-            <Link to="/forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
+            <Link to="/forgot-password" className="text-sm text-accent hover:text-accent-strong">
               Forgot password?
             </Link>
           </div>
         </div>
 
-        {serverError && <p className="text-sm text-red-400" role="alert">{serverError}</p>}
+        {serverError && <p className="text-sm text-danger" role="alert">{serverError}</p>}
 
         <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
           Sign In

@@ -88,19 +88,19 @@ export function Projects() {
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold text-white">My Projects</h1>
+        <h1 className="text-3xl font-semibold text-fg">My Projects</h1>
         <Link
           to="/studio"
-          className="inline-flex h-11 items-center rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white hover:from-blue-400 hover:to-violet-400"
+          className="inline-flex h-11 items-center rounded-btn bg-accent px-5 font-semibold text-accent-ink hover:bg-accent-strong"
         >
           New Project
         </Link>
       </div>
 
       {/* Toolbar */}
-      <div className="mt-5 flex flex-wrap items-center gap-3 rounded-card border border-gray-800 bg-panel p-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-3">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
           <input
             value={query}
             onChange={(e) => {
@@ -108,7 +108,7 @@ export function Projects() {
               setParams(e.target.value ? { q: e.target.value } : {});
             }}
             placeholder="Search projects…"
-            className="w-full rounded-input border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500"
+            className="w-full rounded-input border border-line-strong bg-sunken py-2 pl-9 pr-3 text-sm text-fg placeholder-faint"
             aria-label="Search projects"
           />
         </div>
@@ -137,10 +137,10 @@ export function Projects() {
           ariaLabel="Sort projects"
         />
         <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => setView("grid")} aria-label="Grid view" aria-pressed={view === "grid"} className={cn("rounded-md p-2 transition-colors", view === "grid" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white")}>
+          <button onClick={() => setView("grid")} aria-label="Grid view" aria-pressed={view === "grid"} className={cn("rounded-md p-2 transition-colors", view === "grid" ? "bg-tint-strong text-fg" : "text-muted hover:text-fg")}>
             <Grid3X3 className="h-4 w-4" />
           </button>
-          <button onClick={() => setView("list")} aria-label="List view" aria-pressed={view === "list"} className={cn("rounded-md p-2 transition-colors", view === "list" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white")}>
+          <button onClick={() => setView("list")} aria-label="List view" aria-pressed={view === "list"} className={cn("rounded-md p-2 transition-colors", view === "list" ? "bg-tint-strong text-fg" : "text-muted hover:text-fg")}>
             <List className="h-4 w-4" />
           </button>
           {selected.size > 0 && (
@@ -158,13 +158,13 @@ export function Projects() {
             <SkeletonCard /><SkeletonCard /><SkeletonCard />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-card border border-gray-800 bg-panel">
+          <div className="rounded-card border border-line bg-surface">
             <EmptyState
               icon={<FolderKanban className="h-8 w-8" />}
               title={query || typeFilter !== "all" ? "No matching projects" : "No projects yet"}
               description={query || typeFilter !== "all" ? "Try a different search or filter." : "Create your first project from the Studio."}
               action={
-                <Link to="/studio" className="inline-flex h-11 items-center rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white hover:from-blue-400 hover:to-violet-400">
+                <Link to="/studio" className="inline-flex h-11 items-center rounded-btn bg-accent px-5 font-semibold text-accent-ink hover:bg-accent-strong">
                   Create a project
                 </Link>
               }
@@ -177,7 +177,7 @@ export function Projects() {
             ))}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-card border border-gray-800 bg-panel">
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
             {filtered.map((p) => (
               <ProjectListRow key={p.id} project={p} selected={selected.has(p.id)} onSelect={() => toggleSelect(p.id)} />
             ))}
@@ -186,9 +186,9 @@ export function Projects() {
       </div>
 
       {user?.plan === "FREE" && projects.some((p) => p.storageType === "LOCAL") && (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-faint">
           <Badge tone="amber" dot>Local Only</Badge> projects are stored in your browser.{" "}
-          <Link to="/pricing" className="text-blue-400 hover:text-blue-300">Upgrade to sync to cloud</Link>.
+          <Link to="/pricing" className="text-accent hover:text-accent-strong">Upgrade to sync to cloud</Link>.
         </p>
       )}
     </div>
@@ -197,13 +197,13 @@ export function Projects() {
 
 function ProjectGridCard({ project, selected, onSelect }: { project: ProjectMeta; selected: boolean; onSelect: () => void }) {
   return (
-    <div className={cn("rounded-card border bg-panel p-4 transition-all", selected ? "border-blue-500" : "border-gray-800 hover:border-gray-700")}>
+    <div className={cn("rounded-card border bg-surface p-4 transition-all", selected ? "border-accent" : "border-line hover:border-line-strong")}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-white">{project.title}</p>
-          <p className="text-xs text-gray-500">{formatDate(project.createdAt)}</p>
+          <p className="truncate font-semibold text-fg">{project.title}</p>
+          <p className="text-xs text-faint">{formatDate(project.createdAt)}</p>
         </div>
-        <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="mt-0.5 h-4 w-4 accent-blue-500" />
+        <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="mt-0.5 h-4 w-4 accent-accent" />
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Badge tone="blue">{project.type}</Badge>
@@ -217,15 +217,15 @@ function ProjectGridCard({ project, selected, onSelect }: { project: ProjectMeta
 
 function ProjectListRow({ project, selected, onSelect }: { project: ProjectMeta; selected: boolean; onSelect: () => void }) {
   return (
-    <div className={cn("flex items-center gap-3 border-b border-gray-800 px-4 py-3 last:border-0", selected && "bg-blue-500/5")}>
-      <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="h-4 w-4 accent-blue-500" />
+    <div className={cn("flex items-center gap-3 border-b border-line px-4 py-3 last:border-0", selected && "bg-accent/5")}>
+      <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${project.title}`} className="h-4 w-4 accent-accent" />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-white">{project.title}</p>
-        <p className="truncate text-xs text-gray-500">{formatDate(project.createdAt)}</p>
+        <p className="truncate font-medium text-fg">{project.title}</p>
+        <p className="truncate text-xs text-faint">{formatDate(project.createdAt)}</p>
       </div>
       <Badge tone="blue" className="hidden sm:inline-flex">{project.type}</Badge>
       <Badge tone="gray" className="hidden md:inline-flex">{displayNameFor(project.voiceId)}</Badge>
-      {project.duration != null && <span className="hidden font-mono text-xs text-gray-500 md:inline">{formatDuration(project.duration)}</span>}
+      {project.duration != null && <span className="hidden font-mono text-xs text-faint md:inline">{formatDuration(project.duration)}</span>}
       {project.storageType === "LOCAL" && <Badge tone="amber" dot>Local</Badge>}
     </div>
   );

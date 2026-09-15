@@ -96,7 +96,7 @@ export function Studio() {
   const limitReached = remaining !== null && remaining <= 0;
   const charCount = studio.text.length;
   const countRatio = hardLimit > 0 ? charCount / hardLimit : 0;
-  const countTone = charCount >= hardLimit ? "text-red-400" : countRatio > 0.95 ? "text-red-400" : countRatio > 0.8 ? "text-orange-400" : countRatio > 0.5 ? "text-amber-400" : "text-emerald-400";
+  const countTone = charCount >= hardLimit ? "text-danger" : countRatio > 0.95 ? "text-danger" : countRatio > 0.8 ? "text-warning" : countRatio > 0.5 ? "text-warning" : "text-success";
 
   const canGenerate = studio.text.trim().length > 0 && !limitReached && tts.status !== "generating";
   const generating = tts.status === "generating";
@@ -192,7 +192,7 @@ export function Studio() {
     <div className="mx-auto max-w-7xl">
       {/* Offline banner */}
       {!online && (
-        <div className="mb-4 flex items-center gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="mb-4 flex items-center gap-3 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           <WifiOff className="h-5 w-5 shrink-0" />
           <span className="min-w-0">
             You appear to be offline. TTS will fall back to the built-in demo voice, and project saving and video export require a connection.
@@ -202,15 +202,15 @@ export function Studio() {
 
       {/* Error banner */}
       {tts.status === "error" && tts.error && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           <span className="min-w-0 flex-1">{tts.error}</span>
         </div>
       )}
 
       {/* Demo-voice fallback banner */}
       {tts.engine === "offline" && tts.status === "done" && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          <Mic className="h-5 w-5 shrink-0 text-amber-300" />
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <Mic className="h-5 w-5 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">
             The Microsoft Neural voice service wasn't reachable, so this clip used the built-in demo voice. Check your connection and regenerate.
           </span>
@@ -220,8 +220,8 @@ export function Studio() {
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-white">Text-to-Speech Studio</h1>
-          <p className="text-sm text-gray-400">Generate professional voice audio with Microsoft Neural voices.</p>
+          <h1 className="text-2xl font-semibold text-fg">Text-to-Speech Studio</h1>
+          <p className="text-sm text-muted">Generate professional voice audio with Microsoft Neural voices.</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge tone="green" dot>Microsoft Neural</Badge>
@@ -233,9 +233,9 @@ export function Studio() {
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* ── LEFT: input & controls ───────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="studio-text" className="text-sm font-medium text-gray-300">Text</label>
+              <label htmlFor="studio-text" className="text-sm font-medium text-fg-soft">Text</label>
               <span className={cn("font-mono text-sm tabular-nums", countTone)}>
                 {formatNumber(charCount)} / {formatNumber(hardLimit)} characters
               </span>
@@ -248,24 +248,24 @@ export function Studio() {
               }}
               placeholder="Enter the text you want to convert to speech..."
               rows={7}
-              className="w-full resize-y overflow-y-auto rounded-input border border-gray-700 bg-gray-900 px-3.5 py-3 text-base text-white placeholder-gray-500 [overflow-wrap:break-word] transition-colors focus:border-blue-500"
+              className="w-full resize-y overflow-y-auto rounded-input border border-line-strong bg-sunken px-3.5 py-3 text-base text-fg placeholder-faint [overflow-wrap:break-word] transition-colors focus:border-accent"
             />
             {limitReached && (
-              <p className="mt-2 text-sm text-red-400">Monthly character limit reached. Upgrade to Pro for more.</p>
+              <p className="mt-2 text-sm text-danger">Monthly character limit reached. Upgrade to Pro for more.</p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Tooltip content="Insert a pause at the cursor">
-                <button onClick={() => insertTag(BREAK_TAG)} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(BREAK_TAG)} className="flex h-8 items-center gap-1.5 rounded border border-line-strong px-2.5 text-xs text-fg-soft transition-colors hover:border-line-emphasis hover:text-fg">
                   <Pause className="h-3.5 w-3.5" /> Add pause
                 </button>
               </Tooltip>
               <Tooltip content="Insert emphasis markers">
-                <button onClick={() => insertTag(" *emphasized* ")} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(" *emphasized* ")} className="flex h-8 items-center gap-1.5 rounded border border-line-strong px-2.5 text-xs text-fg-soft transition-colors hover:border-line-emphasis hover:text-fg">
                   <Wand2 className="h-3.5 w-3.5" /> Emphasis
                 </button>
               </Tooltip>
               <Tooltip content="Insert a pronunciation guide">
-                <button onClick={() => insertTag(' {pronounce:"example|ig-zam-pul"} ')} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(' {pronounce:"example|ig-zam-pul"} ')} className="flex h-8 items-center gap-1.5 rounded border border-line-strong px-2.5 text-xs text-fg-soft transition-colors hover:border-line-emphasis hover:text-fg">
                   <Gauge className="h-3.5 w-3.5" /> Pronunciation
                 </button>
               </Tooltip>
@@ -273,19 +273,19 @@ export function Studio() {
           </div>
 
           {/* Voice */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-2 text-sm font-medium text-gray-300">Voice</p>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <p className="mb-2 text-sm font-medium text-fg-soft">Voice</p>
             <VoicePicker voices={voices} value={studio.voiceId} onChange={studio.setVoiceId} />
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-gray-400">Selected:</span>
-              <span className="font-semibold text-white">{displayNameFor(studio.voiceId)}</span>
+              <span className="text-muted">Selected:</span>
+              <span className="font-semibold text-fg">{displayNameFor(studio.voiceId)}</span>
               <Badge tone={studio.voiceId.includes("-GB-") ? "violet" : "blue"}>{studio.voiceId.includes("-GB-") ? "British" : "American"}</Badge>
             </div>
           </div>
 
           {/* Settings */}
-          <div className="space-y-5 rounded-card border border-gray-800 bg-panel p-5">
-            <p className="text-sm font-medium text-gray-300">Voice Settings</p>
+          <div className="space-y-5 rounded-card border border-line bg-surface p-5">
+            <p className="text-sm font-medium text-fg-soft">Voice Settings</p>
             <Slider
               label="Speed"
               value={studio.voiceSettings.speed}
@@ -310,7 +310,7 @@ export function Studio() {
           </div>
 
           {/* Generate */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="flex gap-3">
               <Button
                 size="lg"
@@ -327,7 +327,7 @@ export function Studio() {
                   <button
                     onClick={tts.cancel}
                     aria-label="Cancel generation"
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-btn border border-danger/50 text-red-300 transition-colors hover:bg-danger/10"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-btn border border-danger/50 text-danger transition-colors hover:bg-danger/10"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -337,15 +337,15 @@ export function Studio() {
             {generating && (
               <div className="mt-3">
                 <ProgressBar indeterminate tone="default" label="Generating audio" />
-                <p className="mt-2 text-center text-xs text-gray-500">
+                <p className="mt-2 text-center text-xs text-faint">
                   Generating with Microsoft Neural voice…
                 </p>
               </div>
             )}
             {tts.status === "error" && (
-              <p className="mt-3 text-sm text-red-400">Speech generation failed — try a shorter text or a different voice.</p>
+              <p className="mt-3 text-sm text-danger">Speech generation failed — try a shorter text or a different voice.</p>
             )}
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-faint">
               🔒 Audio is generated securely on our servers with Microsoft Neural voices. Your text is used only to synthesize the audio and is not stored.
             </p>
           </div>
@@ -353,9 +353,9 @@ export function Studio() {
 
         {/* ── RIGHT: preview & output ──────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Preview & Output</p>
+              <p className="text-sm font-medium text-fg-soft">Preview & Output</p>
               {tts.status === "done" && <Badge tone="green" dot>Ready</Badge>}
             </div>
             <AudioPlayer ref={playerRef} audioBuffer={tts.audioBuffer} onDownload={() => setDownloadModalOpen(true)} />
@@ -372,7 +372,7 @@ export function Studio() {
             {tts.status === "done" && (
               <button
                 onClick={handleGenerate}
-                className="mt-4 flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+                className="mt-4 flex items-center gap-2 text-sm text-accent transition-colors hover:text-accent-strong"
               >
                 <RefreshCw className="h-4 w-4" /> Regenerate
               </button>
@@ -381,14 +381,14 @@ export function Studio() {
 
           {/* Word timings */}
           {studio.wordTimings.length > 0 && (
-            <div className="rounded-card border border-gray-800 bg-panel p-5">
-              <p className="mb-3 text-sm font-medium text-gray-300">Word Timing Data</p>
-              <p className="text-xs text-gray-500">
+            <div className="rounded-card border border-line bg-surface p-5">
+              <p className="mb-3 text-sm font-medium text-fg-soft">Word Timing Data</p>
+              <p className="text-xs text-faint">
                 {studio.wordTimings.length} words aligned — used to auto-populate the subtitle editor.
               </p>
               <div className="mt-3 flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
                 {studio.wordTimings.slice(0, 120).map((w, i) => (
-                  <span key={i} className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300" title={`${w.start.toFixed(2)}s – ${w.end.toFixed(2)}s`}>
+                  <span key={i} className="rounded bg-tint px-2 py-0.5 text-xs text-fg-soft" title={`${w.start.toFixed(2)}s – ${w.end.toFixed(2)}s`}>
                     {w.word}
                   </span>
                 ))}
@@ -397,12 +397,12 @@ export function Studio() {
           )}
 
           {/* History */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-3 text-sm font-medium text-gray-300">This Session</p>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <p className="mb-3 text-sm font-medium text-fg-soft">This Session</p>
             {studio.history.length === 0 ? (
-              <p className="text-sm text-gray-500">Generations you make will appear here.</p>
+              <p className="text-sm text-faint">Generations you make will appear here.</p>
             ) : (
-              <ul className="divide-y divide-gray-800">
+              <ul className="divide-y divide-line">
                 {studio.history.map((h) => (
                   <li key={h.id} className="flex items-center gap-3 py-2.5">
                     <button
@@ -412,15 +412,15 @@ export function Studio() {
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <span className="block truncate text-sm text-white">{truncate(h.text, 60)}</span>
-                      <span className="block text-xs text-gray-500">
+                      <span className="block truncate text-sm text-fg">{truncate(h.text, 60)}</span>
+                      <span className="block text-xs text-faint">
                         {displayNameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
                       </span>
                     </button>
                     <button
                       onClick={() => studio.removeHistory(h.id)}
                       aria-label="Remove from history"
-                      className="rounded p-1 text-gray-500 hover:text-red-400"
+                      className="rounded p-1 text-faint hover:text-danger"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -448,11 +448,11 @@ export function Studio() {
                 aria-pressed={format === f}
                 className={cn(
                   "rounded-card border py-4 text-center transition-all",
-                  format === f ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500",
+                  format === f ? "border-accent bg-accent/10" : "border-line-strong hover:border-line-emphasis",
                 )}
               >
-                <span className="block text-lg font-bold uppercase text-white">{f}</span>
-                <span className="block text-xs text-gray-500">{f === "mp3" ? "Compressed" : f === "wav" ? "Lossless" : "Efficient"}</span>
+                <span className="block text-lg font-semibold uppercase text-fg">{f}</span>
+                <span className="block text-xs text-faint">{f === "mp3" ? "Compressed" : f === "wav" ? "Lossless" : "Efficient"}</span>
               </button>
             ))}
           </div>
@@ -471,10 +471,10 @@ function QuickAction({ icon, label, onClick, loading }: { icon: React.ReactNode;
     <button
       onClick={onClick}
       disabled={loading}
-      className="flex min-w-0 flex-col items-center gap-1.5 rounded-card border border-gray-700 px-2 py-3 text-center transition-all duration-200 hover:border-blue-500/60 disabled:opacity-50"
+      className="flex min-w-0 flex-col items-center gap-1.5 rounded-card border border-line-strong px-2 py-3 text-center transition-all duration-200 hover:border-accent/60 disabled:opacity-50"
     >
-      <span className="text-blue-300">{icon}</span>
-      <span className="w-full truncate text-xs font-medium text-gray-300">{label}</span>
+      <span className="text-accent">{icon}</span>
+      <span className="w-full truncate text-xs font-medium text-fg-soft">{label}</span>
     </button>
   );
 }

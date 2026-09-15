@@ -2,24 +2,150 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base ─────────────────────────────────────────────────────────────── */
-:root {
+/* ══════════════════════════════════════════════════════════════════════
+   Design tokens
+   ---------------------------------------------------------------------
+   Two calm themes driven by `data-theme` on <html>:
+     • dark  — soft charcoal, cool-neutral greys, dusty slate-blue accent
+     • light — warm paper, hairline borders, the same accent, deepened
+   Every value is stored as raw RGB channels so Tailwind opacity
+   modifiers (bg-accent/10, border-line/60, …) keep working.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
+
+  /* surfaces */
+  --c-canvas: 22 25 29; /* #16191D */
+  --c-surface: 30 34 39; /* #1E2227 */
+  --c-raised: 35 40 46; /* #23282E */
+  --c-sunken: 25 29 33; /* #191D21 */
+
+  /* lines */
+  --c-line: 45 51 58; /* #2D333A */
+  --c-line-strong: 65 74 83; /* #414A53 */
+  --c-line-emphasis: 92 102 111; /* #5C666F */
+
+  /* subtle fills (hover states, tracks) */
+  --c-tint: 42 47 53; /* #2A2F35 */
+  --c-tint-strong: 58 65 73; /* #3A4149 */
+
+  /* text */
+  --c-fg: 228 231 234; /* #E4E7EA */
+  --c-fg-soft: 202 208 214; /* #CAD0D6 */
+  --c-muted: 152 160 168; /* #98A0A8 */
+  --c-faint: 135 143 152; /* #878F98 */
+
+  /* brand — dusty slate blue */
+  --c-accent: 138 163 187; /* #8AA3BB */
+  --c-accent-strong: 165 188 208; /* #A5BCD0 */
+  --c-accent-ink: 17 21 25; /* #111519 */
+  --c-secondary: 158 149 168; /* #9E95A8 — muted stone violet */
+
+  /* status — desaturated */
+  --c-success: 134 168 145; /* #86A891 */
+  --c-danger: 199 138 138; /* #C78A8A */
+  --c-warning: 199 172 124; /* #C7AC7C */
+
+  /* neutral ramp */
+  --c-gray-50: 242 244 246;
+  --c-gray-100: 230 232 234;
+  --c-gray-200: 211 215 219;
+  --c-gray-300: 183 189 196;
+  --c-gray-400: 152 160 168;
+  --c-gray-500: 122 130 138;
+  --c-gray-600: 92 100 108;
+  --c-gray-700: 58 65 73;
+  --c-gray-800: 42 47 53;
+  --c-gray-900: 32 36 41;
+  --c-gray-950: 24 27 31;
+
+  /* effects */
+  --c-shadow: 0 0 0;
+  --scrim: rgb(8 10 12 / 0.72);
+  --hairline: rgb(255 255 255 / 0.05);
+  --range-track: rgb(var(--c-tint));
+  --focus-ring: rgb(var(--c-accent) / 0.55);
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* surfaces — warm paper, no glare */
+  --c-canvas: 246 245 241; /* #F6F5F1 */
+  --c-surface: 253 252 250; /* #FDFCFA */
+  --c-raised: 255 255 255; /* #FFFFFF */
+  --c-sunken: 242 241 236; /* #F2F1EC */
+
+  /* lines */
+  --c-line: 228 226 219; /* #E4E2DB */
+  --c-line-strong: 214 211 202; /* #D6D3CA */
+  --c-line-emphasis: 191 187 176; /* #BFBBB0 */
+
+  /* subtle fills (hover states, tracks) */
+  --c-tint: 232 229 222; /* #E8E5DE */
+  --c-tint-strong: 223 220 211; /* #DFDCD3 */
+
+  /* text */
+  --c-fg: 35 40 45; /* #23282D */
+  --c-fg-soft: 58 65 72; /* #3A4148 */
+  --c-muted: 94 102 110; /* #5E666E */
+  --c-faint: 107 116 124; /* #6B747C */
+
+  /* brand — same dusty slate blue, deepened for contrast on paper */
+  --c-accent: 79 109 138; /* #4F6D8A */
+  --c-accent-strong: 62 90 117; /* #3E5A75 */
+  --c-accent-ink: 250 251 252; /* #FAFBFC */
+  --c-secondary: 121 111 133; /* #796F85 */
+
+  /* status */
+  --c-success: 79 122 92; /* #4F7A5C */
+  --c-danger: 168 92 92; /* #A85C5C */
+  --c-warning: 145 113 58; /* #91713A */
+
+  /* neutral ramp — text shades go dark, surface shades stay pale */
+  --c-gray-50: 251 250 248;
+  --c-gray-100: 35 40 45;
+  --c-gray-200: 51 58 65;
+  --c-gray-300: 70 78 86;
+  --c-gray-400: 90 99 107;
+  --c-gray-500: 110 119 127;
+  --c-gray-600: 214 211 203;
+  --c-gray-700: 223 220 213;
+  --c-gray-800: 232 229 222;
+  --c-gray-900: 241 239 233;
+  --c-gray-950: 247 246 241;
+
+  /* effects */
+  --c-shadow: 60 66 74;
+  --scrim: rgb(38 43 50 / 0.42);
+  --hairline: rgb(35 40 45 / 0.04);
+  --range-track: rgb(var(--c-tint));
+  --focus-ring: rgb(var(--c-accent) / 0.45);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
 html,
 body,
 #root {
   height: 100%;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  @apply bg-navy text-gray-100 font-sans antialiased;
+  @apply bg-canvas text-fg font-sans antialiased;
   font-size: 16px;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgb(var(--c-accent) / 0.25);
 }
 
 /* ── Focus visibility (WCAG 2.1 AA) ─────────────────────────────────── */
@@ -29,15 +155,15 @@ body {
 :focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px #111827,
-    0 0 0 4px #3b82f6;
-  border-radius: 4px;
+    0 0 0 2px rgb(var(--c-surface)),
+    0 0 0 4px var(--focus-ring);
+  border-radius: 6px;
 }
 
-/* ── Custom dark scrollbars ──────────────────────────────────────────── */
+/* ── Quiet scrollbars ───────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #374151 transparent;
+  scrollbar-color: rgb(var(--c-line-emphasis)) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
@@ -47,11 +173,11 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: rgb(var(--c-line-emphasis));
   border-radius: 8px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: rgb(var(--c-muted));
 }
 
 /* ── Custom range inputs ─────────────────────────────────────────────── */
@@ -59,59 +185,60 @@ body {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
+  height: 3px;
   border-radius: 9999px;
-  background: #1f2937;
+  background: var(--range-track);
   cursor: pointer;
   outline-offset: 4px;
 }
 .sw-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border: 2px solid #0a0f1c;
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.5), 0 2px 6px rgba(0, 0, 0, 0.5);
+  background: rgb(var(--c-accent));
+  border: 2px solid rgb(var(--c-surface));
+  box-shadow: 0 1px 3px rgb(var(--c-shadow) / 0.25);
   transition: transform 0.2s ease-in-out;
 }
 .sw-range::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.1);
 }
 .sw-range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border: 2px solid #0a0f1c;
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.5), 0 2px 6px rgba(0, 0, 0, 0.5);
+  background: rgb(var(--c-accent));
+  border: 2px solid rgb(var(--c-surface));
+  box-shadow: 0 1px 3px rgb(var(--c-shadow) / 0.25);
 }
 
-/* ── Gradient text helper ────────────────────────────────────────────── */
-.text-gradient {
-  background-image: linear-gradient(to right, #60a5fa, #a78bfa);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* ── Overlay / scrim helpers ─────────────────────────────────────────── */
+@layer utilities {
+  .bg-scrim {
+    background-color: var(--scrim);
+  }
+  .bg-hairline {
+    background-color: var(--hairline);
+  }
+  .border-hairline {
+    border-color: var(--hairline);
+  }
 }
 
 /* ── Shimmer skeleton ────────────────────────────────────────────────── */
 .skeleton {
-  @apply rounded-md bg-gray-800/70 relative overflow-hidden;
+  @apply rounded-md relative overflow-hidden;
+  background-color: rgb(var(--c-tint) / 0.75);
 }
 .skeleton::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.06),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, var(--hairline), transparent);
   background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
+  animation: shimmer 1.8s linear infinite;
 }
 @keyframes shimmer {
   0% {

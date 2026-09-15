@@ -22,6 +22,7 @@ import { Button } from "../components/ui/Button";
 import { TextField } from "../components/ui/TextField";
 import { Select } from "../components/ui/Select";
 import { Toggle } from "../components/ui/Toggle";
+import { ThemeSelect } from "../components/ui/ThemeToggle";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { idbClear, idbUsage } from "../lib/idb";
@@ -47,10 +48,10 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-3xl font-bold text-white">Settings</h1>
-      <p className="mt-1 text-sm text-gray-400">Manage your account, billing, and preferences.</p>
+      <h1 className="text-3xl font-semibold text-fg">Settings</h1>
+      <p className="mt-1 text-sm text-muted">Manage your account, billing, and preferences.</p>
 
-      <div className="mt-6 flex gap-1 overflow-x-auto rounded-card border border-gray-800 bg-gray-900/60 p-1" role="tablist">
+      <div className="mt-6 flex gap-1 overflow-x-auto rounded-card border border-line bg-sunken/60 p-1" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -59,7 +60,7 @@ export function Settings() {
             onClick={() => navigate(`/settings/${t.id === "profile" ? "" : t.id}`)}
             className={cn(
               "flex shrink-0 items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-all duration-200",
-              active === t.id ? "bg-gradient-to-r from-blue-500/20 to-violet-500/20 text-white" : "text-gray-400 hover:text-gray-200",
+              active === t.id ? "bg-accent/10 text-accent" : "text-muted hover:text-fg-soft",
             )}
           >
             {t.icon}
@@ -144,12 +145,12 @@ function ProfileTab() {
     <>
       <Card title="Profile" icon={<User className="h-4 w-4" />}>
         <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-xl font-bold text-white">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-xl font-semibold text-accent-ink">
             {(user?.name ?? "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-white">{user?.name}</p>
-            <p className="truncate text-sm text-gray-500">{user?.email}</p>
+            <p className="truncate font-semibold text-fg">{user?.name}</p>
+            <p className="truncate text-sm text-faint">{user?.email}</p>
           </div>
         </div>
         <div className="mt-5 space-y-4">
@@ -165,15 +166,15 @@ function ProfileTab() {
           <TextField label="New password" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
           <TextField label="Confirm new password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
           <Button onClick={changePassword} loading={pwSaving} variant="outline">Update password</Button>
-          <div className="border-t border-gray-800 pt-4">
-            <p className="text-sm text-gray-400">Sign out of all other devices:</p>
+          <div className="border-t border-line pt-4">
+            <p className="text-sm text-muted">Sign out of all other devices:</p>
             <Button onClick={signOutOthers} variant="outline" className="mt-2">Sign out all other sessions</Button>
           </div>
         </div>
       </Card>
 
-      <Card title="Danger zone" icon={<Trash2 className="h-4 w-4" />} className="border-red-500/30">
-        <p className="text-sm text-gray-400">Deleting your account removes your cloud projects. We keep a 30-day recovery window.</p>
+      <Card title="Danger zone" icon={<Trash2 className="h-4 w-4" />} className="border-danger/30">
+        <p className="text-sm text-muted">Deleting your account removes your cloud projects. We keep a 30-day recovery window.</p>
         <Button variant="danger" className="mt-3" onClick={() => setDeleteOpen(true)}>Delete account</Button>
       </Card>
 
@@ -217,10 +218,10 @@ function BillingTab() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-lg font-bold text-white">{planDef.name}</p>
+              <p className="text-lg font-semibold text-fg">{planDef.name}</p>
               <Badge tone="gradient">{planDef.monthlyPrice === 0 ? "Free" : `$${planDef.monthlyPrice}/mo`}</Badge>
             </div>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-muted">
               {formatNumber(used)} / {formatNumber(limit)} characters this month
             </p>
           </div>
@@ -230,8 +231,8 @@ function BillingTab() {
             </Button>
           )}
         </div>
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-tint">
+          <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniStat label="Resolution" value={planDef.maxResolution} />
@@ -242,15 +243,15 @@ function BillingTab() {
       </Card>
 
       <Card title="Payment method" icon={<CreditCard className="h-4 w-4" />}>
-        <p className="text-sm text-gray-400">No card on file. In production, payment methods are managed via Stripe Customer Portal (no raw card data ever touches our servers).</p>
+        <p className="text-sm text-muted">No card on file. In production, payment methods are managed via Stripe Customer Portal (no raw card data ever touches our servers).</p>
       </Card>
 
       <Card title="Billing history" icon={<CreditCard className="h-4 w-4" />}>
-        <p className="text-sm text-gray-500">No invoices yet.</p>
+        <p className="text-sm text-faint">No invoices yet.</p>
       </Card>
 
       <Card title="Cancel subscription" icon={<Trash2 className="h-4 w-4" />}>
-        <p className="text-sm text-gray-400">You can cancel anytime from the Stripe Customer Portal. Your access continues until the end of the billing period.</p>
+        <p className="text-sm text-muted">You can cancel anytime from the Stripe Customer Portal. Your access continues until the end of the billing period.</p>
       </Card>
     </>
   );
@@ -258,9 +259,9 @@ function BillingTab() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-card border border-gray-800 bg-gray-900/60 p-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-0.5 truncate text-sm font-semibold text-white">{value}</p>
+    <div className="rounded-card border border-line bg-sunken/60 p-3">
+      <p className="text-xs text-faint">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold text-fg">{value}</p>
     </div>
   );
 }
@@ -315,10 +316,22 @@ function PreferencesTab() {
 
   return (
     <>
+      <Card title="Appearance" icon={<Palette className="h-4 w-4" />}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm text-fg-soft">Theme</p>
+            <p className="mt-0.5 text-sm text-faint">
+              A quiet charcoal theme and a soft paper theme. “System” follows your device setting.
+            </p>
+          </div>
+          <ThemeSelect />
+        </div>
+      </Card>
+
       <Card title="Defaults" icon={<Palette className="h-4 w-4" />}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default voice</label>
+            <label className="mb-1.5 block text-sm text-fg-soft">Default voice</label>
             <Select
               value={defaultVoice}
               onChange={setDefaultVoice}
@@ -327,7 +340,7 @@ function PreferencesTab() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default export quality</label>
+            <label className="mb-1.5 block text-sm text-fg-soft">Default export quality</label>
             <Select
               value={exportQuality}
               onChange={setExportQuality}
@@ -350,16 +363,16 @@ function PreferencesTab() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Download my data</p>
-              <p className="text-xs text-gray-500">GDPR — exports your profile, projects, and usage logs.</p>
+              <p className="text-sm font-medium text-fg">Download my data</p>
+              <p className="text-xs text-faint">GDPR — exports your profile, projects, and usage logs.</p>
             </div>
             <Button size="sm" variant="outline" icon={<Download className="h-4 w-4" />} onClick={downloadData}>Export</Button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Browser storage</p>
-              <p className="text-xs text-gray-500">
-                Local audio and projects use <span className="text-white">{formatBytes(storageUsage)}</span>.
+              <p className="text-sm font-medium text-fg">Browser storage</p>
+              <p className="text-xs text-faint">
+                Local audio and projects use <span className="text-fg">{formatBytes(storageUsage)}</span>.
               </p>
             </div>
             <div className="flex gap-2">
@@ -376,8 +389,8 @@ function PrefToggle({ label, desc, checked, onChange }: { label: string; desc: s
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{label}</p>
-        <p className="text-xs text-gray-500">{desc}</p>
+        <p className="text-sm font-medium text-fg">{label}</p>
+        <p className="text-xs text-faint">{desc}</p>
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
@@ -409,7 +422,7 @@ function ApiKeysTab() {
   if (user?.plan !== "ENTERPRISE") {
     return (
       <Card title="API Keys" icon={<KeyRound className="h-4 w-4" />}>
-        <p className="text-sm text-gray-400">API keys are available on the Enterprise plan. Note: API keys grant access to video-export endpoints only — TTS generation is always client-side.</p>
+        <p className="text-sm text-muted">API keys are available on the Enterprise plan. Note: API keys grant access to video-export endpoints only — TTS generation is always client-side.</p>
       </Card>
     );
   }
@@ -441,27 +454,27 @@ function ApiKeysTab() {
 
   return (
     <Card title="API Keys" icon={<KeyRound className="h-4 w-4" />}>
-      <p className="mb-4 text-sm text-gray-400">API keys grant access to video-export endpoints only. TTS generation is always client-side.</p>
+      <p className="mb-4 text-sm text-muted">API keys grant access to video-export endpoints only. TTS generation is always client-side.</p>
       <div className="flex gap-2">
         <TextField label="Key name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Production key" className="flex-1" />
         <Button onClick={createKey} loading={creating} className="mt-6">Create key</Button>
       </div>
       {revealed && (
-        <div className="mt-4 rounded-card border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-xs text-amber-200">Copy this key now — it won't be shown again:</p>
-          <p className="mt-1 break-all font-mono text-sm text-white">{revealed}</p>
+        <div className="mt-4 rounded-card border border-warning/30 bg-warning/10 p-3">
+          <p className="text-xs text-warning">Copy this key now — it won't be shown again:</p>
+          <p className="mt-1 break-all font-mono text-sm text-fg">{revealed}</p>
         </div>
       )}
       <div className="mt-5">
-        {loading ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" /> : keys.length === 0 ? (
-          <p className="text-sm text-gray-500">No API keys yet.</p>
+        {loading ? <Loader2 className="h-5 w-5 animate-spin text-faint" /> : keys.length === 0 ? (
+          <p className="text-sm text-faint">No API keys yet.</p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-line">
             {keys.map((k) => (
               <li key={k.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-white">{k.name}</p>
-                  <p className="font-mono text-xs text-gray-500">{k.prefix}…</p>
+                  <p className="truncate font-medium text-fg">{k.name}</p>
+                  <p className="font-mono text-xs text-faint">{k.prefix}…</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone="gray">{k.createdAt ? formatDate(k.createdAt) : ""}</Badge>
@@ -478,10 +491,10 @@ function ApiKeysTab() {
 
 function Card({ title, icon, children, className }: { title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-card border border-gray-800 bg-panel p-5 sm:p-6", className)}>
+    <div className={cn("rounded-card border border-line bg-surface p-5 sm:p-6", className)}>
       <div className="mb-5 flex items-center gap-2">
-        {icon && <span className="text-blue-400">{icon}</span>}
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        {icon && <span className="text-accent">{icon}</span>}
+        <h2 className="text-lg font-semibold text-fg">{title}</h2>
       </div>
       {children}
     </div>

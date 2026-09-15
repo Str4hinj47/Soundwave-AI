@@ -6,7 +6,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-5">
+    <div className="rounded-card border border-line bg-surface p-5">
       <Skeleton className="mb-4 h-6 w-2/5" />
       <Skeleton className="mb-2 h-4 w-full" />
       <Skeleton className="mb-2 h-4 w-4/5" />

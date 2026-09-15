@@ -69,7 +69,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
       {open && (
         <div className="fixed inset-0 z-30 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
           <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-scrim backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -79,7 +79,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
             ref={panelRef}
             tabIndex={-1}
             className={cn(
-              "relative w-full rounded-card border border-gray-700 bg-panel shadow-2xl outline-none",
+              "relative w-full rounded-card border border-line bg-raised shadow-pop outline-none",
               sizes[size],
             )}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -89,19 +89,19 @@ export function Modal({ open, onClose, title, description, children, footer, siz
           >
             <div className="flex items-start justify-between gap-4 p-5 pb-0">
               <div className="min-w-0">
-                {title && <h2 className="text-xl font-semibold text-white">{title}</h2>}
-                {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
+                {title && <h2 className="text-xl font-semibold text-fg">{title}</h2>}
+                {description && <p className="mt-1 text-sm text-muted">{description}</p>}
               </div>
               <button
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-gray-700 hover:text-white"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-all duration-200 hover:bg-tint-strong hover:text-fg"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-5">{children}</div>
-            {footer && <div className="flex justify-end gap-3 border-t border-gray-800 px-5 py-4">{footer}</div>}
+            {footer && <div className="flex justify-end gap-3 border-t border-line px-5 py-4">{footer}</div>}
           </motion.div>
         </div>
       )}

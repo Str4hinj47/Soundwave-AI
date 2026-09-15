@@ -32,11 +32,11 @@ function ScrollToTop() {
 
 function FullPageLoader() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-navy">
+    <div className="flex min-h-screen items-center justify-center bg-canvas">
       <div className="flex flex-col items-center gap-4">
         <Logo />
-        <div className="h-1 w-40 overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full w-1/3 animate-[shimmer_1.4s_linear_infinite] rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
+        <div className="h-1 w-40 overflow-hidden rounded-full bg-tint">
+          <div className="h-full w-1/3 animate-[shimmer_1.4s_linear_infinite] rounded-full bg-accent" />
         </div>
       </div>
     </div>

@@ -55,12 +55,12 @@ export function Dashboard() {
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Welcome back, {firstName}</h1>
-          <p className="mt-1 text-sm text-gray-400">{today}</p>
+          <h1 className="text-3xl font-semibold text-fg">Welcome back, {firstName}</h1>
+          <p className="mt-1 text-sm text-muted">{today}</p>
         </div>
         <Link
           to="/studio"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white shadow-glow transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-btn bg-accent px-5 font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-strong"
         >
           <Sparkles className="h-4 w-4" /> New Text-to-Speech
         </Link>
@@ -82,7 +82,7 @@ export function Dashboard() {
           icon={<ArrowUpRight className="h-5 w-5" />}
           footer={
             user?.plan !== "ENTERPRISE" ? (
-              <Link to="/pricing" className="mt-1 inline-block text-sm text-blue-400 hover:text-blue-300">
+              <Link to="/pricing" className="mt-1 inline-block text-sm text-accent hover:text-accent-strong">
                 Upgrade →
               </Link>
             ) : undefined
@@ -91,7 +91,7 @@ export function Dashboard() {
       </div>
 
       {/* Quick actions */}
-      <h2 className="mt-10 text-lg font-semibold text-white">Quick actions</h2>
+      <h2 className="mt-10 text-lg font-semibold text-fg">Quick actions</h2>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <QuickAction
           icon={<Mic className="h-6 w-6" />}
@@ -115,8 +115,8 @@ export function Dashboard() {
 
       {/* Recent projects */}
       <div className="mt-10 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Recent projects</h2>
-        <Link to="/projects" className="text-sm text-blue-400 hover:text-blue-300">
+        <h2 className="text-lg font-semibold text-fg">Recent projects</h2>
+        <Link to="/projects" className="text-sm text-accent hover:text-accent-strong">
           View all →
         </Link>
       </div>
@@ -129,7 +129,7 @@ export function Dashboard() {
             <SkeletonCard />
           </div>
         ) : projects.length === 0 ? (
-          <div className="rounded-card border border-gray-800 bg-panel">
+          <div className="rounded-card border border-line bg-surface">
             <EmptyState
               icon={<Mic className="h-8 w-8" />}
               title="Create your first project"
@@ -137,7 +137,7 @@ export function Dashboard() {
               action={
                 <Link
                   to="/studio"
-                  className="inline-flex h-11 items-center rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white hover:from-blue-400 hover:to-violet-400"
+                  className="inline-flex h-11 items-center rounded-btn bg-accent px-5 font-semibold text-accent-ink hover:bg-accent-strong"
                 >
                   Start creating
                 </Link>
@@ -158,12 +158,12 @@ export function Dashboard() {
 
 function StatCard({ title, value, icon, footer }: { title: string; value: string; icon: React.ReactNode; footer?: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-5">
+    <div className="rounded-card border border-line bg-surface p-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">{title}</p>
-        <span className="text-blue-400">{icon}</span>
+        <p className="text-sm text-muted">{title}</p>
+        <span className="text-accent">{icon}</span>
       </div>
-      <p className="mt-2 truncate text-2xl font-bold text-white">{value}</p>
+      <p className="mt-2 truncate text-2xl font-semibold text-fg">{value}</p>
       {footer}
     </div>
   );
@@ -173,14 +173,14 @@ function QuickAction({ icon, title, desc, to }: { icon: React.ReactNode; title: 
   return (
     <Link
       to={to}
-      className="group flex items-start gap-4 rounded-card border border-gray-800 bg-panel p-5 transition-all duration-200 hover:border-blue-500/50"
+      className="group flex items-start gap-4 rounded-card border border-line bg-surface p-5 transition-all duration-200 hover:border-line-emphasis"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 text-blue-300 transition-colors group-hover:text-blue-200">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent transition-colors group-hover:text-accent-strong">
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block truncate font-semibold text-white">{title}</span>
-        <span className="mt-0.5 block text-sm text-gray-400">{desc}</span>
+        <span className="block truncate font-semibold text-fg">{title}</span>
+        <span className="mt-0.5 block text-sm text-muted">{desc}</span>
       </span>
     </Link>
   );
@@ -190,17 +190,17 @@ function ProjectCard({ project, onOpen, onDelete }: { project: ProjectMeta; onOp
   const [deleted, setDeleted] = useState(false);
   if (deleted) return null;
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-4 transition-all duration-200 hover:border-blue-500/50">
+    <div className="rounded-card border border-line bg-surface p-4 transition-all duration-200 hover:border-line-emphasis">
       <div className="flex items-start justify-between gap-2">
         <button onClick={onOpen} className="min-w-0 flex-1 text-left">
-          <p className="truncate font-semibold text-white">{project.title}</p>
-          <p className="mt-0.5 text-xs text-gray-500">{formatDate(project.createdAt)}</p>
+          <p className="truncate font-semibold text-fg">{project.title}</p>
+          <p className="mt-0.5 text-xs text-faint">{formatDate(project.createdAt)}</p>
         </button>
         <Dropdown
           align="right"
           label="Project actions"
           trigger={
-            <button aria-label="Project actions" className="rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white">
+            <button aria-label="Project actions" className="rounded p-1.5 text-muted hover:bg-tint hover:text-fg">
               ⋯
             </button>
           }
@@ -236,7 +236,7 @@ function ProjectCard({ project, onOpen, onDelete }: { project: ProjectMeta; onOp
         {project.storageType === "LOCAL" && <Badge tone="amber" dot>Local Only</Badge>}
       </div>
       {project.textContent && (
-        <p className="mt-3 line-clamp-2 text-sm text-gray-500">{truncate(project.textContent, 160)}</p>
+        <p className="mt-3 line-clamp-2 text-sm text-faint">{truncate(project.textContent, 160)}</p>
       )}
     </div>
   );

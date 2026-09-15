@@ -25,7 +25,7 @@ soundwave-ai/
 │   ├── src/components/  # ui/ primitives, layout/, VoicePicker, Waveform, …
 │   ├── src/hooks/       # useTTS (edge-tts API call + offline fallback)
 │   ├── src/lib/         # audio, ttsEngine, voices, subtitlePresets, idb, api, …
-│   └── src/store/       # Zustand: auth, studio, toast
+│   └── src/store/       # Zustand: auth, studio, toast, theme
 ├── server/              # Express API
 │   ├── src/routes/      # auth, voices, tts, projects, upload, export, user, billing, apiKeys
 │   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, plans, security
@@ -180,8 +180,41 @@ OAuth identity; new OAuth users are created email-verified with no password.
 
 ## Design system
 
-Dark-only UI: background `#0A0F1C`, cards `#111827`, primary blue `#3B82F6`,
-accent violet `#8B5CF6`, success `#10B981`, danger `#EF4444`, warning `#F59E0B`.
-Radii 4/6/8, 4-px spacing grid, Inter/JetBrains Mono type scale, layered
-shadows, visible `:focus-visible` rings, WCAG 2.1 AA contrast. Every text
-container truncates or clamps; flex children carry `min-width:0`.
+A quiet, minimal UI with two themes — **charcoal** (soft neutral dark) and
+**paper** (warm off-white light) — plus a **system** mode that follows the OS.
+No gradients, no coloured glow, one muted dusty slate-blue accent.
+
+Everything is driven by CSS custom properties declared in
+`frontend/src/index.css` under `[data-theme="dark"]` / `[data-theme="light"]`
+and exposed to Tailwind as semantic colour tokens (`frontend/tailwind.config.js`).
+Each token stores raw RGB channels, so opacity modifiers (`bg-accent/10`,
+`border-line/60`) work in both themes.
+
+| Token | Purpose | Charcoal | Paper |
+| --- | --- | --- | --- |
+| `canvas` / `surface` / `raised` / `sunken` | page, cards, popovers, inputs | `#16191D` / `#1E2227` / `#23282E` / `#191D21` | `#F6F5F1` / `#FDFCFA` / `#FFFFFF` / `#F2F1EC` |
+| `line` / `line-strong` / `line-emphasis` | hairlines, inputs, hover borders | `#2D333A` / `#414A53` / `#5C666F` | `#E4E2DB` / `#D6D3CA` / `#BFBBB0` |
+| `fg` / `fg-soft` / `muted` / `faint` | text hierarchy | `#E4E7EA` → `#878F98` | `#23282D` → `#6B747C` |
+| `accent` / `accent-strong` / `accent-ink` | brand + on-brand text | `#8AA3BB` / `#A5BCD0` / `#111519` | `#4F6D8A` / `#3E5A75` / `#FAFBFC` |
+| `secondary` | muted stone-violet (badges) | `#9E95A8` | `#796F85` |
+| `success` / `danger` / `warning` | desaturated status colours | `#86A891` / `#C78A8A` / `#C7AC7C` | `#4F7A5C` / `#A85C5C` / `#91713A` |
+| `tint` / `tint-strong` | subtle fills, hover states, tracks | `#2A2F35` / `#3A4149` | `#E8E5DE` / `#DFDCD3` |
+
+Radii 8/8/12 (input/button/card), 4-px spacing grid, Inter/JetBrains Mono type
+scale, semibold headings at most, soft neutral shadows (`shadow-card`,
+`shadow-pop`), visible `:focus-visible` rings, WCAG 2.1 AA contrast in both
+themes. Every text container truncates or clamps; flex children carry
+`min-width:0`.
+
+**Theming plumbing**
+
+- `frontend/src/store/theme.ts` — zustand store (`light` / `dark` / `system`),
+  persisted in `localStorage["soundwave:theme"]`; writes `data-theme` on
+  `<html>` and keeps `<meta name="theme-color">` in sync.
+- An inline script in `frontend/index.html` resolves the stored theme before
+  first paint (no flash), and `initTheme()` re-applies it on boot and listens
+  for OS-level `prefers-color-scheme` changes.
+- `frontend/src/components/ui/ThemeToggle.tsx` — icon switch (navbar, app
+  header, auth pages) and `ThemeSelect` (Settings → Preferences → Appearance).
+- Canvas visualisers (waveform, hero bars) read tokens through
+  `frontend/src/lib/themeTokens.ts` and redraw when the theme changes.

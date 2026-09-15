@@ -22,6 +22,7 @@ import { Logo } from "../Logo";
 import { useAuth } from "../../store/auth";
 import { initials } from "../../lib/format";
 import { Dropdown } from "../ui/Dropdown";
+import { ThemeToggle } from "../ui/ThemeToggle";
 import { toast } from "../../store/toast";
 
 interface NavItem {
@@ -76,12 +77,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center justify-between border-b border-gray-800 px-4">
+      <div className="flex h-16 items-center justify-between border-b border-line px-4">
         <NavLink to="/dashboard" className="flex items-center">
           <Logo />
         </NavLink>
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-md text-muted hover:bg-tint lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Close menu"
         >
@@ -101,14 +102,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={studioNav.to}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                studioActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
+                studioActive ? "bg-accent/15 text-fg" : "text-muted hover:bg-tint hover:text-fg",
               )}
             >
               {studioNav.icon}
               {studioNav.label}
             </NavLink>
             {studioActive && (
-              <div className="ml-6 mt-1 space-y-1 border-l border-gray-800 pl-3">
+              <div className="ml-6 mt-1 space-y-1 border-l border-line pl-3">
                 {studioNav.sub.map((s) => (
                   <NavLink
                     key={s.to}
@@ -117,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     className={({ isActive }) =>
                       cn(
                         "block rounded-md px-3 py-2 text-sm transition-colors",
-                        isActive ? "text-blue-300" : "text-gray-500 hover:text-gray-200",
+                        isActive ? "text-accent" : "text-faint hover:text-fg-soft",
                       )
                     }
                   >
@@ -130,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <a
             href="mailto:support@soundwave.ai"
-            className="mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-gray-800 hover:text-white"
+            className="mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted transition-all duration-200 hover:bg-tint hover:text-fg"
           >
             <HelpCircle className="h-5 w-5" />
             Help & Support
@@ -138,22 +139,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </nav>
 
-      <div className="border-t border-gray-800 p-3">
+      <div className="border-t border-line p-3">
         {user?.plan === "FREE" ? (
-          <div className="rounded-card border border-violet-500/30 bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-3">
-            <p className="text-sm font-semibold text-white">Upgrade to Pro</p>
-            <p className="mt-0.5 text-xs text-gray-400">200K chars, 1080p, no watermark.</p>
+          <div className="rounded-card border border-line bg-sunken p-3">
+            <p className="text-sm font-semibold text-fg">Upgrade to Pro</p>
+            <p className="mt-0.5 text-xs text-muted">200K chars, 1080p, no watermark.</p>
             <button
               onClick={() => navigate("/pricing")}
-              className="mt-2 w-full rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
+              className="mt-2 w-full rounded-btn bg-accent px-3 py-2 text-sm font-semibold text-accent-ink transition-all duration-200 hover:bg-accent-strong"
             >
               Upgrade
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-card border border-gray-800 bg-gray-900/60 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-card border border-line bg-sunken/60 px-3 py-2.5">
             <span className="h-2 w-2 rounded-full bg-success" />
-            <span className="text-sm text-gray-300">{user?.plan} plan</span>
+            <span className="text-sm text-fg-soft">{user?.plan} plan</span>
           </div>
         )}
       </div>
@@ -161,23 +162,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className="min-h-screen bg-canvas">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-gray-800 bg-panel lg:block">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-surface lg:block">{sidebar}</aside>
 
       {/* Mobile drawer */}
       <AnimatePresence>
         {mobileOpen && (
           <>
             <motion.div
-              className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+              className="fixed inset-0 z-30 bg-scrim lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
-              className="fixed inset-y-0 left-0 z-30 w-72 bg-panel lg:hidden"
+              className="fixed inset-y-0 left-0 z-30 w-72 border-r border-line bg-surface lg:hidden"
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
@@ -191,10 +192,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 border-b border-gray-800 bg-navy/85 backdrop-blur-xl">
+        <header className="sticky top-0 z-10 border-b border-line bg-canvas/80 backdrop-blur-md">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
             <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted hover:bg-tint lg:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
@@ -202,21 +203,22 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
 
             <form onSubmit={onSearch} className="relative hidden max-w-md flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
               <input
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search projects…"
-                className="w-full rounded-input border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600"
+                className="w-full rounded-input border border-line bg-sunken py-2 pl-9 pr-3 text-sm text-fg placeholder-faint transition-colors focus:border-accent/60 hover:border-line-emphasis"
                 aria-label="Search projects"
               />
             </form>
 
             <div className="ml-auto flex items-center gap-1.5">
+              <ThemeToggle className="hover:bg-tint" />
               <button
                 aria-label="Notifications"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition-colors hover:bg-tint hover:text-fg"
               >
                 <Bell className="h-5 w-5" />
               </button>
@@ -225,11 +227,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 align="right"
                 label="Account menu"
                 trigger={
-                  <button className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-gray-800">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-sm font-bold text-white">
+                  <button className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-tint">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent">
                       {initials(user?.name ?? "U")}
                     </span>
-                    <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
+                    <ChevronDown className="hidden h-4 w-4 text-muted sm:block" />
                   </button>
                 }
                 items={[
@@ -257,7 +259,7 @@ function SidebarLink({ item }: { item: NavItem }) {
       className={({ isActive }) =>
         cn(
           "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-          isActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
+          isActive ? "bg-accent/15 text-fg" : "text-muted hover:bg-tint hover:text-fg",
         )
       }
     >

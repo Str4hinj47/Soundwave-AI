@@ -213,8 +213,8 @@ export function VideoCompositor() {
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Video Compositor</h1>
-          <p className="text-sm text-gray-400">Overlay your subtitles onto video and export. Audio is only uploaded when you export.</p>
+          <h1 className="text-2xl font-semibold text-fg">Video Compositor</h1>
+          <p className="text-sm text-muted">Overlay your subtitles onto video and export. Audio is only uploaded when you export.</p>
         </div>
         <Badge tone="blue">{planDef.name} plan · up to {planDef.maxResolution}</Badge>
       </div>
@@ -223,7 +223,7 @@ export function VideoCompositor() {
         {/* Left column */}
         <div className="min-w-0 space-y-5">
           {/* Preview */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-lg bg-black" style={{ aspectRatio: "16 / 9" }}>
               {videoUrl ? (
                 <video ref={videoRef} src={videoUrl} className="h-full w-full object-contain" muted playsInline />
@@ -236,7 +236,7 @@ export function VideoCompositor() {
                 </div>
               )}
               {!videoUrl && (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
+                <div className="absolute inset-0 flex items-center justify-center text-[rgba(255,255,255,0.45)]">
                   <span className="flex items-center gap-2 text-sm"><FileVideo className="h-5 w-5" /> No video — solid background</span>
                 </div>
               )}
@@ -245,18 +245,18 @@ export function VideoCompositor() {
             {/* Timeline */}
             <div className="mt-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-300">Timeline</p>
+                <p className="text-sm font-medium text-fg-soft">Timeline</p>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} className="rounded px-2 py-0.5 text-gray-400 hover:text-white" aria-label="Zoom out">−</button>
-                  <span className="text-xs text-gray-500">{Math.round(zoom * 100)}%</span>
-                  <button onClick={() => setZoom((z) => Math.min(3, z + 0.25))} className="rounded px-2 py-0.5 text-gray-400 hover:text-white" aria-label="Zoom in">+</button>
+                  <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} className="rounded px-2 py-0.5 text-muted hover:text-fg" aria-label="Zoom out">−</button>
+                  <span className="text-xs text-faint">{Math.round(zoom * 100)}%</span>
+                  <button onClick={() => setZoom((z) => Math.min(3, z + 0.25))} className="rounded px-2 py-0.5 text-muted hover:text-fg" aria-label="Zoom in">+</button>
                 </div>
               </div>
-              <div className="mt-2 overflow-x-auto rounded-card border border-gray-800 bg-gray-900/60 p-3">
+              <div className="mt-2 overflow-x-auto rounded-card border border-line bg-sunken/60 p-3">
                 <div style={{ width: `${Math.max(100, zoom * 100)}%` }} className="min-w-full">
-                  <div className="flex h-14 items-center gap-1 overflow-hidden rounded-md border border-gray-800">
+                  <div className="flex h-14 items-center gap-1 overflow-hidden rounded-md border border-line">
                     {Array.from({ length: Math.max(1, Math.round(duration || 5)) }).map((_, i) => (
-                      <div key={i} className="h-full flex-1 bg-gray-800/80" title={`${i}s`} />
+                      <div key={i} className="h-full flex-1 bg-tint/80" title={`${i}s`} />
                     ))}
                   </div>
                   <div className="mt-2">
@@ -264,12 +264,12 @@ export function VideoCompositor() {
                   </div>
                   <div className="mt-2 flex h-8 items-center gap-0.5">
                     {cues.length === 0 ? (
-                      <span className="text-xs text-gray-600">No subtitle cues — add them in the Subtitle Editor.</span>
+                      <span className="text-xs text-faint">No subtitle cues — add them in the Subtitle Editor.</span>
                     ) : (
                       cues.map((c) => (
                         <div
                           key={c.id}
-                          className={cn("flex h-7 items-center overflow-hidden rounded px-1.5 text-[10px] text-white", currentTime >= c.start && currentTime < c.end ? "bg-violet-500" : "bg-gray-700")}
+                          className={cn("flex h-7 items-center overflow-hidden rounded px-1.5 text-[10px]", currentTime >= c.start && currentTime < c.end ? "bg-accent/20 text-accent" : "bg-tint text-muted")}
                           style={{ width: `${((c.end - c.start) / Math.max(duration, 1)) * 100}%` }}
                           title={c.text}
                         >
@@ -284,17 +284,17 @@ export function VideoCompositor() {
           </div>
 
           {/* Video background */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Video Background</p>
+              <p className="text-sm font-medium text-fg-soft">Video Background</p>
               {videoUrl && <Badge tone="green" dot>Uploaded</Badge>}
             </div>
 
             {videoUrl ? (
               <div className="mt-3 flex items-center gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-white">{videoName}</p>
-                  <p className="text-xs text-gray-500">MP4/MOV/WEBM/AVI · max {planDef.maxVideoMb}MB</p>
+                  <p className="truncate text-sm text-fg">{videoName}</p>
+                  <p className="text-xs text-faint">MP4/MOV/WEBM/AVI · max {planDef.maxVideoMb}MB</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={clearVideo} icon={<Trash2 className="h-4 w-4" />}>Remove</Button>
               </div>
@@ -303,20 +303,20 @@ export function VideoCompositor() {
                 <div
                   onDrop={onDrop}
                   onDragOver={(e) => e.preventDefault()}
-                  className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-gray-700 px-6 py-10 text-center transition-colors hover:border-blue-500/50"
+                  className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-line-strong px-6 py-10 text-center transition-colors hover:border-line-emphasis"
                   onClick={() => inputRef.current?.click()}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
                 >
-                  <Upload className="mb-3 h-8 w-8 text-gray-500" />
-                  <p className="text-sm text-gray-300">Drag & drop a video, or click to browse</p>
-                  <p className="mt-1 text-xs text-gray-500">MP4, MOV, WEBM, AVI · up to {planDef.maxVideoMb}MB on your plan</p>
+                  <Upload className="mb-3 h-8 w-8 text-faint" />
+                  <p className="text-sm text-fg-soft">Drag & drop a video, or click to browse</p>
+                  <p className="mt-1 text-xs text-faint">MP4, MOV, WEBM, AVI · up to {planDef.maxVideoMb}MB on your plan</p>
                   {uploading && <ProgressBar indeterminate className="mt-4 max-w-xs" />}
                   <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
                 </div>
                 <div className="mt-4 flex items-center gap-3">
-                  <span className="text-sm text-gray-400">Or use a solid background:</span>
+                  <span className="text-sm text-muted">Or use a solid background:</span>
                   <ColorPicker value={bgColor} onChange={setBgColor} label="Background color" />
                 </div>
               </>
@@ -324,11 +324,11 @@ export function VideoCompositor() {
           </div>
 
           {/* Audio track */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <div className="flex items-center justify-between">
-              <p className="flex items-center gap-2 text-sm font-medium text-gray-300"><Music className="h-4 w-4" /> Audio Track</p>
+              <p className="flex items-center gap-2 text-sm font-medium text-fg-soft"><Music className="h-4 w-4" /> Audio Track</p>
               {studio.audioBlob ? <Badge tone="green" dot>Neural TTS audio</Badge> : (
-                <button onClick={() => navigate("/studio")} className="text-sm text-blue-400 hover:text-blue-300">Generate audio →</button>
+                <button onClick={() => navigate("/studio")} className="text-sm text-accent hover:text-accent-strong">Generate audio →</button>
               )}
             </div>
             {studio.audioBlob && (
@@ -345,11 +345,11 @@ export function VideoCompositor() {
 
         {/* Right column: export settings */}
         <div className="min-w-0 space-y-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-4 text-sm font-semibold text-white">Export Settings</p>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <p className="mb-4 text-sm font-semibold text-fg">Export Settings</p>
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Resolution</label>
+                <label className="mb-1.5 block text-sm text-fg-soft">Resolution</label>
                 <Select
                   value={resolution}
                   onChange={(v) => setResolution(v as Resolution)}
@@ -361,30 +361,30 @@ export function VideoCompositor() {
                   ariaLabel="Resolution"
                 />
                 {RES_ORDER.indexOf(resolution) > maxResolutionIdx && (
-                  <p className="mt-1 text-xs text-amber-400">This resolution requires a higher plan.</p>
+                  <p className="mt-1 text-xs text-warning">This resolution requires a higher plan.</p>
                 )}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Format</label>
+                <label className="mb-1.5 block text-sm text-fg-soft">Format</label>
                 <Select value={format} onChange={(v) => setFormat(v as "mp4" | "webm")} options={[{ value: "mp4", label: "MP4 (H.264)" }, { value: "webm", label: "WEBM (VP9)" }]} ariaLabel="Format" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Quality</label>
+                <label className="mb-1.5 block text-sm text-fg-soft">Quality</label>
                 <Select value={quality} onChange={(v) => setQuality(v as "low" | "medium" | "high")} options={[{ value: "low", label: "Low (fast, smaller)" }, { value: "medium", label: "Medium" }, { value: "high", label: "High (slow, larger)" }]} ariaLabel="Quality" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Frame rate</label>
+                <label className="mb-1.5 block text-sm text-fg-soft">Frame rate</label>
                 <Select value={String(fps)} onChange={(v) => setFps(parseInt(v, 10))} options={[{ value: "24", label: "24 fps" }, { value: "30", label: "30 fps" }, { value: "60", label: "60 fps" }]} ariaLabel="Frame rate" />
               </div>
-              <div className="flex items-center justify-between rounded-card border border-gray-800 bg-gray-900/60 px-3.5 py-3">
-                <span className="text-sm text-gray-400">Estimated size</span>
-                <span className="font-mono text-sm text-white">~{formatBytes(estimatedSize)}</span>
+              <div className="flex items-center justify-between rounded-card border border-line bg-sunken/60 px-3.5 py-3">
+                <span className="text-sm text-muted">Estimated size</span>
+                <span className="font-mono text-sm text-fg">~{formatBytes(estimatedSize)}</span>
               </div>
-              {planDef.watermark && <p className="text-xs text-amber-400">Free plan exports include a small watermark. Upgrade to Pro to remove it.</p>}
+              {planDef.watermark && <p className="text-xs text-warning">Free plan exports include a small watermark. Upgrade to Pro to remove it.</p>}
             </div>
           </div>
 
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-line bg-surface p-5">
             <Button
               fullWidth
               size="lg"
@@ -398,7 +398,7 @@ export function VideoCompositor() {
             {exporting && (
               <div className="mt-4">
                 <ProgressBar value={exportProgress} tone="default" label="Export progress" />
-                <p className="mt-2 text-center text-sm text-gray-400">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
+                <p className="mt-2 text-center text-sm text-muted">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
               </div>
             )}
             {downloadUrl && !exporting && (
@@ -406,7 +406,7 @@ export function VideoCompositor() {
                 Download Video
               </Button>
             )}
-            <p className="mt-3 text-center text-xs text-gray-500">
+            <p className="mt-3 text-center text-xs text-faint">
               🔒 Audio is uploaded only for this FFmpeg compositing step, then deleted.
             </p>
           </div>
