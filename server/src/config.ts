@@ -59,15 +59,11 @@ export const config = {
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;
 
-const REQUIRED_PROD = [
-  "JWT_ACCESS_SECRET",
-  "JWT_REFRESH_SECRET",
-  "DATABASE_URL",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-];
+// Everything optional at runtime is intentionally absent here so lean (free)
+// deployments boot without extra accounts: blank Google keys hide the OAuth
+// button, blank Stripe keys make billing endpoints return a clear error, and
+// a missing DATABASE_URL falls back to the local JSON store.
+const REQUIRED_PROD = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
 const REQUIRED_DEV = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
