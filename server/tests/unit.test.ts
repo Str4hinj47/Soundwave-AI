@@ -86,6 +86,15 @@ describe("config", () => {
   });
 });
 
+describe("ffmpeg filter path escaping", () => {
+  it("quotes paths and escapes drive colons (Windows) and backslashes", async () => {
+    const { ffmpegFilterPath } = await import("../src/lib/ffmpeg.js");
+    expect(ffmpegFilterPath(String.raw`C:\Users\A B\tmp\file.ass`)).toBe("'C\\:/Users/A B/tmp/file.ass'");
+    expect(ffmpegFilterPath("/home/user/jobs/x.ass")).toBe("'/home/user/jobs/x.ass'");
+    expect(ffmpegFilterPath(String.raw`D:\we\i'rd\y.ass`)).toBe("'D\\:/we/i\\'rd/y.ass'");
+  });
+});
+
 describe("ASS subtitle generation", () => {
   it("produces a valid ASS document with styles and events", () => {
     const ass = buildAss(

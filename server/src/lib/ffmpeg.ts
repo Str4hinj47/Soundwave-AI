@@ -259,6 +259,16 @@ export function probeMedia(filePath: string): Promise<ProbeResult> {
   });
 }
 
+/** Escape a filesystem path for use as an ffmpeg filter-option value.
+ *  On Windows the drive colon ("C:\") terminates the option for the filter
+ *  parser (the famous "Unable to parse 'original_size' …" error), and
+ *  backslashes/spaces need quoting — normalize to forward slashes and
+ *  single-quote with escaped colon/apostrophe. */
+export function ffmpegFilterPath(p: string): string {
+  const fwd = p.replace(/\\/g, "/");
+  return `'${fwd.replace(/:/g, "\\:").replace(/'/g, "\\'")}'`;
+}
+
 export function runFfmpegExport(params: ExportParams): Promise<void> {
   return new Promise((resolve, reject) => {
     const { videoPath, audioPath, outputPath, settings, onProgress } = params;
@@ -275,7 +285,8 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
       "utf8",
     );
 
-    const vf = `${scaleFilter},subtitles=${assPath}`;
+    // Drive-colon-safe path quoting (Windows) for the subtitles filter.
+    const vf = `${scaleFilter},subtitles=${ffmpegFilterPath(assPath)}`;
 
     // How long the output runs: explicit duration (audio length or the
     // user's chosen end), else the subtitle timeline end, else 10s.
