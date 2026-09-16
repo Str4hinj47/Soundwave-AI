@@ -36,27 +36,45 @@ function getCookies(req: Request): Record<string, string> {
   return out;
 }
 
-/** CSRF protection for cookie-authenticated state-changing requests. */
+/**
+ * CSRF protection for cookie-authenticated state-changing requests
+ * (double-submit cookie: the SPA mirrors the readable `csrf_token` cookie into
+ * the `X-CSRF-Token` header). Header-authenticated requests — Bearer API keys
+ * — are not reachable cross-site and are therefore exempt.
+ */
 function checkCsrf(req: Request): void {
   const method = req.method.toUpperCase();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-  const cookies = getCookies(req);
-  const token = cookies["csrf_token"];
-  if (!token) {
-    // If there's no CSRF cookie, this is not a cookie-authenticated request,
-    // so we still need to reject state-changing requests that lack proper CSRF validation
-    const header = req.headers["x-csrf-token"];
-    if (header && typeof header === "string" && header.length > 0) {
-      // Client sent a CSRF header but no cookie — reject it
-      throw new ApiError(403, "CSRF_FAILED", "Invalid CSRF token.");
-    }
-    // No cookie and no header: reject state-changing requests
-    throw new ApiError(403, "CSRF_FAILED", "CSRF token required.");
-  }
+  const token = getCookies(req)["csrf_token"];
   const header = req.headers["x-csrf-token"];
-  if (typeof header !== "string" || header.length === 0 || header !== token) {
-    throw new ApiError(403, "CSRF_FAILED", "Invalid CSRF token.");
+  if (!token || typeof header !== "string" || header.length === 0 || header !== token) {
+    throw new ApiError(403, "CSRF_FAILED", "Security check failed. Reload the page and try again.");
   }
+}
+
+/**
+ * Bearer API-key authentication (`Authorization: Bearer sw_…`), used by
+ * scripts/CI and the documented Enterprise API. Before this existed the keys
+ * could be created, listed and revoked but never used.
+ */
+async function userFromApiKey(req: Request): Promise<StoredUser | null> {
+  const header = req.headers.authorization;
+  if (typeof header !== "string" || !/^bearer /i.test(header)) return null;
+  const raw = header.slice(7).trim();
+  if (!raw.startsWith("sw_")) return null;
+  const store = await getStore();
+  const key = await store.findApiKeyByHash(sha256(raw));
+  if (!key || key.revokedAt) return null;
+  if (key.expiresAt && new Date(key.expiresAt).getTime() < Date.now()) return null;
+  const user = await store.findUserById(key.userId);
+  if (!user) return null;
+  // Touch `lastUsedAt` at most once every five minutes — the JSON store
+  // rewrites its file on every update.
+  const last = key.lastUsedAt ? new Date(key.lastUsedAt).getTime() : 0;
+  if (Date.now() - last > 5 * 60 * 1000) {
+    await store.updateApiKey(key.id, { lastUsedAt: new Date().toISOString() });
+  }
+  return user;
 }
 
 /** Attempt silent refresh via the refresh-token cookie. */
@@ -105,7 +123,27 @@ async function resolveUser(req: Request, res: Response): Promise<StoredUser | nu
 
 export const requireAuth: RequestHandler = async (req, res, next) => {
   try {
-    checkCsrf(req);
+    const apiKeyUser = await userFromApiKey(req);
+    if (apiKeyUser) {
+      req.user = apiKeyUser;
+      next();
+      return;
+    }
+
+    // Cookie-authenticated request → CSRF applies, and it is checked *before*
+    // the silent refresh below so a cross-site POST can never rotate a
+    // victim's session.
+    const cookies = getCookies(req);
+    if (cookies["access_token"] || cookies["refresh_token"]) {
+      if (!cookies["csrf_token"]) {
+        // Half-eaten cookie jar (user cleared one cookie by hand): force a
+        // clean re-authentication instead of silently skipping the check.
+        clearAuthCookies(res);
+        throw new ApiError(401, "UNAUTHORIZED", "Your session needs to be refreshed. Please try again.");
+      }
+      checkCsrf(req);
+    }
+
     const user = await resolveUser(req, res);
     if (!user) {
       clearAuthCookies(res);
@@ -115,16 +153,6 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     next();
   } catch (e) {
     next(e);
-  }
-};
-
-export const optionalAuth: RequestHandler = async (req, _res, next) => {
-  try {
-    const user = await resolveUser(req, _res);
-    if (user) req.user = user;
-    next();
-  } catch {
-    next();
   }
 };
 

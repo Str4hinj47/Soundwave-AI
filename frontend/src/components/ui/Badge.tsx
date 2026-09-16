@@ -4,13 +4,13 @@ import { cn } from "../../lib/cn";
 type Tone = "blue" | "violet" | "green" | "red" | "amber" | "gray" | "gradient";
 
 const tones: Record<Tone, string> = {
-  blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-  violet: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  green: "bg-success/15 text-emerald-300 border-success/30",
-  red: "bg-danger/15 text-red-300 border-danger/30",
-  amber: "bg-warning/15 text-amber-300 border-warning/30",
-  gray: "bg-gray-700/40 text-gray-300 border-gray-600/40",
-  gradient: "bg-gradient-to-r from-blue-500 to-violet-500 text-white border-transparent",
+  blue: "bg-primary/15 text-primary border-primary/30",
+  violet: "bg-accent/15 text-accent border-accent/30",
+  green: "bg-success/15 text-success border-success/30",
+  red: "bg-danger/15 text-danger border-danger/30",
+  amber: "bg-warning/15 text-warning border-warning/30",
+  gray: "bg-surface-2 text-fg-muted border-border-strong",
+  gradient: "bg-gradient-to-r from-primary to-accent text-primary-fg border-transparent",
 };
 
 export function Badge({

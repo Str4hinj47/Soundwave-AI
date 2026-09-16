@@ -36,14 +36,14 @@ export function ColorPicker({ value, onChange, label, disabled }: ColorPickerPro
 
   return (
     <div ref={rootRef} className="relative w-full min-w-0">
-      {label && <div className="mb-1.5 text-sm text-gray-300">{label}</div>}
+      {label && <div className="mb-1.5 text-sm text-fg-muted">{label}</div>}
       <div className="flex items-center gap-2">
         <button
           type="button"
           disabled={disabled}
           aria-label={`Open color picker for ${label ?? "color"}`}
           onClick={() => setOpen((o) => !o)}
-          className="h-9 w-9 shrink-0 rounded-input border border-gray-600 transition-transform hover:scale-105"
+          className="h-9 w-9 shrink-0 rounded-input border border-border-strong transition-transform hover:scale-105"
           style={{ backgroundColor: value }}
         />
         <input
@@ -52,13 +52,13 @@ export function ColorPicker({ value, onChange, label, disabled }: ColorPickerPro
             const v = e.target.value;
             if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) onChange(v);
           }}
-          className="h-9 w-full min-w-0 rounded-input border border-gray-700 bg-gray-900 px-3 font-mono text-sm text-white transition-colors hover:border-gray-600"
+          className="h-9 w-full min-w-0 rounded-input border border-border-strong bg-surface-inset px-3 font-mono text-sm text-fg-strong transition-colors hover:border-border-strong"
           aria-label={`${label ?? "Color"} hex value`}
         />
       </div>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-2 w-64 rounded-card border border-gray-700 bg-panel p-3 shadow-2xl">
+        <div className="absolute left-0 z-20 mt-2 w-64 rounded-card border border-border-strong bg-surface p-3 shadow-2xl">
           <input
             type="color"
             value={value}
@@ -72,10 +72,10 @@ export function ColorPicker({ value, onChange, label, disabled }: ColorPickerPro
               onChange={(e) => setHexDraft(e.target.value)}
               onBlur={commitHex}
               onKeyDown={(e) => e.key === "Enter" && commitHex()}
-              className="w-full min-w-0 rounded-input border border-gray-700 bg-gray-900 px-2 py-1 font-mono text-sm text-white"
+              className="w-full min-w-0 rounded-input border border-border-strong bg-surface-inset px-2 py-1 font-mono text-sm text-fg-strong"
               aria-label="Hex"
             />
-            <span className="flex items-center text-xs text-gray-500">Hex</span>
+            <span className="flex items-center text-xs text-fg-subtle">Hex</span>
           </div>
           <div className="mt-3 grid grid-cols-5 gap-1.5">
             {COLOR_SWATCHES.map((c) => (
@@ -86,7 +86,7 @@ export function ColorPicker({ value, onChange, label, disabled }: ColorPickerPro
                 aria-label={`Set color ${c}`}
                 className={cn(
                   "h-7 w-full rounded border transition-transform hover:scale-110",
-                  c.toLowerCase() === value.toLowerCase() ? "border-blue-400" : "border-gray-700",
+                  c.toLowerCase() === value.toLowerCase() ? "border-primary" : "border-border-strong",
                 )}
                 style={{ backgroundColor: c }}
               />

@@ -69,10 +69,17 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     }
   }, []);
 
+  const volumeRef = useRef(100);
+  const mutedRef = useRef(false);
+
   const ensureGraph = useCallback(() => {
     if (!ctxRef.current) {
       ctxRef.current = getAudioContext();
       gainRef.current = ctxRef.current.createGain();
+      // Previously the gain node defaulted to 1.0 and the volume slider only
+      // took effect after it was moved — a muted player still played at full
+      // volume until then.
+      gainRef.current.gain.value = mutedRef.current ? 0 : volumeRef.current / 100;
       gainRef.current.connect(ctxRef.current.destination);
     }
     return ctxRef.current;
@@ -166,6 +173,8 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
   const setVolume = useCallback((v: number) => {
     setVolumeState(v);
     setMuted(v === 0);
+    volumeRef.current = v;
+    mutedRef.current = v === 0;
     if (gainRef.current) gainRef.current.gain.value = v / 100;
   }, []);
 
@@ -188,25 +197,22 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
   }, [audioBuffer]);
 
   const toggleMute = () => {
-    if (muted) {
-      setMuted(false);
-      if (gainRef.current) gainRef.current.gain.value = volume / 100;
-    } else {
-      setMuted(true);
-      if (gainRef.current) gainRef.current.gain.value = 0;
-    }
+    const nextMuted = !muted;
+    mutedRef.current = nextMuted;
+    setMuted(nextMuted);
+    if (gainRef.current) gainRef.current.gain.value = nextMuted ? 0 : volumeRef.current / 100;
   };
 
   if (!audioBuffer) {
     return (
-      <div className="flex h-40 items-center justify-center rounded-card border border-gray-800 bg-panel text-sm text-gray-500">
+      <div className="flex h-40 items-center justify-center rounded-card border border-border bg-surface text-sm text-fg-subtle">
         Generate audio to see the player
       </div>
     );
   }
 
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-4">
+    <div className="rounded-card border border-border bg-surface p-4">
       <div className="mb-3">
         <Waveform audioBuffer={audioBuffer} currentTime={currentTime} duration={duration} onSeek={seek} />
       </div>
@@ -215,23 +221,23 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
         <button
           onClick={() => (playing ? pause() : play())}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-glow transition-all duration-200 hover:scale-105"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-primary to-accent text-fg-strong shadow-glow transition-all duration-200 hover:scale-105"
         >
           {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
         </button>
         <button
           onClick={() => seek(0)}
           aria-label="Restart"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg-strong"
         >
           <RotateCcw className="h-4 w-4" />
         </button>
-        <span className="min-w-0 shrink-0 font-mono text-sm tabular-nums text-gray-300">
-          {formatDuration(currentTime)} <span className="text-gray-600">/</span> {formatDuration(duration)}
+        <span className="min-w-0 shrink-0 font-mono text-sm tabular-nums text-fg-muted">
+          {formatDuration(currentTime)} <span className="text-fg-subtle">/</span> {formatDuration(duration)}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden items-center gap-1 rounded-md bg-gray-800/80 p-0.5 sm:flex">
+          <div className="hidden items-center gap-1 rounded-md bg-surface-2 p-0.5 sm:flex">
             {RATES.map((r) => (
               <button
                 key={r}
@@ -239,7 +245,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
                 aria-label={`Playback speed ${r}x`}
                 aria-pressed={rate === r}
                 className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
-                  rate === r ? "bg-blue-500/30 text-white" : "text-gray-400 hover:text-white"
+                  rate === r ? "bg-primary/30 text-fg-strong" : "text-fg-muted hover:text-fg-strong"
                 }`}
               >
                 {r}x
@@ -247,7 +253,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
             ))}
           </div>
 
-          <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:text-white">
+          <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="shrink-0 rounded p-1.5 text-fg-muted transition-colors hover:text-fg-strong">
             {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
           <div className="hidden w-24 md:block">
@@ -258,7 +264,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
             <button
               onClick={onDownload}
               aria-label="Download audio"
-              className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-btn border border-gray-600 px-3 text-sm text-gray-200 transition-all duration-200 hover:border-blue-500/60 hover:text-white"
+              className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-btn border border-border-strong px-3 text-sm text-fg transition-all duration-200 hover:border-primary/60 hover:text-fg-strong"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Download</span>

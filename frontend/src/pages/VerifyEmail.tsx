@@ -17,6 +17,13 @@ export function VerifyEmail() {
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
+    if (!token) {
+      // Opening the page without a token used to fire a request with an empty
+      // string and surface a confusing server error.
+      setMessage("This link is missing its verification token. Open the link from your email.");
+      setState("error");
+      return;
+    }
     void (async () => {
       try {
         await http.post("/auth/verify-email", { token }, { skipAuth: true });
@@ -29,27 +36,27 @@ export function VerifyEmail() {
   }, [token]);
 
   return (
-    <AuthLayout footer={<Link to="/dashboard" className="text-blue-400 hover:text-blue-300">Go to dashboard →</Link>}>
+    <AuthLayout footer={<Link to="/dashboard" className="sw-link">Go to dashboard →</Link>}>
       <div className="flex flex-col items-center py-4 text-center">
         {state === "loading" && (
           <>
-            <Spinner className="h-10 w-10 text-blue-400" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Verifying your email…</h1>
-            <p className="mt-2 text-sm text-gray-400">This should only take a moment.</p>
+            <Spinner className="h-10 w-10 text-primary" />
+            <h1 className="mt-4 text-2xl font-bold text-fg-strong">Verifying your email…</h1>
+            <p className="mt-2 text-sm text-fg-muted">This should only take a moment.</p>
           </>
         )}
         {state === "success" && (
           <>
             <CheckCircle2 className="h-12 w-12 text-success" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Email verified</h1>
-            <p className="mt-2 text-sm text-gray-400">Thanks! Your account is now fully verified.</p>
+            <h1 className="mt-4 text-2xl font-bold text-fg-strong">Email verified</h1>
+            <p className="mt-2 text-sm text-fg-muted">Thanks! Your account is now fully verified.</p>
           </>
         )}
         {state === "error" && (
           <>
             <XCircle className="h-12 w-12 text-danger" />
-            <h1 className="mt-4 text-2xl font-bold text-white">Verification failed</h1>
-            <p className="mt-2 text-sm text-gray-400">{message || "This link is invalid or has expired."}</p>
+            <h1 className="mt-4 text-2xl font-bold text-fg-strong">Verification failed</h1>
+            <p className="mt-2 text-sm text-fg-muted">{message || "This link is invalid or has expired."}</p>
           </>
         )}
       </div>

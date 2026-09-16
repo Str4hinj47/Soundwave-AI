@@ -35,9 +35,12 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { Tooltip } from "../components/ui/Tooltip";
-import { saveLocalProject } from "../lib/localProjects";
-import type { ProjectMeta } from "../lib/types";
+import { buildProjectMeta, persistProject } from "../lib/projectSave";
+import { getAutoPlay, getDefaultVoice } from "../lib/preferences";
 
+// Delivery helpers. node-edge-tts escapes everything it receives, so inline
+// SSML is impossible — pauses are converted to punctuation and the two
+// "say as"/"spell out" forms are expanded client-side (see cleanTextForTTS).
 const BREAK_TAG = '<break time="500ms"/>';
 
 interface CloneProfile {
@@ -57,7 +60,20 @@ export function Studio() {
   const [encoding, setEncoding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
-  const [online] = useState(() => navigator.onLine);
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+
+  // navigator.onLine was previously read once on mount, so the banner could
+  // never disappear (or appear) while the tab stayed open.
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
 
   // ── Voice cloning (OmniVoice sidecar) ────────────────────────────────────
   const [voiceTab, setVoiceTab] = useState<"neural" | "clone">(() => (isCloneVoiceId(studio.voiceId) ? "clone" : "neural"));
@@ -169,20 +185,31 @@ export function Studio() {
 
   const tts = useTTS(onComplete);
 
+  // Opening the Studio seeds the voice from ?voice= or the saved preference.
   useEffect(() => {
     const preset = params.get("voice");
     if (preset && DEFAULT_VOICES.some((v) => v.id === preset)) studio.setVoiceId(preset);
+    else if (!studio.voiceId) studio.setVoiceId(getDefaultVoice());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-play on completion.
+  // Auto-play on completion (honours the Preferences toggle).
   const prevStatus = useRef(tts.status);
   useEffect(() => {
-    if (tts.status === "done" && prevStatus.current !== "done") {
-      setTimeout(() => playerRef.current?.play(), 150);
+    if (tts.status === "done" && prevStatus.current !== "done" && getAutoPlay()) {
+      const t = setTimeout(() => playerRef.current?.play(), 150);
+      return () => clearTimeout(t);
     }
     prevStatus.current = tts.status;
   }, [tts.status]);
+
+  // The studio store outlives this page, so it is the source of truth for the
+  // generated take. Previously the page only rendered `tts.*`, which meant
+  // navigating away and back (to Subtitles, say) showed an empty player even
+  // though the audio was still in the store.
+  const audioBuffer = tts.audioBuffer ?? studio.audioBuffer;
+  const audioBlob = tts.audioBlob ?? studio.audioBlob;
+  const wordTimings = tts.wordTimings.length > 0 ? tts.wordTimings : studio.wordTimings;
 
   const voices = DEFAULT_VOICES;
 
@@ -191,9 +218,19 @@ export function Studio() {
   const limitReached = remaining !== null && remaining <= 0;
   const charCount = studio.text.length;
   const countRatio = hardLimit > 0 ? charCount / hardLimit : 0;
-  const countTone = charCount >= hardLimit ? "text-red-400" : countRatio > 0.95 ? "text-red-400" : countRatio > 0.8 ? "text-orange-400" : countRatio > 0.5 ? "text-amber-400" : "text-emerald-400";
+  const countTone =
+    charCount >= hardLimit || countRatio > 0.95
+      ? "text-danger"
+      : countRatio > 0.8
+        ? "text-warning"
+        : "text-fg-muted";
 
   const canGenerate = studio.text.trim().length > 0 && !limitReached && tts.status !== "generating";
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
+  const [speakAsOpen, setSpeakAsOpen] = useState(false);
+  const [speakAsWord, setSpeakAsWord] = useState("");
+  const [speakAsPron, setSpeakAsPron] = useState("");
+
   const generating = tts.status === "generating";
 
   const generateLabel = generating ? "Generating… ⚡" : "Generate Speech";
@@ -226,7 +263,7 @@ export function Studio() {
   };
 
   const download = async () => {
-    if (!tts.audioBlob) return;
+    if (!audioBlob) return;
     // If the generated audio is already in the requested format (Edge/cloned
     // voices are MP3, the offline voice is WAV), download it as-is — faster,
     // lossless, and doesn't depend on client-side encoders.
@@ -238,15 +275,15 @@ export function Studio() {
       "audio/wave": "wav",
       "audio/ogg": "ogg",
     };
-    if (byMime[tts.audioBlob.type] === format) {
-      downloadBlob(tts.audioBlob, `soundwave-${studio.voiceId}-${Date.now()}.${format}`);
+    if (byMime[audioBlob.type] === format) {
+      downloadBlob(audioBlob, `soundwave-${studio.voiceId}-${nowStamp()}.${format}`);
       return;
     }
-    if (!tts.audioBuffer) return;
+    if (!audioBuffer) return;
     setEncoding(true);
     try {
-      const blob = await encodeAudio(tts.audioBuffer, format, 128);
-      downloadBlob(blob, `soundwave-${studio.voiceId}-${Date.now()}.${format}`);
+      const blob = await encodeAudio(audioBuffer, format, 128);
+      downloadBlob(blob, `soundwave-${studio.voiceId}-${nowStamp()}.${format}`);
     } catch {
       toast.error("Encoding failed", "Could not encode the audio. Try a different format.");
     } finally {
@@ -255,31 +292,23 @@ export function Studio() {
   };
 
   const saveProject = async () => {
-    if (!tts.audioBuffer) return;
+    if (!audioBuffer) return;
     setSaving(true);
     try {
-      const meta: ProjectMeta = {
-        id: crypto.randomUUID(),
+      const meta = buildProjectMeta({
+        id: savedProjectId ?? undefined,
         title: studio.projectName,
         type: "TTS",
-        textContent: studio.text,
+        text: studio.text,
         voiceId: studio.voiceId,
         voiceSettings: studio.voiceSettings,
-        characterCount: studio.text.length,
-        duration: tts.audioBuffer.duration,
-        status: "DRAFT",
-        storageType: user?.plan === "FREE" ? "LOCAL" : "CLOUD",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        audioUrl: null,
-      };
-      if (user?.plan === "FREE") {
-        await saveLocalProject(meta);
-        toast.success("Saved locally", "This project is stored in your browser (Local Only).");
-      } else {
-        await http.post("/projects", { ...meta, storageType: undefined });
-        toast.success("Project saved", "Saved to your cloud projects.");
-      }
+        duration: audioBuffer.duration,
+        cues: studio.cues,
+        subtitleStyle: studio.subtitleStyle,
+      });
+      const result = await persistProject(meta, user?.plan);
+      setSavedProjectId(meta.id);
+      toast.success("Project saved", result.label);
     } catch (e) {
       toast.error("Save failed", (e as Error).message);
     } finally {
@@ -288,16 +317,16 @@ export function Studio() {
   };
 
   const goSubtitles = () => {
-    if (!tts.audioBuffer) {
+    if (!audioBuffer) {
       toast.warning("No audio yet", "Generate audio first, then add subtitles.");
       return;
     }
-    if (studio.wordTimings.length > 0) studio.setCues(cuesFromTimings(studio.wordTimings));
+    if (wordTimings.length > 0 && studio.cues.length === 0) studio.setCues(cuesFromTimings(wordTimings));
     navigate("/studio/subtitles");
   };
 
   const goVideo = () => {
-    if (!tts.audioBuffer) {
+    if (!audioBuffer) {
       toast.warning("No audio yet", "Generate audio first, then create a video.");
       return;
     }
@@ -308,7 +337,7 @@ export function Studio() {
     <div className="mx-auto max-w-7xl">
       {/* Offline banner */}
       {!online && (
-        <div className="mb-4 flex items-center gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="mb-4 flex items-center gap-3 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           <WifiOff className="h-5 w-5 shrink-0" />
           <span className="min-w-0">
             You appear to be offline. TTS will fall back to the built-in demo voice, and project saving and video export require a connection.
@@ -318,15 +347,15 @@ export function Studio() {
 
       {/* Error banner */}
       {tts.status === "error" && tts.error && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           <span className="min-w-0 flex-1">{tts.error}</span>
         </div>
       )}
 
       {/* Demo-voice fallback banner */}
       {tts.engine === "offline" && tts.status === "done" && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          <Mic className="h-5 w-5 shrink-0 text-amber-300" />
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <Mic className="h-5 w-5 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">
             The Microsoft Neural voice service wasn't reachable, so this clip used the built-in demo voice. Check your connection and regenerate.
           </span>
@@ -336,8 +365,8 @@ export function Studio() {
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-white">Text-to-Speech Studio</h1>
-          <p className="text-sm text-gray-400">Generate professional voice audio with Microsoft Neural voices.</p>
+          <h1 className="text-2xl font-bold text-fg-strong">Text-to-Speech Studio</h1>
+          <p className="text-sm text-fg-muted">Generate professional voice audio with Microsoft Neural voices.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" icon={<FolderOpen className="h-4 w-4" />} onClick={() => navigate("/projects")}>
@@ -353,9 +382,9 @@ export function Studio() {
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* ── LEFT: input & controls ───────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="studio-text" className="text-sm font-medium text-gray-300">Text</label>
+              <label htmlFor="studio-text" className="text-sm font-medium text-fg-muted">Text</label>
               <span className={cn("font-mono text-sm tabular-nums", countTone)}>
                 {formatNumber(charCount)} / {formatNumber(hardLimit)} characters
               </span>
@@ -368,24 +397,24 @@ export function Studio() {
               }}
               placeholder="Enter the text you want to convert to speech..."
               rows={7}
-              className="w-full resize-y overflow-y-auto rounded-input border border-gray-700 bg-gray-900 px-3.5 py-3 text-base text-white placeholder-gray-500 [overflow-wrap:break-word] transition-colors focus:border-blue-500"
+              className="w-full resize-y overflow-y-auto rounded-input border border-border-strong bg-surface-inset px-3.5 py-3 text-base text-fg-strong placeholder:text-fg-subtle [overflow-wrap:break-word] transition-colors focus:border-primary"
             />
             {limitReached && (
-              <p className="mt-2 text-sm text-red-400">Monthly character limit reached. Upgrade to Pro for more.</p>
+              <p className="mt-2 text-sm text-danger">Monthly character limit reached. Upgrade to Pro for more.</p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Tooltip content="Insert a pause at the cursor">
-                <button onClick={() => insertTag(BREAK_TAG)} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(BREAK_TAG)} className="flex h-8 items-center gap-1.5 rounded border border-border-strong px-2.5 text-xs text-fg-muted transition-colors hover:border-border-strong hover:text-fg-strong">
                   <Pause className="h-3.5 w-3.5" /> Add pause
                 </button>
               </Tooltip>
               <Tooltip content="Insert emphasis markers">
-                <button onClick={() => insertTag(" *emphasized* ")} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(" *emphasized* ")} className="flex h-8 items-center gap-1.5 rounded border border-border-strong px-2.5 text-xs text-fg-muted transition-colors hover:border-border-strong hover:text-fg-strong">
                   <Wand2 className="h-3.5 w-3.5" /> Emphasis
                 </button>
               </Tooltip>
               <Tooltip content="Insert a pronunciation guide">
-                <button onClick={() => insertTag(' {pronounce:"example|ig-zam-pul"} ')} className="flex h-8 items-center gap-1.5 rounded border border-gray-700 px-2.5 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white">
+                <button onClick={() => insertTag(' {pronounce:"example|ig-zam-pul"} ')} className="flex h-8 items-center gap-1.5 rounded border border-border-strong px-2.5 text-xs text-fg-muted transition-colors hover:border-border-strong hover:text-fg-strong">
                   <Gauge className="h-3.5 w-3.5" /> Pronunciation
                 </button>
               </Tooltip>
@@ -393,17 +422,17 @@ export function Studio() {
           </div>
 
           {/* Voice */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-2 text-sm font-medium text-gray-300">Voice</p>
+          <div className="rounded-card border border-border bg-surface p-5">
+            <p className="mb-2 text-sm font-medium text-fg-muted">Voice</p>
             {cloneConfigured && (
-              <div className="mb-3 grid grid-cols-2 gap-1 rounded-input border border-gray-700 bg-gray-900 p-1 text-sm">
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-input border border-border-strong bg-surface-inset p-1 text-sm">
                 <button
                   type="button"
                   onClick={() => {
                     setVoiceTab("neural");
                     if (isCloneVoiceId(studio.voiceId)) studio.setVoiceId(DEFAULT_VOICES[0]?.id ?? studio.voiceId);
                   }}
-                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "neural" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "neural" ? "bg-primary text-fg-strong" : "text-fg-muted hover:text-fg-strong")}
                 >
                   Microsoft Neural
                 </button>
@@ -413,7 +442,7 @@ export function Studio() {
                     setVoiceTab("clone");
                     if (!isCloneVoiceId(studio.voiceId) && cloneProfiles[0]) studio.setVoiceId(`clone:${cloneProfiles[0].id}`);
                   }}
-                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "clone" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "clone" ? "bg-primary text-fg-strong" : "text-fg-muted hover:text-fg-strong")}
                 >
                   Cloned voices
                 </button>
@@ -422,12 +451,12 @@ export function Studio() {
 
             {voiceTab === "clone" && cloneConfigured ? (
               !cloneAvailable ? (
-                <div className="rounded-input border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm leading-relaxed text-amber-200">
+                <div className="rounded-input border border-warning/30 bg-warning/10 px-3.5 py-3 text-sm leading-relaxed text-warning">
                   The voice-clone service isn't running. In a separate terminal, start it from the <code>voiceclone/</code> folder
-                  (<code className="text-amber-100">uvicorn server:app --port 8100</code> — first start downloads the model), then refresh this page.
+                  (<code className="text-warning">uvicorn server:app --port 8100</code> — first start downloads the model), then refresh this page.
                 </div>
               ) : cloneProfiles.length === 0 ? (
-                <div className="flex flex-col items-start gap-3 rounded-input border border-dashed border-gray-700 px-3.5 py-4 text-sm text-gray-400">
+                <div className="flex flex-col items-start gap-3 rounded-input border border-dashed border-border-strong px-3.5 py-4 text-sm text-fg-muted">
                   <p>No cloned voices yet. Upload a 3–10&nbsp;s clean reference clip to create one.</p>
                   <Button size="sm" variant="outline" onClick={() => setCloneModalOpen(true)} icon={<Upload className="h-4 w-4" />}>
                     Clone a new voice
@@ -458,13 +487,13 @@ export function Studio() {
                         onClick={() => removeCloneProfile(studio.voiceId.slice("clone:".length))}
                         title="Delete this cloned voice"
                         aria-label="Delete this cloned voice"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-input border border-gray-700 text-gray-400 transition-colors hover:border-red-500/50 hover:text-red-400"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-input border border-border-strong text-fg-muted transition-colors hover:border-danger/50 hover:text-danger"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-fg-subtle">
                     Powered by OmniVoice running on your machine — on CPU each generation takes longer than the neural voices.
                   </p>
                 </>
@@ -474,8 +503,8 @@ export function Studio() {
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-gray-400">Selected:</span>
-              <span className="font-semibold text-white">{nameFor(studio.voiceId)}</span>
+              <span className="text-fg-muted">Selected:</span>
+              <span className="font-semibold text-fg-strong">{nameFor(studio.voiceId)}</span>
               {isCloneVoiceId(studio.voiceId) ? (
                 <Badge tone="violet">Cloned (OmniVoice)</Badge>
               ) : (
@@ -485,8 +514,8 @@ export function Studio() {
           </div>
 
           {/* Settings */}
-          <div className="space-y-5 rounded-card border border-gray-800 bg-panel p-5">
-            <p className="text-sm font-medium text-gray-300">Voice Settings</p>
+          <div className="space-y-5 rounded-card border border-border bg-surface p-5">
+            <p className="text-sm font-medium text-fg-muted">Voice Settings</p>
             <Slider
               label="Speed"
               value={studio.voiceSettings.speed}
@@ -511,7 +540,7 @@ export function Studio() {
           </div>
 
           {/* Generate */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div className="flex gap-3">
               <Button
                 size="lg"
@@ -528,7 +557,7 @@ export function Studio() {
                   <button
                     onClick={tts.cancel}
                     aria-label="Cancel generation"
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-btn border border-danger/50 text-red-300 transition-colors hover:bg-danger/10"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-btn border border-danger/50 text-danger transition-colors hover:bg-danger/10"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -538,15 +567,15 @@ export function Studio() {
             {generating && (
               <div className="mt-3">
                 <ProgressBar indeterminate tone="default" label="Generating audio" />
-                <p className="mt-2 text-center text-xs text-gray-500">
+                <p className="mt-2 text-center text-xs text-fg-subtle">
                   Generating with Microsoft Neural voice…
                 </p>
               </div>
             )}
             {tts.status === "error" && (
-              <p className="mt-3 text-sm text-red-400">Speech generation failed — try a shorter text or a different voice.</p>
+              <p className="mt-3 text-sm text-danger">Speech generation failed — try a shorter text or a different voice.</p>
             )}
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-fg-subtle">
               🔒 Audio is generated securely on our servers with Microsoft Neural voices. Your text is used only to synthesize the audio and is not stored.
             </p>
           </div>
@@ -554,26 +583,31 @@ export function Studio() {
 
         {/* ── RIGHT: preview & output ──────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Preview & Output</p>
+              <p className="text-sm font-medium text-fg-muted">Preview & Output</p>
               {tts.status === "done" && <Badge tone="green" dot>Ready</Badge>}
             </div>
-            <AudioPlayer ref={playerRef} audioBuffer={tts.audioBuffer} onDownload={() => setDownloadModalOpen(true)} />
+            <AudioPlayer ref={playerRef} audioBuffer={audioBuffer} onDownload={() => setDownloadModalOpen(true)} />
 
-            {tts.audioBuffer && (
+            {audioBuffer && (
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <QuickAction icon={<Download className="h-4 w-4" />} label="Download" onClick={() => setDownloadModalOpen(true)} />
                 <QuickAction icon={<Captions className="h-4 w-4" />} label="Add Subtitles" onClick={goSubtitles} />
                 <QuickAction icon={<Film className="h-4 w-4" />} label="Create Video" onClick={goVideo} />
-                <QuickAction icon={<Save className="h-4 w-4" />} label="Save Project" onClick={saveProject} loading={saving} />
+                <QuickAction
+                  icon={<Save className="h-4 w-4" />}
+                  label={savedProjectId ? "Update Project" : "Save Project"}
+                  onClick={saveProject}
+                  loading={saving}
+                />
               </div>
             )}
 
             {tts.status === "done" && (
               <button
                 onClick={handleGenerate}
-                className="mt-4 flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+                className="sw-link mt-4 flex items-center gap-2 text-sm"
               >
                 <RefreshCw className="h-4 w-4" /> Regenerate
               </button>
@@ -581,15 +615,15 @@ export function Studio() {
           </div>
 
           {/* Word timings */}
-          {studio.wordTimings.length > 0 && (
-            <div className="rounded-card border border-gray-800 bg-panel p-5">
-              <p className="mb-3 text-sm font-medium text-gray-300">Word Timing Data</p>
-              <p className="text-xs text-gray-500">
-                {studio.wordTimings.length} words aligned — used to auto-populate the subtitle editor.
+          {wordTimings.length > 0 && (
+            <div className="rounded-card border border-border bg-surface p-5">
+              <p className="mb-3 text-sm font-medium text-fg-muted">Word Timing Data</p>
+              <p className="text-xs text-fg-subtle">
+                {wordTimings.length} words aligned — used to auto-populate the subtitle editor.
               </p>
               <div className="mt-3 flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
-                {studio.wordTimings.slice(0, 120).map((w, i) => (
-                  <span key={i} className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300" title={`${w.start.toFixed(2)}s – ${w.end.toFixed(2)}s`}>
+                {wordTimings.slice(0, 120).map((w, i) => (
+                  <span key={i} className="rounded bg-surface-2 px-2 py-0.5 text-xs text-fg-muted" title={`${w.start.toFixed(2)}s – ${w.end.toFixed(2)}s`}>
                     {w.word}
                   </span>
                 ))}
@@ -598,12 +632,12 @@ export function Studio() {
           )}
 
           {/* History */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-3 text-sm font-medium text-gray-300">This Session</p>
+          <div className="rounded-card border border-border bg-surface p-5">
+            <p className="mb-3 text-sm font-medium text-fg-muted">This Session</p>
             {studio.history.length === 0 ? (
-              <p className="text-sm text-gray-500">Generations you make will appear here.</p>
+              <p className="text-sm text-fg-subtle">Generations you make will appear here.</p>
             ) : (
-              <ul className="divide-y divide-gray-800">
+              <ul className="divide-y divide-border">
                 {studio.history.map((h) => (
                   <li key={h.id} className="flex items-center gap-3 py-2.5">
                     <button
@@ -614,15 +648,15 @@ export function Studio() {
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <span className="block truncate text-sm text-white">{truncate(h.text, 60)}</span>
-                      <span className="block text-xs text-gray-500">
+                      <span className="block truncate text-sm text-fg-strong">{truncate(h.text, 60)}</span>
+                      <span className="block text-xs text-fg-subtle">
                         {nameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
                       </span>
                     </button>
                     <button
                       onClick={() => studio.removeHistory(h.id)}
                       aria-label="Remove from history"
-                      className="rounded p-1 text-gray-500 hover:text-red-400"
+                      className="rounded p-1 text-fg-subtle hover:text-danger"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -633,6 +667,50 @@ export function Studio() {
           </div>
         </div>
       </div>
+
+      {/* Say-as modal — injects a {say:"word|phonetic"} directive */}
+      <Modal
+        open={speakAsOpen}
+        onClose={() => setSpeakAsOpen(false)}
+        title="Say it differently"
+        description="Tell the voice how to pronounce a word or name. The directive is expanded before synthesis."
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" onClick={() => setSpeakAsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!speakAsWord.trim() || !speakAsPron.trim()) return;
+                insertTag(`{say:"${speakAsWord.trim()}|${speakAsPron.trim()}"}`);
+                setSpeakAsWord("");
+                setSpeakAsPron("");
+                setSpeakAsOpen(false);
+              }}
+              disabled={!speakAsWord.trim() || !speakAsPron.trim()}
+            >
+              Insert
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <TextField
+            label="Word or name in your script"
+            placeholder="Soundwave"
+            value={speakAsWord}
+            onChange={(e) => setSpeakAsWord(e.target.value)}
+            autoFocus
+          />
+          <TextField
+            label="How it should sound"
+            placeholder="sound-wave"
+            value={speakAsPron}
+            onChange={(e) => setSpeakAsPron(e.target.value)}
+            hint="Write it the way you would say it out loud."
+          />
+        </div>
+      </Modal>
 
       {/* Clone-a-new-voice modal */}
       <Modal
@@ -661,20 +739,20 @@ export function Studio() {
             autoFocus
           />
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-300">Reference audio</label>
+            <label className="mb-1.5 block text-sm font-medium text-fg-muted">Reference audio</label>
             <input
               type="file"
               accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a"
               onChange={(e) => setCloneFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-400 file:mr-3 file:rounded-input file:border-0 file:bg-gray-800 file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-gray-100 hover:file:bg-gray-700"
+              className="block w-full text-sm text-fg-muted file:mr-3 file:rounded-input file:border-0 file:bg-surface-2 file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-fg hover:file:bg-surface-3"
             />
-            <p className="mt-1.5 text-xs text-gray-500">
+            <p className="mt-1.5 text-xs text-fg-subtle">
               WAV, MP3, FLAC, OGG, or M4A · 3–10&nbsp;s is ideal — same language as the text you'll generate, minimal background noise.
             </p>
           </div>
           <div>
-            <label htmlFor="clone-ref-text" className="mb-1.5 block text-sm font-medium text-gray-300">
-              Transcript of the clip <span className="font-normal text-gray-500">(optional)</span>
+            <label htmlFor="clone-ref-text" className="mb-1.5 block text-sm font-medium text-fg-muted">
+              Transcript of the clip <span className="font-normal text-fg-subtle">(optional)</span>
             </label>
             <textarea
               id="clone-ref-text"
@@ -682,15 +760,15 @@ export function Studio() {
               value={cloneRefText}
               onChange={(e) => setCloneRefText(e.target.value)}
               placeholder="Exactly what is said in the clip — improves cloning quality. If empty, the service transcribes it automatically (slower)."
-              className="w-full resize-y rounded-input border border-gray-700 bg-gray-900 px-3.5 py-2.5 text-sm text-white placeholder-gray-500 transition-colors focus:border-blue-500"
+              className="w-full resize-y rounded-input border border-border-strong bg-surface-inset px-3.5 py-2.5 text-sm text-fg-strong placeholder:text-fg-subtle transition-colors focus:border-primary"
             />
           </div>
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-input border border-gray-800 bg-gray-900/50 px-3.5 py-3 text-sm text-gray-300">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-input border border-border bg-surface-inset px-3.5 py-3 text-sm text-fg-muted">
             <input
               type="checkbox"
               checked={cloneConsent}
               onChange={(e) => setCloneConsent(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-blue-500"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
             />
             <span>
               This is my voice, or I have the speaker's explicit permission to clone it. Cloning someone's voice
@@ -716,11 +794,11 @@ export function Studio() {
                 aria-pressed={format === f}
                 className={cn(
                   "rounded-card border py-4 text-center transition-all",
-                  format === f ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500",
+                  format === f ? "border-primary bg-primary/10" : "border-border-strong hover:border-border-strong",
                 )}
               >
-                <span className="block text-lg font-bold uppercase text-white">{f}</span>
-                <span className="block text-xs text-gray-500">{f === "mp3" ? "Compressed" : f === "wav" ? "Lossless" : "Efficient"}</span>
+                <span className="block text-lg font-bold uppercase text-fg-strong">{f}</span>
+                <span className="block text-xs text-fg-subtle">{f === "mp3" ? "Compressed" : f === "wav" ? "Lossless" : "Efficient"}</span>
               </button>
             ))}
           </div>
@@ -734,15 +812,22 @@ export function Studio() {
   );
 }
 
+/** Short, sortable timestamp used in downloaded file names. */
+function nowStamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
 function QuickAction({ icon, label, onClick, loading }: { icon: React.ReactNode; label: string; onClick: () => void; loading?: boolean }) {
   return (
     <button
       onClick={onClick}
       disabled={loading}
-      className="flex min-w-0 flex-col items-center gap-1.5 rounded-card border border-gray-700 px-2 py-3 text-center transition-all duration-200 hover:border-blue-500/60 disabled:opacity-50"
+      className="flex min-w-0 flex-col items-center gap-1.5 rounded-card border border-border-strong px-2 py-3 text-center transition-all duration-200 hover:border-primary/60 disabled:opacity-50"
     >
-      <span className="text-blue-300">{icon}</span>
-      <span className="w-full truncate text-xs font-medium text-gray-300">{label}</span>
+      <span className="text-primary">{icon}</span>
+      <span className="w-full truncate text-xs font-medium text-fg-muted">{label}</span>
     </button>
   );
 }

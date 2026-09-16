@@ -69,7 +69,22 @@ function hit(key: string, limit: number, windowMs: number): { ok: boolean; retry
   return { ok: true, retryAfter: 0 };
 }
 
-const failedLogins = new Map<string, number>();
+// Per-account failed sign-in tracking. After MAX_FAILED_LOGINS consecutive
+// failures the account is locked for LOGIN_LOCKOUT_MS and the API answers 429
+// + Retry-After — which the UI surfaces verbatim. (The old behaviour returned
+// `CAPTCHA_REQUIRED` after 5 attempts, but no CAPTCHA exists anywhere in the
+// product, so the account was simply dead-ended.)
+const MAX_FAILED_LOGINS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const failedLogins = new Map<string, { count: number; lockedUntil: number }>();
+
+/** Drop stale entries so the map can never grow unbounded. */
+function pruneFailedLogins(now: number): void {
+  if (failedLogins.size < 1000) return;
+  for (const [key, entry] of failedLogins) {
+    if (entry.lockedUntil <= now) failedLogins.delete(key);
+  }
+}
 
 // ── Sign up ─────────────────────────────────────────────────────────────────
 router.post("/signup", authSignupLimiter, validate({ body: signupSchema }), async (req, res, next) => {
@@ -109,16 +124,44 @@ router.post("/signin", authLoginLimiter, validate({ body: signinSchema }), async
     if (!user || !user.passwordHash) {
       throw new ApiError(401, "INVALID_CREDENTIALS", "Invalid email or password.");
     }
-    if ((failedLogins.get(user.id) ?? 0) >= 5) {
-      throw new ApiError(403, "CAPTCHA_REQUIRED", "Too many failed attempts. Please complete the CAPTCHA.");
+    // Lock-outs are tracked per email (not per user id) so that an unknown
+    // address produces exactly the same messages — no enumeration oracle.
+    const attemptKey = email.toLowerCase();
+    const knownAttempt = failedLogins.get(attemptKey);
+    const now = Date.now();
+    if (knownAttempt && knownAttempt.lockedUntil > now) {
+      const retryAfter = Math.ceil((knownAttempt.lockedUntil - now) / 1000);
+      const minutes = Math.max(1, Math.ceil(retryAfter / 60));
+      throw new ApiError(
+        429,
+        "TOO_MANY_ATTEMPTS",
+        `Too many failed sign-in attempts. Please try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+        retryAfter,
+      );
     }
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
-      failedLogins.set(user.id, (failedLogins.get(user.id) ?? 0) + 1);
-      const remaining = 5 - (failedLogins.get(user.id) ?? 0);
-      throw new ApiError(401, "INVALID_CREDENTIALS", remaining > 0 ? `Invalid email or password. ${remaining} attempts remaining.` : "Invalid email or password.");
+      const count = (knownAttempt?.count ?? 0) + 1;
+      if (count >= MAX_FAILED_LOGINS) {
+        const lockMs = LOGIN_LOCKOUT_MS;
+        failedLogins.set(attemptKey, { count, lockedUntil: now + lockMs });
+        pruneFailedLogins(now);
+        throw new ApiError(
+          429,
+          "TOO_MANY_ATTEMPTS",
+          `Too many failed attempts. Sign-in is locked for ${Math.ceil(lockMs / 60000)} minutes.`,
+          Math.ceil(lockMs / 1000),
+        );
+      }
+      failedLogins.set(attemptKey, { count, lockedUntil: 0 });
+      const remaining = MAX_FAILED_LOGINS - count;
+      throw new ApiError(
+        401,
+        "INVALID_CREDENTIALS",
+        `Invalid email or password. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+      );
     }
-    failedLogins.delete(user.id);
+    failedLogins.delete(attemptKey);
     const bundle = await createUserSession(store, user.id, req.ip ?? "unknown", deviceInfo(req));
     setAuthCookies(res, signAccessToken(user.id), bundle.refreshToken, randomToken(16));
     res.json({ user: publicUser(user) });

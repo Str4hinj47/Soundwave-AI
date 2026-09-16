@@ -7,6 +7,7 @@
 
 import type { BackendKind, VoiceSettings } from "./types";
 import { OFFLINE_SAMPLE_RATE, normalizeFloat32 } from "./audio";
+import { DEFAULT_VOICES, VOICE_META } from "./voices";
 
 export interface SynthRequest {
   text: string;
@@ -103,10 +104,14 @@ function synthesizeOffline(req: SynthRequest): SynthResult {
   const sampleRate = OFFLINE_SAMPLE_RATE;
   const { text, voiceId, settings } = req;
 
-  // Base pitch per voice — male lower, female higher; slight per-voice variation.
+  // Base pitch per voice — male lower, female higher; slight per-voice
+  // variation. The gender comes from the shared voice catalogue: the previous
+  // `/^[ab]m/` test never matched a real id such as "en-US-JennyNeural", so
+  // every offline voice used the female range.
   const seed = hashStr(voiceId);
-  const isMale = /^[ab]m/.test(voiceId);
-  const baseF0 = (isMale ? 95 : 175) + (seed % 60);
+  const isMale = VOICE_META.find((v) => v.id === voiceId)?.gender === "Male";
+  const british = voiceId.includes("-GB-");
+  const baseF0 = (isMale ? 96 : 176) + (seed % 50) + (british ? 6 : 0);
   const pitchFactor = Math.pow(2, (settings.pitch ?? 0) / 100);
   const f0 = baseF0 * pitchFactor;
   const speed = clamp(settings.speed ?? 1, 0.5, 2);
@@ -230,10 +235,8 @@ export function createOfflineEngine(): EngineHandle {
   return {
     kind: "offline",
     backend: "demo",
-    voices: async () => [
-      "en-US-JennyNeural", "en-US-AnaNeural", "en-GB-SoniaNeural",
-      "en-US-ChristopherNeural", "en-US-GuyNeural", "en-GB-RyanNeural",
-    ],
+    // Mirrors the server-side catalogue so the fallback never drifts.
+    voices: async () => DEFAULT_VOICES.map((v) => v.id),
     synth: async (req) => synthesizeOffline(req),
   };
 }

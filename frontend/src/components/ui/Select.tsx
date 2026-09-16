@@ -76,36 +76,36 @@ export function Select({ options, value, onChange, placeholder = "Select…", se
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex h-11 w-full min-w-0 items-center gap-2 rounded-input border border-gray-700 bg-gray-900 px-3.5 text-left text-base text-white transition-all duration-200",
-          "hover:border-gray-600 focus:border-blue-500",
+          "flex h-11 w-full min-w-0 items-center gap-2 rounded-input border border-border-strong bg-surface-inset px-3.5 text-left text-base text-fg-strong transition-all duration-200",
+          "hover:border-border-strong focus:border-primary",
           disabled && "opacity-50 cursor-not-allowed",
         )}
       >
         {selected?.icon && <span className="shrink-0">{selected.icon}</span>}
-        <span className="min-w-0 flex-1 truncate">{selected ? selected.label : <span className="text-gray-500">{placeholder}</span>}</span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-400 transition-transform", open && "rotate-180")} />
+        <span className="min-w-0 flex-1 truncate">{selected ? selected.label : <span className="text-fg-subtle">{placeholder}</span>}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-fg-muted transition-transform", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-80 overflow-hidden rounded-card border border-gray-700 bg-panel shadow-2xl">
+        <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-80 overflow-hidden rounded-card border border-border-strong bg-surface shadow-2xl">
           {searchable && (
-            <div className="flex items-center gap-2 border-b border-gray-800 px-3 py-2">
-              <Search className="h-4 w-4 shrink-0 text-gray-500" />
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <Search className="h-4 w-4 shrink-0 text-fg-subtle" />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
-                className="w-full min-w-0 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
+                className="w-full min-w-0 bg-transparent text-sm text-fg-strong placeholder:text-fg-subtle focus:outline-none"
               />
             </div>
           )}
           <ul className="max-h-64 overflow-y-auto py-1" role="listbox">
-            {grouped.length === 0 && <li className="px-3 py-3 text-sm text-gray-500">No results</li>}
+            {grouped.length === 0 && <li className="px-3 py-3 text-sm text-fg-subtle">No results</li>}
             {grouped.map((g) => (
               <li key={g.group || "_"}>
                 {g.group && (
-                  <div className="px-3 pb-0.5 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{g.group}</div>
+                  <div className="px-3 pb-0.5 pt-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">{g.group}</div>
                 )}
                 {g.items.map((o) => (
                   <button
@@ -119,16 +119,16 @@ export function Select({ options, value, onChange, placeholder = "Select…", se
                       setQuery("");
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-800",
-                      o.value === value && "bg-blue-500/10 text-blue-200",
+                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-2",
+                      o.value === value && "bg-primary/10 text-primary",
                     )}
                   >
                     {o.icon && <span className="shrink-0">{o.icon}</span>}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-white">{o.label}</span>
-                      {o.sublabel && <span className="block truncate text-xs text-gray-500">{o.sublabel}</span>}
+                      <span className="block truncate text-fg-strong">{o.label}</span>
+                      {o.sublabel && <span className="block truncate text-xs text-fg-subtle">{o.sublabel}</span>}
                     </span>
-                    {o.value === value && <Check className="h-4 w-4 shrink-0 text-blue-400" />}
+                    {o.value === value && <Check className="h-4 w-4 shrink-0 text-primary" />}
                   </button>
                 ))}
               </li>

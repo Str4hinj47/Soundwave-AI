@@ -22,6 +22,9 @@ router.get("/plans", (_req, res) => {
       cloudSave: p.cloudSave,
       apiAccess: p.apiAccess,
     })),
+    // Tells the SPA whether the instant plan switch is available on this
+    // deployment (dev/demo) or whether upgrades must go through Stripe.
+    demoPlanSwitch: config.allowDemoPlanSwitch,
   });
 });
 
@@ -40,8 +43,16 @@ router.post("/create-checkout", requireAuth, validate({ body: checkoutSchema }),
 });
 
 // Demo affordance: apply a plan locally so the full quota flow can be tested.
+// Disabled in production unless ALLOW_DEMO_PLAN_SWITCH=true is set explicitly.
 router.post("/apply-plan", requireAuth, validate({ body: checkoutSchema }), async (req, res, next) => {
   try {
+    if (!config.allowDemoPlanSwitch) {
+      throw new ApiError(
+        501,
+        "BILLING_NOT_CONFIGURED",
+        "Plan changes on this deployment go through the payment provider, which is not configured.",
+      );
+    }
     const { plan } = req.body as z.infer<typeof checkoutSchema>;
     const store = await getStore();
     const user = await store.updateUser(req.user!.id, { plan });

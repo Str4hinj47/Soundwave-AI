@@ -31,6 +31,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { ColorPicker } from "../components/ui/ColorPicker";
 import { subtitleStyleToCss, subtitlePosition } from "../lib/subtitleStyle";
 import { PLANS, type Plan } from "../lib/plans";
+import { getDefaultAspect, getExportQuality } from "../lib/preferences";
 import type { SubtitleCue } from "../lib/types";
 
 type Resolution = "720p" | "1080p" | "1440p" | "4K";
@@ -64,7 +65,7 @@ export function VideoCompositor() {
   const [uploading, setUploading] = useState(false);
   const [ytUrl, setYtUrl] = useState("");
   const [ytImporting, setYtImporting] = useState(false);
-  const [bgColor, setBgColor] = useState("#0A0F1C");
+  const [bgColor, setBgColor] = useState(() => studio.video.bgColor || "#0A0F1C");
 
   const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -74,9 +75,10 @@ export function VideoCompositor() {
   const [zoom, setZoom] = useState(1);
 
   const [resolution, setResolution] = useState<Resolution>(planDef.maxResolution as Resolution);
-  const [aspect, setAspect] = useState<Aspect>("16:9");
+  // Aspect + quality come from Preferences so the editor opens how you like it.
+  const [aspect, setAspect] = useState<Aspect>(() => getDefaultAspect());
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
-  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
+  const [quality, setQuality] = useState<"low" | "medium" | "high">(() => getExportQuality());
   const [fps, setFps] = useState(30);
 
   const [exporting, setExporting] = useState(false);
@@ -114,6 +116,12 @@ export function VideoCompositor() {
       : naturalMax;
   // Back-compat alias used by the timeline rendering below.
   const duration = timelineEnd;
+
+  // Remember the background colour in the shared studio store.
+  useEffect(() => {
+    if (studio.video.bgColor !== bgColor) studio.setVideo({ bgColor });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bgColor]);
 
   // Object URL for voiceover playback in the preview.
   useEffect(() => {
@@ -355,6 +363,10 @@ export function VideoCompositor() {
           audioVolume: audioVolume / 100,
           fadeIn,
           fadeOut,
+          // Without a video the export renders a solid background — the colour
+          // used to be hardcoded server-side, so the picker only affected the
+          // on-screen preview.
+          ...(videoFileKey ? {} : { backgroundColor: bgColor }),
           ...(!fitToVoice && trimEnd > 0 ? { videoEnd: Math.min(trimEnd, naturalMax) } : {}),
         },
       });
@@ -406,8 +418,8 @@ export function VideoCompositor() {
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Video Compositor</h1>
-          <p className="text-sm text-gray-400">Overlay your subtitles onto video and export. Audio is only uploaded when you export.</p>
+          <h1 className="text-2xl font-bold text-fg-strong">Video Compositor</h1>
+          <p className="text-sm text-fg-muted">Overlay your subtitles onto video and export. Audio is only uploaded when you export.</p>
         </div>
         <Badge tone="blue">{planDef.name} plan · up to {planDef.maxResolution}</Badge>
       </div>
@@ -416,11 +428,11 @@ export function VideoCompositor() {
         {/* Left column */}
         <div className="min-w-0 space-y-5">
           {/* Preview */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div
               ref={previewRef}
               className={cn(
-                "relative mx-auto w-full overflow-hidden rounded-lg bg-black transition-all duration-300",
+                "relative mx-auto w-full overflow-hidden rounded-card bg-black transition-all duration-300",
                 aspect === "9:16" ? "max-w-[280px] sm:max-w-[330px]" : "max-w-3xl",
               )}
               style={{ aspectRatio: aspect === "9:16" ? "9 / 16" : "16 / 9" }}
@@ -431,6 +443,7 @@ export function VideoCompositor() {
                   src={videoUrl}
                   className="h-full w-full object-contain"
                   muted
+                  loop
                   playsInline
                   onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
                   onEnded={() => !hasAudio && pausePreview()}
@@ -460,7 +473,7 @@ export function VideoCompositor() {
                 </div>
               )}
               {!videoUrl && (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
+                <div className="absolute inset-0 flex items-center justify-center text-fg-subtle">
                   <span className="flex items-center gap-2 text-sm"><FileVideo className="h-5 w-5" /> No video — solid background</span>
                 </div>
               )}
@@ -473,16 +486,16 @@ export function VideoCompositor() {
                 onClick={() => (playing ? pausePreview() : playPreview())}
                 disabled={!audioUrl && !videoUrl}
                 aria-label={playing ? "Pause preview" : "Play preview"}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-glow transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-primary to-accent text-fg-strong shadow-glow transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
               >
                 {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
               </button>
               <div className="min-w-0 flex-1">
-                <p className="font-mono text-sm tabular-nums text-white">
+                <p className="font-mono text-sm tabular-nums text-fg-strong">
                   {formatDuration(Math.min(currentTime, timelineEnd))}
-                  <span className="text-gray-500"> / {formatDuration(timelineEnd)}</span>
+                  <span className="text-fg-subtle"> / {formatDuration(timelineEnd)}</span>
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-fg-subtle">
                   {!audioUrl && !videoUrl
                     ? "Generate a voiceover to preview playback"
                     : `${playing ? "Previewing" : "Preview"} with voice + subtitles${!fitToVoice && trimEnd > 0 ? ` · ends at ${formatDuration(Math.min(trimEnd, naturalMax))}` : " · ends at voice end"}`}
@@ -496,18 +509,18 @@ export function VideoCompositor() {
             {/* Timeline */}
             <div className="mt-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-300">Timeline</p>
+                <p className="text-sm font-medium text-fg-muted">Timeline</p>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} className="rounded px-2 py-0.5 text-gray-400 hover:text-white" aria-label="Zoom out">−</button>
-                  <span className="text-xs text-gray-500">{Math.round(zoom * 100)}%</span>
-                  <button onClick={() => setZoom((z) => Math.min(3, z + 0.25))} className="rounded px-2 py-0.5 text-gray-400 hover:text-white" aria-label="Zoom in">+</button>
+                  <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} className="rounded px-2 py-0.5 text-fg-muted hover:text-fg-strong" aria-label="Zoom out">−</button>
+                  <span className="text-xs text-fg-subtle">{Math.round(zoom * 100)}%</span>
+                  <button onClick={() => setZoom((z) => Math.min(3, z + 0.25))} className="rounded px-2 py-0.5 text-fg-muted hover:text-fg-strong" aria-label="Zoom in">+</button>
                 </div>
               </div>
-              <div className="mt-2 overflow-x-auto rounded-card border border-gray-800 bg-gray-900/60 p-3">
+              <div className="mt-2 overflow-x-auto rounded-card border border-border bg-surface-inset p-3">
                 <div style={{ width: `${Math.max(100, zoom * 100)}%` }} className="min-w-full">
-                  <div className="flex h-14 items-center gap-1 overflow-hidden rounded-md border border-gray-800">
+                  <div className="flex h-14 items-center gap-1 overflow-hidden rounded-md border border-border">
                     {Array.from({ length: Math.max(1, Math.round(duration || 5)) }).map((_, i) => (
-                      <div key={i} className="h-full flex-1 bg-gray-800/80" title={`${i}s`} />
+                      <div key={i} className="h-full flex-1 bg-surface-2" title={`${i}s`} />
                     ))}
                   </div>
                   <div className="mt-2">
@@ -515,12 +528,12 @@ export function VideoCompositor() {
                   </div>
                   <div className="mt-2 flex h-8 items-center gap-0.5">
                     {cues.length === 0 ? (
-                      <span className="text-xs text-gray-600">No subtitle cues — add them in the Subtitle Editor.</span>
+                      <span className="text-xs text-fg-subtle">No subtitle cues — add them in the Subtitle Editor.</span>
                     ) : (
                       cues.map((c) => (
                         <div
                           key={c.id}
-                          className={cn("flex h-7 items-center overflow-hidden rounded px-1.5 text-[10px] text-white", currentTime >= c.start && currentTime < c.end ? "bg-violet-500" : "bg-gray-700")}
+                          className={cn("flex h-7 items-center overflow-hidden rounded px-1.5 text-[10px] text-fg-strong", currentTime >= c.start && currentTime < c.end ? "bg-accent" : "bg-surface-3")}
                           style={{ width: `${((c.end - c.start) / Math.max(duration, 1)) * 100}%` }}
                           title={c.text}
                         >
@@ -535,9 +548,9 @@ export function VideoCompositor() {
           </div>
 
           {/* Video background */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Video Background</p>
+              <p className="text-sm font-medium text-fg-muted">Video Background</p>
               {videoUrl && (
                 <Badge tone={videoFromYouTube ? "violet" : "green"} dot>
                   {videoFromYouTube ? "YouTube" : "Uploaded"}
@@ -548,8 +561,8 @@ export function VideoCompositor() {
             {videoUrl ? (
               <div className="mt-3 flex items-center gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-white">{videoName}</p>
-                  <p className="text-xs text-gray-500">MP4/MOV/WEBM/AVI · max {planDef.maxVideoMb}MB</p>
+                  <p className="truncate text-sm text-fg-strong">{videoName}</p>
+                  <p className="text-xs text-fg-subtle">MP4/MOV/WEBM/AVI · max {planDef.maxVideoMb}MB</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={clearVideo} icon={<Trash2 className="h-4 w-4" />}>Remove</Button>
               </div>
@@ -558,23 +571,23 @@ export function VideoCompositor() {
                 <div
                   onDrop={onDrop}
                   onDragOver={(e) => e.preventDefault()}
-                  className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-gray-700 px-6 py-10 text-center transition-colors hover:border-blue-500/50"
+                  className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-border-strong px-6 py-10 text-center transition-colors hover:border-primary/50"
                   onClick={() => inputRef.current?.click()}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
                 >
-                  <Upload className="mb-3 h-8 w-8 text-gray-500" />
-                  <p className="text-sm text-gray-300">Drag & drop a video, or click to browse</p>
-                  <p className="mt-1 text-xs text-gray-500">MP4, MOV, WEBM, AVI · up to {planDef.maxVideoMb}MB on your plan</p>
+                  <Upload className="mb-3 h-8 w-8 text-fg-subtle" />
+                  <p className="text-sm text-fg-muted">Drag & drop a video, or click to browse</p>
+                  <p className="mt-1 text-xs text-fg-subtle">MP4, MOV, WEBM, AVI · up to {planDef.maxVideoMb}MB on your plan</p>
                   {uploading && <ProgressBar indeterminate className="mt-4 max-w-xs" />}
                   <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
                 </div>
 
                 {/* Import straight from YouTube */}
-                <div className="mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4">
-                  <p className="flex items-center gap-2 text-sm font-medium text-gray-200">
-                    <Youtube className="h-4 w-4 text-red-400" /> Import from YouTube
+                <div className="mt-4 rounded-card border border-border bg-surface-inset p-4">
+                  <p className="flex items-center gap-2 text-sm font-medium text-fg">
+                    <Youtube className="h-4 w-4 text-danger" /> Import from YouTube
                   </p>
                   <form
                     className="mt-2.5 flex flex-col gap-2 sm:flex-row"
@@ -589,7 +602,7 @@ export function VideoCompositor() {
                       disabled={ytImporting}
                       placeholder="Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…"
                       aria-label="YouTube video URL"
-                      className="h-10 w-full rounded-input border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600 focus:border-blue-500 disabled:opacity-60"
+                      className="h-10 w-full rounded-input border border-border-strong bg-surface-inset px-3 text-sm text-fg-strong placeholder:text-fg-subtle transition-colors hover:border-border-strong focus:border-primary disabled:opacity-60"
                     />
                     <Button type="submit" size="sm" loading={ytImporting} icon={<Youtube className="h-4 w-4" />} className="h-10 shrink-0 sm:w-auto w-full">
                       {ytImporting ? "Importing…" : "Import"}
@@ -598,16 +611,16 @@ export function VideoCompositor() {
                   {ytImporting && (
                     <div className="mt-3">
                       <ProgressBar indeterminate />
-                      <p className="mt-1.5 text-xs text-gray-500">Downloading from YouTube — long videos can take a minute.</p>
+                      <p className="mt-1.5 text-xs text-fg-subtle">Downloading from YouTube — long videos can take a minute.</p>
                     </div>
                   )}
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-fg-subtle">
                     The video is downloaded straight to your project. Only import content you own or have permission to use.
                   </p>
                 </div>
 
                 <div className="mt-4 flex items-center gap-3">
-                  <span className="text-sm text-gray-400">Or use a solid background:</span>
+                  <span className="text-sm text-fg-muted">Or use a solid background:</span>
                   <ColorPicker value={bgColor} onChange={setBgColor} label="Background color" />
                 </div>
               </>
@@ -615,11 +628,11 @@ export function VideoCompositor() {
           </div>
 
           {/* Audio track */}
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <div className="flex items-center justify-between">
-              <p className="flex items-center gap-2 text-sm font-medium text-gray-300"><Music className="h-4 w-4" /> Audio Track</p>
+              <p className="flex items-center gap-2 text-sm font-medium text-fg-muted"><Music className="h-4 w-4" /> Audio Track</p>
               {studio.audioBlob ? <Badge tone="green" dot>Neural TTS audio</Badge> : (
-                <button onClick={() => navigate("/studio")} className="text-sm text-blue-400 hover:text-blue-300">Generate audio →</button>
+                <button onClick={() => navigate("/studio")} className="sw-link text-sm">Generate audio →</button>
               )}
             </div>
             {studio.audioBlob && (
@@ -636,11 +649,11 @@ export function VideoCompositor() {
 
         {/* Right column: export settings */}
         <div className="min-w-0 space-y-5">
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <p className="mb-4 text-sm font-semibold text-white">Export Settings</p>
+          <div className="rounded-card border border-border bg-surface p-5">
+            <p className="mb-4 text-sm font-semibold text-fg-strong">Export Settings</p>
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Video style</label>
+                <label className="mb-1.5 block text-sm text-fg-muted">Video style</label>
                 <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Video style">
                   <AspectButton
                     active={aspect === "16:9"}
@@ -658,20 +671,20 @@ export function VideoCompositor() {
                   />
                 </div>
                 {aspect === "9:16" && (
-                  <p className="mt-1.5 text-xs text-gray-500">
+                  <p className="mt-1.5 text-xs text-fg-subtle">
                     Vertical video for YouTube Shorts, TikTok & Reels. Landscape footage is fitted with black bars.
                   </p>
                 )}
               </div>
 
               {/* Length — how long the finished video runs */}
-              <div className="rounded-card border border-gray-800 bg-gray-900/50 p-3.5">
+              <div className="rounded-card border border-border bg-surface-inset p-3.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-gray-200">
-                      <Scissors className="h-4 w-4 text-blue-400" /> End video with the voice
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-fg">
+                      <Scissors className="h-4 w-4 text-primary" /> End video with the voice
                     </p>
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-fg-subtle">
                       {hasAudio
                         ? `Both video and subtitles stop at ${formatDuration(audioDuration)} — right when the voiceover finishes.`
                         : "Generate a voiceover to enable length options."}
@@ -685,7 +698,7 @@ export function VideoCompositor() {
                   />
                 </div>
                 {!fitToVoice && (
-                  <div className="mt-3 border-t border-gray-800 pt-3">
+                  <div className="mt-3 border-t border-border pt-3">
                     <Slider
                       label="End video at"
                       value={trimEnd > 0 ? trimEnd : naturalMax}
@@ -695,7 +708,7 @@ export function VideoCompositor() {
                       step={0.5}
                       format={(v) => `${formatDuration(v)}${Math.abs(v - naturalMax) < 0.01 ? " (video end)" : ""}`}
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-fg-subtle">
                       Cuts the video early (e.g. let the voice end, then stop). Footage shorter than the voice loops automatically.
                     </p>
                   </div>
@@ -703,7 +716,7 @@ export function VideoCompositor() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Resolution</label>
+                <label className="mb-1.5 block text-sm text-fg-muted">Resolution</label>
                 <Select
                   value={resolution}
                   onChange={(v) => setResolution(v as Resolution)}
@@ -715,30 +728,30 @@ export function VideoCompositor() {
                   ariaLabel="Resolution"
                 />
                 {RES_ORDER.indexOf(resolution) > maxResolutionIdx && (
-                  <p className="mt-1 text-xs text-amber-400">This resolution requires a higher plan.</p>
+                  <p className="mt-1 text-xs text-warning">This resolution requires a higher plan.</p>
                 )}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Format</label>
+                <label className="mb-1.5 block text-sm text-fg-muted">Format</label>
                 <Select value={format} onChange={(v) => setFormat(v as "mp4" | "webm")} options={[{ value: "mp4", label: "MP4 (H.264)" }, { value: "webm", label: "WEBM (VP9)" }]} ariaLabel="Format" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Quality</label>
+                <label className="mb-1.5 block text-sm text-fg-muted">Quality</label>
                 <Select value={quality} onChange={(v) => setQuality(v as "low" | "medium" | "high")} options={[{ value: "low", label: "Low (fast, smaller)" }, { value: "medium", label: "Medium" }, { value: "high", label: "High (slow, larger)" }]} ariaLabel="Quality" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-gray-300">Frame rate</label>
+                <label className="mb-1.5 block text-sm text-fg-muted">Frame rate</label>
                 <Select value={String(fps)} onChange={(v) => setFps(parseInt(v, 10))} options={[{ value: "24", label: "24 fps" }, { value: "30", label: "30 fps" }, { value: "60", label: "60 fps" }]} ariaLabel="Frame rate" />
               </div>
-              <div className="flex items-center justify-between rounded-card border border-gray-800 bg-gray-900/60 px-3.5 py-3">
-                <span className="text-sm text-gray-400">Estimated size</span>
-                <span className="font-mono text-sm text-white">~{formatBytes(estimatedSize)}</span>
+              <div className="flex items-center justify-between rounded-card border border-border bg-surface-inset px-3.5 py-3">
+                <span className="text-sm text-fg-muted">Estimated size</span>
+                <span className="font-mono text-sm text-fg-strong">~{formatBytes(estimatedSize)}</span>
               </div>
-              {planDef.watermark && <p className="text-xs text-amber-400">Free plan exports include a small watermark. Upgrade to Pro to remove it.</p>}
+              {planDef.watermark && <p className="text-xs text-warning">Free plan exports include a small watermark. Upgrade to Pro to remove it.</p>}
             </div>
           </div>
 
-          <div className="rounded-card border border-gray-800 bg-panel p-5">
+          <div className="rounded-card border border-border bg-surface p-5">
             <Button
               fullWidth
               size="lg"
@@ -752,12 +765,12 @@ export function VideoCompositor() {
             {exporting && (
               <div className="mt-4">
                 <ProgressBar value={exportProgress} tone="default" label="Export progress" />
-                <p className="mt-2 text-center text-sm text-gray-400">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
+                <p className="mt-2 text-center text-sm text-fg-muted">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
               </div>
             )}
             {exportError && !exporting && (
-              <div className="mt-4 rounded-input border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-relaxed text-red-200">
-                <p className="font-semibold text-red-300">Export failed</p>
+              <div className="mt-4 rounded-input border border-danger/30 bg-danger/10 px-3.5 py-3 text-sm leading-relaxed text-danger">
+                <p className="font-semibold text-danger">Export failed</p>
                 <p className="mt-0.5 break-words">{exportError}</p>
               </div>
             )}
@@ -766,7 +779,7 @@ export function VideoCompositor() {
                 Download Video
               </Button>
             )}
-            <p className="mt-3 text-center text-xs text-gray-500">
+            <p className="mt-3 text-center text-xs text-fg-subtle">
               🔒 Audio is uploaded only for this FFmpeg compositing step, then deleted.
             </p>
           </div>
@@ -798,15 +811,15 @@ function AspectButton({
       className={cn(
         "flex flex-col items-center gap-1 rounded-card border px-3 py-3 text-center transition-all duration-200",
         active
-          ? "border-blue-500/60 bg-blue-500/10 text-white shadow-glow"
-          : "border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200",
+          ? "border-primary/60 bg-primary/10 text-fg-strong shadow-glow"
+          : "border-border-strong text-fg-muted hover:border-border-strong hover:text-fg",
       )}
     >
-      <span className={cn("flex items-center gap-1.5 text-sm font-semibold", active ? "text-white" : "text-gray-300")}>
+      <span className={cn("flex items-center gap-1.5 text-sm font-semibold", active ? "text-fg-strong" : "text-fg-muted")}>
         {icon}
         {title}
       </span>
-      <span className="text-[11px] text-gray-500">{sub}</span>
+      <span className="text-[11px] text-fg-subtle">{sub}</span>
     </button>
   );
 }

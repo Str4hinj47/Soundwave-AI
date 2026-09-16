@@ -32,7 +32,7 @@ export function Tooltip({ content, children, side = "top", disabled }: TooltipPr
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-50 w-max max-w-64 rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-xs text-gray-200 shadow-xl transition-opacity duration-150",
+          "pointer-events-none absolute z-50 w-max max-w-64 rounded-md border border-border-strong bg-surface-inset px-2.5 py-1.5 text-xs text-fg shadow-xl transition-opacity duration-150",
           sideClass,
           show ? "opacity-100" : "opacity-0",
         )}

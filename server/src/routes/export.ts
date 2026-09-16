@@ -37,6 +37,12 @@ const exportSchema = z.object({
     quality: z.enum(["low", "medium", "high"]),
     fps: z.number().int().min(24).max(60),
     audioVolume: z.number().min(0).max(2).optional(),
+    // Solid background colour used when no video is attached (defaults to the
+    // Midnight app background when omitted).
+    backgroundColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "Background colour must be a #RRGGBB hex value.")
+      .optional(),
     fadeIn: z.number().min(0).max(30).optional(),
     fadeOut: z.number().min(0).max(30).optional(),
     // Optional: cut the video at this many seconds. When omitted the export
@@ -115,7 +121,13 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
       const audioProbe = await probeMedia(audioPath).catch(() => null);
       const subtitleEnd = body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0);
       const seconds = Math.min(3600, Math.max(1, Math.ceil((body.exportSettings.videoEnd ?? audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
-      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user!.id);
+      videoPath = await generateColorVideo(
+        dims.width,
+        dims.height,
+        seconds,
+        req.user!.id,
+        body.exportSettings.backgroundColor ?? "#0A0F1C",
+      );
     }
 
     // How long the output runs: the user's chosen end if given, else exactly
@@ -164,16 +176,24 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
   }
 });
 
-async function generateColorVideo(width: number, height: number, seconds: number, userId: string): Promise<string> {
+async function generateColorVideo(
+  width: number,
+  height: number,
+  seconds: number,
+  userId: string,
+  backgroundColor = "#0A0F1C",
+): Promise<string> {
   const dir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, `${userId}-bg-${Date.now()}.mp4`);
   const dur = Math.min(3600, Math.max(1, Math.round(seconds)));
+  // lavfi wants 0xRRGGBB; the schema already constrained the value to #RRGGBB.
+  const color = `0x${backgroundColor.replace("#", "").toUpperCase()}`;
   // lavfi color source of just the needed length; the export ends at audio
   // length via -shortest.
   await new Promise<void>((resolve, reject) => {
     const child = spawn(resolveFfmpegPath(), [
-      "-y", "-f", "lavfi", "-i", `color=c=0x0A0F1C:s=${width}x${height}:d=${dur}:r=30`,
+      "-y", "-f", "lavfi", "-i", `color=c=${color}:s=${width}x${height}:d=${dur}:r=30`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", String(dur), out,
     ]);
     child.on("error", reject);

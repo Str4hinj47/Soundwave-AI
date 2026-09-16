@@ -35,11 +35,17 @@ export const securityHeaders = helmet({
 });
 
 // ── Rate limiting (applied to ALL backend endpoints) ────────────────────────
-const trustIp = (req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string => {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0]!.trim();
-  return req.ip ?? "unknown";
-};
+/**
+ * Rate-limit key for anonymous requests.
+ *
+ * `X-Forwarded-For` is attacker-controlled unless it comes from a trusted
+ * proxy, and the first entry in the chain is the one a client can freely
+ * forge — using it directly let anyone bypass every limiter by rotating the
+ * header. Express already resolves the real client address from the header
+ * when `trust proxy` is configured (see app.ts), so `req.ip` is the value to
+ * trust here.
+ */
+const trustIp = (req: { ip?: string }): string => req.ip ?? "unknown";
 
 export const generalLimiter = rateLimit({
   windowMs: 60 * 1000,

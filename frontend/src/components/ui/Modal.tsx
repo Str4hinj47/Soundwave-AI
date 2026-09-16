@@ -79,7 +79,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
             ref={panelRef}
             tabIndex={-1}
             className={cn(
-              "relative w-full rounded-card border border-gray-700 bg-panel shadow-2xl outline-none",
+              "relative w-full rounded-card border border-border-strong bg-surface shadow-2xl outline-none",
               sizes[size],
             )}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -89,19 +89,19 @@ export function Modal({ open, onClose, title, description, children, footer, siz
           >
             <div className="flex items-start justify-between gap-4 p-5 pb-0">
               <div className="min-w-0">
-                {title && <h2 className="text-xl font-semibold text-white">{title}</h2>}
-                {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
+                {title && <h2 className="text-xl font-semibold text-fg-strong">{title}</h2>}
+                {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
               </div>
               <button
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-gray-700 hover:text-white"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition-all duration-200 hover:bg-surface-3 hover:text-fg-strong"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-5">{children}</div>
-            {footer && <div className="flex justify-end gap-3 border-t border-gray-800 px-5 py-4">{footer}</div>}
+            {footer && <div className="flex justify-end gap-3 border-t border-border px-5 py-4">{footer}</div>}
           </motion.div>
         </div>
       )}

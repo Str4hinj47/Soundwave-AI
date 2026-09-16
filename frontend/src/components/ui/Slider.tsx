@@ -47,7 +47,7 @@ export function Slider({
     <div className={cn("w-full min-w-0", className)}>
       {label && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <label className="text-sm text-gray-300">{label}</label>
+          <label className="text-sm text-fg-muted">{label}</label>
           {editing ? (
             <input
               ref={inputRef}
@@ -62,7 +62,7 @@ export function Slider({
                 if (e.key === "Enter") commit();
                 if (e.key === "Escape") setEditing(false);
               }}
-              className="w-20 rounded-input border border-gray-600 bg-gray-900 px-2 py-1 text-right text-sm text-white"
+              className="w-20 rounded-input border border-border-strong bg-surface-inset px-2 py-1 text-right text-sm text-fg-strong"
               aria-label={`${label} value`}
             />
           ) : (
@@ -72,7 +72,7 @@ export function Slider({
                 setDraft(String(value));
                 setEditing(true);
               }}
-              className="rounded px-1.5 py-0.5 text-sm font-medium text-blue-300 transition-colors hover:bg-gray-800 hover:text-blue-200"
+              className="rounded px-1.5 py-0.5 text-sm font-medium text-primary transition-colors hover:bg-surface-2 hover:brightness-110"
               title="Click to type a value"
             >
               {display}

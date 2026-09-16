@@ -10,7 +10,7 @@ interface ProgressBarProps {
 }
 
 const tones: Record<NonNullable<ProgressBarProps["tone"]>, string> = {
-  default: "bg-gradient-to-r from-blue-500 to-violet-500",
+  default: "bg-gradient-to-r from-primary to-accent",
   success: "bg-success",
   warning: "bg-warning",
   danger: "bg-danger",
@@ -26,7 +26,7 @@ export function ProgressBar({ value = 0, className, barClassName, indeterminate,
       aria-valuemax={100}
       aria-label={label ?? "Progress"}
     >
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
         {indeterminate ? (
           <div
             className={cn("h-full w-1/3 rounded-full animate-[shimmer_1.4s_linear_infinite]", tones[tone])}

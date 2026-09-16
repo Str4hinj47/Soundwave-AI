@@ -17,7 +17,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
   return (
     <div className="w-full min-w-0">
       {label && (
-        <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-gray-300">
+        <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-fg-muted">
           {label}
         </label>
       )}
@@ -28,9 +28,9 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
           aria-invalid={!!error}
           aria-describedby={descId}
           className={cn(
-            "w-full min-w-0 rounded-input border bg-gray-900 px-3.5 py-2.5 text-base text-white placeholder-gray-500 transition-all duration-200",
-            "focus:border-blue-500",
-            error ? "border-danger" : "border-gray-700 hover:border-gray-600",
+            "w-full min-w-0 rounded-input border bg-surface-inset px-3.5 py-2.5 text-base text-fg-strong placeholder:text-fg-subtle transition-all duration-200",
+            "focus:border-primary",
+            error ? "border-danger" : "border-border-strong hover:border-border-strong",
             rightSlot ? "pr-11" : undefined,
             className,
           )}
@@ -39,11 +39,11 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         {rightSlot && <div className="absolute inset-y-0 right-0 flex items-center pr-3">{rightSlot}</div>}
       </div>
       {error ? (
-        <p id={`${inputId}-error`} className="mt-1.5 text-sm text-red-400" role="alert">
+        <p id={`${inputId}-error`} className="mt-1.5 text-sm text-danger" role="alert">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${inputId}-hint`} className="mt-1.5 text-sm text-gray-500">
+        <p id={`${inputId}-hint`} className="mt-1.5 text-sm text-fg-subtle">
           {hint}
         </p>
       ) : null}

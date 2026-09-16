@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cssVarColor, useTheme } from "../store/theme";
 
 interface WaveformProps {
   audioBuffer: AudioBuffer | null;
@@ -19,9 +20,13 @@ export function Waveform({
   duration,
   onSeek,
   height = 72,
-  progressColor = "rgba(139,92,246,0.9)",
-  idleColor = "rgba(148,163,184,0.45)",
+  progressColor,
+  idleColor,
 }: WaveformProps) {
+  // The waveform is painted on a canvas, so it cannot use CSS classes: read the
+  // live theme tokens instead. Subscribing to the theme keys re-runs `draw`
+  // whenever the user switches theme/accent.
+  const themeKey = useTheme((s) => `${s.themeId}|${s.mode}|${s.accentId}|${s.densityId}`);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dragging, setDragging] = useState(false);
   const bufferRef = useRef<AudioBuffer | null>(null);
@@ -67,10 +72,12 @@ export function Waveform({
     const h = rect.height;
     ctx.clearRect(0, 0, w, h);
 
+    const played = progressColor ?? cssVarColor("accent", 0.9);
+    const idle = idleColor ?? cssVarColor("fg-subtle", 0.45);
     const pks = peaksRef.current;
     if (pks.length === 0) {
       // Flat baseline.
-      ctx.fillStyle = "rgba(148,163,184,0.2)";
+      ctx.fillStyle = cssVarColor("fg-subtle", 0.2);
       ctx.fillRect(0, h / 2 - 1, w, 2);
     } else {
       const step = w / pks.length;
@@ -80,7 +87,7 @@ export function Waveform({
         const x = i * step;
         const barH = Math.max(1, (pks[i] ?? 0) * (h - 6));
         const isPlayed = i / pks.length <= progress;
-        ctx.fillStyle = isPlayed ? progressColor : idleColor;
+        ctx.fillStyle = isPlayed ? played : idle;
         ctx.fillRect(x, (h - barH) / 2, barW, barH);
       }
     }
@@ -89,10 +96,10 @@ export function Waveform({
     const dur = durationRef.current;
     if (dur > 0) {
       const x = (Math.min(1, Math.max(0, currentTime / dur))) * w;
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = cssVarColor("fg-strong", 1);
       ctx.fillRect(x - 1, 0, 2, h);
     }
-  }, [currentTime, progressColor, idleColor]);
+  }, [currentTime, progressColor, idleColor, themeKey]);
 
   useEffect(() => {
     draw();
@@ -132,8 +139,16 @@ export function Waveform({
       onMouseLeave={() => setDragging(false)}
       onKeyDown={(e) => {
         const step = duration / 20;
-        if (e.key === "ArrowRight") onSeekRef.current(Math.min(duration, currentTime + step));
-        if (e.key === "ArrowLeft") onSeekRef.current(Math.max(0, currentTime - step));
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          onSeekRef.current(Math.min(duration, currentTime + step));
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          onSeekRef.current(Math.max(0, currentTime - step));
+        }
+        if (e.key === "Home") onSeekRef.current(0);
+        if (e.key === "End") onSeekRef.current(duration);
       }}
     />
   );

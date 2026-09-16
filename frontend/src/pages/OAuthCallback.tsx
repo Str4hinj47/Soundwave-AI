@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
-import { Logo } from "../components/Logo";
+import { FullPageLoader } from "../components/layout/FullPageLoader";
 
 /** Landing page for the OAuth redirect. The backend completes the exchange,
  *  sets the session cookies, then redirects here; we pick up the session and
@@ -43,15 +43,5 @@ export function OAuthCallback() {
     })();
   }, [loadSession, navigate, params]);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-navy">
-      <div className="flex flex-col items-center gap-4">
-        <Logo />
-        <div className="h-1 w-40 overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full w-1/3 animate-[shimmer_1.4s_linear_infinite] rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
-        </div>
-        <p className="text-sm text-gray-400">Completing sign-in…</p>
-      </div>
-    </div>
-  );
+  return <FullPageLoader label="Completing sign-in…" />;
 }

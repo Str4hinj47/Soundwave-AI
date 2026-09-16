@@ -8,7 +8,6 @@ import { Eye, EyeOff } from "lucide-react";
 import { AuthLayout } from "../components/layout/AuthLayout";
 import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
-import { Logo } from "../components/Logo";
 import { http } from "../lib/api";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
@@ -87,17 +86,14 @@ export function SignUp() {
       footer={
         <p>
           Already have an account?{" "}
-          <Link to="/signin" className="text-blue-400 hover:text-blue-300">
+          <Link to="/signin" className="sw-link">
             Sign in
           </Link>
         </p>
       }
     >
-      <div className="mb-6 flex justify-center lg:hidden">
-        <Logo withWordmark={false} />
-      </div>
-      <h1 className="text-2xl font-bold text-white">Create your account</h1>
-      <p className="mt-1 text-sm text-gray-400">Start generating voice content in seconds.</p>
+      <h1 className="text-2xl font-bold text-fg-strong">Create your account</h1>
+      <p className="mt-1 text-sm text-fg-muted">Start generating voice content in seconds.</p>
 
       {/* OAuth button only renders when the server has Google configured —
           otherwise it would dead-end at a "not available" page. */}
@@ -110,9 +106,9 @@ export function SignUp() {
           </div>
 
           <div className="my-6 flex items-center gap-3">
-            <span className="h-px flex-1 bg-gray-800" />
-            <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-            <span className="h-px flex-1 bg-gray-800" />
+            <span className="h-px flex-1 bg-surface-2" />
+            <span className="text-xs uppercase tracking-wide text-fg-subtle">or</span>
+            <span className="h-px flex-1 bg-surface-2" />
           </div>
         </>
       )}
@@ -130,7 +126,7 @@ export function SignUp() {
             placeholder="••••••••"
             error={errors.password?.message}
             rightSlot={
-              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+              <button type="button" onClick={() => setShowPass((s) => !s)} aria-label={showPass ? "Hide password" : "Show password"} className="text-fg-subtle hover:text-fg-muted">
                 {showPass ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             }
@@ -140,8 +136,8 @@ export function SignUp() {
             {checks.map((c) => {
               const ok = c.test(password);
               return (
-                <li key={c.label} className={`flex items-center gap-1.5 text-xs ${ok ? "text-emerald-400" : "text-gray-500"}`}>
-                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400" : "bg-gray-600"}`} />
+                <li key={c.label} className={`flex items-center gap-1.5 text-xs ${ok ? "text-success" : "text-fg-subtle"}`}>
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-success" : "bg-surface-3"}`} />
                   {c.label}
                 </li>
               );
@@ -156,24 +152,24 @@ export function SignUp() {
           placeholder="••••••••"
           error={errors.confirm?.message}
           rightSlot={
-            <button type="button" onClick={() => setShowConfirm((s) => !s)} aria-label={showConfirm ? "Hide password" : "Show password"} className="text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => setShowConfirm((s) => !s)} aria-label={showConfirm ? "Hide password" : "Show password"} className="text-fg-subtle hover:text-fg-muted">
               {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           }
           {...register("confirm")}
         />
 
-        <label className="flex items-start gap-2.5 text-sm text-gray-300">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-900 accent-blue-500" {...register("terms")} />
+        <label className="flex items-start gap-2.5 text-sm text-fg-muted">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-border-strong bg-surface-inset accent-primary" {...register("terms")} />
           <span className="min-w-0">
             I agree to the{" "}
-            <a href="#" className="text-blue-400 hover:text-blue-300">Terms of Service</a> and{" "}
-            <a href="#" className="text-blue-400 hover:text-blue-300">Privacy Policy</a>
+            <a href="#" className="sw-link">Terms of Service</a> and{" "}
+            <a href="#" className="sw-link">Privacy Policy</a>
           </span>
         </label>
-        {errors.terms && <p className="text-sm text-red-400">{errors.terms.message}</p>}
+        {errors.terms && <p className="text-sm text-danger">{errors.terms.message}</p>}
 
-        {serverError && <p className="text-sm text-red-400" role="alert">{serverError}</p>}
+        {serverError && <p className="text-sm text-danger" role="alert">{serverError}</p>}
 
         <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
           Create Account

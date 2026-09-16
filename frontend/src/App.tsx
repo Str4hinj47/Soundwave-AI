@@ -3,8 +3,8 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useAuth } from "./store/auth";
 import { ToastHost } from "./components/ui/ToastHost";
-import { Logo } from "./components/Logo";
 import { AppShell } from "./components/layout/AppShell";
+import { FullPageLoader } from "./components/layout/FullPageLoader";
 import { Landing } from "./pages/Landing";
 import { Pricing } from "./pages/Pricing";
 import { SignIn } from "./pages/SignIn";
@@ -20,6 +20,7 @@ import { VideoCompositor } from "./pages/VideoCompositor";
 import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
+import { Legal } from "./pages/Legal";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
 import { NotFound } from "./pages/NotFound";
 
@@ -29,19 +30,6 @@ function ScrollToTop() {
     window.scrollTo(0, 0);
   }, [pathname]);
   return null;
-}
-
-function FullPageLoader() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-navy">
-      <div className="flex flex-col items-center gap-4">
-        <Logo />
-        <div className="h-1 w-40 overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full w-1/3 animate-[shimmer_1.4s_linear_infinite] rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -93,6 +81,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/terms" element={<Legal kind="terms" />} />
+        <Route path="/privacy" element={<Legal kind="privacy" />} />
         <Route path="/voices" element={<VoiceLibraryRoute />} />
         <Route
           path="/signin"
@@ -165,6 +155,7 @@ export default function App() {
             </RequireAuth>
           }
         />
+        {/* /settings, /settings/billing, /settings/preferences, /settings/appearance */}
         <Route
           path="/settings/*"
           element={

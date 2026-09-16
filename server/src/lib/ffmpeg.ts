@@ -70,9 +70,27 @@ export interface ExportParams {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/** Keep only characters that are safe inside an ASS style line. A font name
+ *  with a comma or newline would otherwise inject extra style/dialogue lines
+ *  into the generated subtitle file. */
+function safeFontFamily(name: unknown): string {
+  const cleaned = String(name ?? "")
+    .replace(/[^\p{L}\p{N} ._-]/gu, "")
+    .trim()
+    .slice(0, 64);
+  return cleaned.length > 0 ? cleaned : "Inter";
+}
+
+/** Normalise any colour-ish input to 6 hex digits (falls back to the supplied
+ *  default) so `hexToAss` can never emit "NaN" channels. */
+function safeHex(value: unknown, fallback: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(value ?? "").trim());
+  return m ? `#${m[1]!.toUpperCase()}` : fallback;
+}
+
 // ── ASS generation ──────────────────────────────────────────────────────────
 function hexToAss(hex: string, opacityPct: number): string {
-  const clean = (hex ?? "#FFFFFF").replace("#", "");
+  const clean = safeHex(hex, "#FFFFFF").replace("#", "");
   const r = parseInt(clean.slice(0, 2), 16) || 255;
   const g = parseInt(clean.slice(2, 4), 16) || 255;
   const b = parseInt(clean.slice(4, 6), 16) || 255;
@@ -141,7 +159,7 @@ export function buildAss(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${style.fontFamily ?? "Inter"},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
+    `Style: Default,${safeFontFamily(style.fontFamily)},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
     `Style: Watermark,Inter,${Math.max(16, Math.round(28 * scale))},${hexToAss("#FFFFFF", 55)},${hexToAss("#FFFFFF", 55)},${hexToAss("#000000", 0)},${hexToAss("#000000", 0)},0,0,0,0,100,100,0,0,1,1,0,9,20,20,20,1`,
     "",
     "[Events]",
@@ -335,15 +353,26 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
     let duration = 0;
     child.stdout.on("data", (d: Buffer) => {
       const txt = d.toString();
-      const dm = txt.match(/out_time_ms=(\d+)/);
       if (!duration) {
-        duration = settings.duration && settings.duration > 0 ? settings.duration : params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
+        duration =
+          settings.duration && settings.duration > 0
+            ? settings.duration
+            : params.subtitles.reduce((m, c) => Math.max(m, c.end), 0) || 10;
       }
-      if (dm) {
-        const ms = parseInt(dm[1]!, 10) / 1000;
-        const pct = duration > 0 ? clamp((ms / duration) * 100, 0, 99) : 0;
-        onProgress?.(pct);
+      // `out_time=00:00:12.345000` is unambiguous; `out_time_ms` was
+      // microseconds on modern FFmpeg builds, which broke the percentage.
+      const om = txt.match(/out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      const usMatch = txt.match(/out_time_us=(\d+)/);
+      let seconds = 0;
+      if (om) {
+        seconds = parseInt(om[1]!, 10) * 3600 + parseInt(om[2]!, 10) * 60 + parseFloat(om[3]!);
+      } else if (usMatch) {
+        seconds = parseInt(usMatch[1]!, 10) / 1_000_000;
+      } else {
+        return;
       }
+      const pct = duration > 0 ? clamp((seconds / duration) * 100, 0, 99.9) : 0;
+      onProgress?.(pct);
     });
     child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
     child.on("error", (e) => {

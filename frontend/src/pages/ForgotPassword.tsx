@@ -32,24 +32,24 @@ export function ForgotPassword() {
   };
 
   return (
-    <AuthLayout footer={<Link to="/signin" className="text-blue-400 hover:text-blue-300">← Back to sign in</Link>}>
-      <h1 className="text-2xl font-bold text-white">Reset your password</h1>
-      <p className="mt-1 text-sm text-gray-400">
+    <AuthLayout footer={<Link to="/signin" className="sw-link">← Back to sign in</Link>}>
+      <h1 className="text-2xl font-bold text-fg-strong">Reset your password</h1>
+      <p className="mt-1 text-sm text-fg-muted">
         {sent
           ? "If an account exists for that email, a reset link has been sent."
           : "Enter your email and we'll send you a reset link."}
       </p>
 
       {sent ? (
-        <div className="mt-6 flex flex-col items-center gap-4 rounded-card border border-gray-800 bg-gray-900/60 p-6 text-center">
+        <div className="mt-6 flex flex-col items-center gap-4 rounded-card border border-border bg-surface-inset p-6 text-center">
           <CheckCircle2 className="h-12 w-12 text-success" />
-          <p className="text-sm text-gray-300">Check your inbox. The link expires in 1 hour.</p>
-          <Link to="/signin" className="text-sm text-blue-400 hover:text-blue-300">Back to sign in</Link>
+          <p className="text-sm text-fg-muted">Check your inbox. The link expires in 1 hour.</p>
+          <Link to="/signin" className="sw-link text-sm">Back to sign in</Link>
         </div>
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="mt-6 space-y-4">
           <TextField label="Email" type="email" autoComplete="email" placeholder="you@example.com" error={errors.email?.message} {...register("email")} />
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           <Button type="submit" fullWidth size="lg" loading={isSubmitting}>
             Send Reset Link
           </Button>

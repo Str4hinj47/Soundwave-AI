@@ -55,6 +55,11 @@ export const config = {
     const v = str("DEFAULT_SIGNUP_PLAN", "FREE").toUpperCase();
     return v === "PRO" || v === "ENTERPRISE" ? v : "FREE";
   })(),
+  // Demo affordance: lets POST /billing/apply-plan switch a user's plan with no
+  // payment provider. On by default outside production, where it would be a
+  // free upgrade to Enterprise for anyone who can sign up.
+  allowDemoPlanSwitch:
+    (env.NODE_ENV ?? "development") !== "production" || str("ALLOW_DEMO_PLAN_SWITCH", "false") === "true",
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;

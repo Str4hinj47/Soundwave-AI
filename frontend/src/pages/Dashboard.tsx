@@ -5,8 +5,10 @@ import {
   Captions,
   Film,
   FolderKanban,
+  Gauge,
   Mic,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { http } from "../lib/api";
@@ -16,10 +18,11 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { SkeletonCard } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Badge } from "../components/ui/Badge";
-import { listLocalProjects } from "../lib/localProjects";
+import { deleteLocalProject, listLocalProjects } from "../lib/localProjects";
 import type { ProjectMeta } from "../lib/types";
 import { Dropdown } from "../components/ui/Dropdown";
 import { toast } from "../store/toast";
+import { openProject } from "../lib/openProject";
 
 export function Dashboard() {
   const { user, quota, refreshQuota } = useAuth();
@@ -32,37 +35,55 @@ export function Dashboard() {
     void (async () => {
       try {
         const [cloud, local] = await Promise.all([
-          http.get<{ projects: ProjectMeta[] }>("/projects").then((r) => r.projects).catch(() => []),
+          http
+            .get<{ projects: ProjectMeta[] }>("/projects")
+            .then((r) => r.projects)
+            .catch(() => []),
           listLocalProjects(),
         ]);
-        setProjects([...cloud, ...local]);
+        // Cloud first, then local — newest first within each source.
+        const all = [...cloud, ...local].sort(
+          (a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime(),
+        );
+        setProjects(all);
       } finally {
         setLoading(false);
       }
     })();
   }, [refreshQuota]);
 
-  const firstName = (user?.name ?? "there").split(" ")[0];
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const firstName = (user?.name ?? "there").trim().split(" ")[0] || "there";
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const used = quota?.used ?? 0;
   const limit = quota?.limit ?? 10_000;
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
 
   const totalDuration = useMemo(() => projects.reduce((a, p) => a + (p.duration ?? 0), 0), [projects]);
+  const localCount = useMemo(() => projects.filter((p) => p.storageType === "LOCAL").length, [projects]);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Welcome back, {firstName}</h1>
-          <p className="mt-1 text-sm text-gray-400">{today}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="sw-eyebrow">{today}</p>
+          <h1 className="mt-1 text-3xl font-bold text-fg-strong">Welcome back, {firstName}</h1>
+          <p className="mt-1 text-sm text-fg-muted">
+            {projects.length === 0
+              ? "Generate your first voiceover to get started."
+              : `You have ${projects.length} project${projects.length === 1 ? "" : "s"} — ${localCount} stored locally.`}
+          </p>
         </div>
         <Link
           to="/studio"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white shadow-glow transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-btn bg-gradient-to-r from-primary to-accent px-5 font-semibold text-primary-fg shadow-glow transition-all duration-200 hover:brightness-110"
         >
-          <Sparkles className="h-4 w-4" /> New Text-to-Speech
+          <Sparkles className="h-4 w-4" /> New voiceover
         </Link>
       </div>
 
@@ -72,51 +93,70 @@ export function Dashboard() {
           title="Characters this month"
           value={`${formatNumber(used)} / ${formatNumber(limit)}`}
           icon={<Mic className="h-5 w-5" />}
-          footer={<ProgressBar value={pct} tone={pct > 95 ? "danger" : pct > 80 ? "warning" : "default"} className="mt-3" />}
+          footer={
+            <ProgressBar
+              value={pct}
+              tone={pct > 95 ? "danger" : pct > 80 ? "warning" : "default"}
+              className="mt-3"
+              label="Monthly character usage"
+            />
+          }
         />
-        <StatCard title="Projects created" value={String(projects.length)} icon={<FolderKanban className="h-5 w-5" />} />
-        <StatCard title="Audio generated" value={formatDuration(totalDuration)} icon={<Captions className="h-5 w-5" />} />
+        <StatCard
+          title="Projects"
+          value={String(projects.length)}
+          icon={<FolderKanban className="h-5 w-5" />}
+          footer={<p className="mt-1 text-xs text-fg-subtle">{localCount} local · {projects.length - localCount} cloud</p>}
+        />
+        <StatCard
+          title="Audio generated"
+          value={formatDuration(totalDuration)}
+          icon={<Captions className="h-5 w-5" />}
+          footer={<p className="mt-1 text-xs text-fg-subtle">across saved projects</p>}
+        />
         <StatCard
           title="Current plan"
           value={user?.plan ?? "FREE"}
-          icon={<ArrowUpRight className="h-5 w-5" />}
+          icon={<Gauge className="h-5 w-5" />}
           footer={
             user?.plan !== "ENTERPRISE" ? (
-              <Link to="/pricing" className="mt-1 inline-block text-sm text-blue-400 hover:text-blue-300">
-                Upgrade →
+              <Link to="/pricing" className="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:brightness-110">
+                Upgrade <ArrowUpRight className="h-3.5 w-3.5" />
               </Link>
-            ) : undefined
+            ) : (
+              <p className="mt-1 text-xs text-fg-subtle">Everything unlocked</p>
+            )
           }
         />
       </div>
 
       {/* Quick actions */}
-      <h2 className="mt-10 text-lg font-semibold text-white">Quick actions</h2>
+      <h2 className="mt-10 text-lg font-semibold text-fg-strong">Quick actions</h2>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <QuickAction
           icon={<Mic className="h-6 w-6" />}
-          title="New Text-to-Speech"
+          title="New text-to-speech"
           desc="Generate speech with any Microsoft Neural voice."
           to="/studio"
         />
         <QuickAction
           icon={<Captions className="h-6 w-6" />}
-          title="New Subtitle Project"
-          desc="Style and sync subtitles to your audio."
+          title="Style subtitles"
+          desc="Cue and design captions for your audio."
           to="/studio/subtitles"
         />
         <QuickAction
           icon={<Film className="h-6 w-6" />}
-          title="New Video Export"
-          desc="Burn subtitles onto a video background."
+          title="Export video"
+          desc="Burn subtitles onto footage or a colour background."
           to="/studio/video"
         />
       </div>
 
       {/* Recent projects */}
       <div className="mt-10 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Recent projects</h2>
-        <Link to="/projects" className="text-sm text-blue-400 hover:text-blue-300">
+        <h2 className="text-lg font-semibold text-fg-strong">Recent projects</h2>
+        <Link to="/projects" className="sw-link text-sm">
           View all →
         </Link>
       </div>
@@ -129,15 +169,15 @@ export function Dashboard() {
             <SkeletonCard />
           </div>
         ) : projects.length === 0 ? (
-          <div className="rounded-card border border-gray-800 bg-panel">
+          <div className="sw-card">
             <EmptyState
               icon={<Mic className="h-8 w-8" />}
               title="Create your first project"
-              description="Generate your first voice clip — it takes seconds and runs entirely in your browser."
+              description="Generate a voiceover — it takes seconds, uses your free monthly characters, and comes with word-level timings for subtitles."
               action={
                 <Link
                   to="/studio"
-                  className="inline-flex h-11 items-center rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-5 font-semibold text-white hover:from-blue-400 hover:to-violet-400"
+                  className="inline-flex h-11 items-center rounded-btn bg-gradient-to-r from-primary to-accent px-5 font-semibold text-primary-fg hover:brightness-110"
                 >
                   Start creating
                 </Link>
@@ -147,7 +187,12 @@ export function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.slice(0, 6).map((p) => (
-              <ProjectCard key={p.id} project={p} onOpen={() => navigate("/studio")} onDelete={() => setProjects((prev) => prev.filter((x) => x.id !== p.id))} />
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onOpen={() => openProject(p, navigate)}
+                onDelete={() => setProjects((prev) => prev.filter((x) => x.id !== p.id))}
+              />
             ))}
           </div>
         )}
@@ -156,14 +201,28 @@ export function Dashboard() {
   );
 }
 
-function StatCard({ title, value, icon, footer }: { title: string; value: string; icon: React.ReactNode; footer?: React.ReactNode }) {
+function StatCard({
+  title,
+  value,
+  icon,
+  footer,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">{title}</p>
-        <span className="text-blue-400">{icon}</span>
+    <div className="group relative overflow-hidden rounded-card border border-border bg-surface p-5 shadow-card transition-transform duration-200 hover:-translate-y-0.5">
+      <span
+        className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 blur-xl transition-opacity duration-300 group-hover:opacity-100 opacity-60"
+        aria-hidden="true"
+      />
+      <div className="relative flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm text-fg-muted">{title}</p>
+        <span className="text-primary">{icon}</span>
       </div>
-      <p className="mt-2 truncate text-2xl font-bold text-white">{value}</p>
+      <p className="relative mt-2 truncate text-2xl font-bold text-fg-strong">{value}</p>
       {footer}
     </div>
   );
@@ -173,34 +232,43 @@ function QuickAction({ icon, title, desc, to }: { icon: React.ReactNode; title: 
   return (
     <Link
       to={to}
-      className="group flex items-start gap-4 rounded-card border border-gray-800 bg-panel p-5 transition-all duration-200 hover:border-blue-500/50"
+      className="group flex items-start gap-4 rounded-card border border-border bg-surface p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lift"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 text-blue-300 transition-colors group-hover:text-blue-200">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-accent/20 text-primary transition-transform group-hover:scale-105">
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block truncate font-semibold text-white">{title}</span>
-        <span className="mt-0.5 block text-sm text-gray-400">{desc}</span>
+        <span className="block truncate font-semibold text-fg-strong">{title}</span>
+        <span className="mt-0.5 block text-sm text-fg-muted">{desc}</span>
       </span>
+      <TrendingUp className="ml-auto h-4 w-4 shrink-0 text-fg-subtle transition-colors group-hover:text-primary" />
     </Link>
   );
 }
 
-function ProjectCard({ project, onOpen, onDelete }: { project: ProjectMeta; onOpen: () => void; onDelete: () => void }) {
+function ProjectCard({
+  project,
+  onOpen,
+  onDelete,
+}: {
+  project: ProjectMeta;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   const [deleted, setDeleted] = useState(false);
   if (deleted) return null;
   return (
-    <div className="rounded-card border border-gray-800 bg-panel p-4 transition-all duration-200 hover:border-blue-500/50">
+    <div className="group rounded-card border border-border bg-surface p-4 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lift">
       <div className="flex items-start justify-between gap-2">
         <button onClick={onOpen} className="min-w-0 flex-1 text-left">
-          <p className="truncate font-semibold text-white">{project.title}</p>
-          <p className="mt-0.5 text-xs text-gray-500">{formatDate(project.createdAt)}</p>
+          <p className="truncate font-semibold text-fg-strong">{project.title}</p>
+          <p className="mt-0.5 text-xs text-fg-subtle">{formatDate(project.updatedAt ?? project.createdAt)}</p>
         </button>
         <Dropdown
           align="right"
           label="Project actions"
           trigger={
-            <button aria-label="Project actions" className="rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white">
+            <button aria-label="Project actions" className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg-strong">
               ⋯
             </button>
           }
@@ -213,7 +281,6 @@ function ProjectCard({ project, onOpen, onDelete }: { project: ProjectMeta; onOp
               onClick: async () => {
                 try {
                   if (project.storageType === "LOCAL") {
-                    const { deleteLocalProject } = await import("../lib/localProjects");
                     await deleteLocalProject(project.id);
                   } else {
                     await http.del(`/projects/${project.id}`);
@@ -233,12 +300,15 @@ function ProjectCard({ project, onOpen, onDelete }: { project: ProjectMeta; onOp
         <Badge tone="blue">{project.type}</Badge>
         <Badge tone="gray">{displayNameFor(project.voiceId)}</Badge>
         {project.duration != null && <Badge tone="gray">{formatDuration(project.duration)}</Badge>}
-        {project.storageType === "LOCAL" && <Badge tone="amber" dot>Local Only</Badge>}
+        {project.storageType === "LOCAL" && (
+          <Badge tone="amber" dot>
+            Local Only
+          </Badge>
+        )}
       </div>
       {project.textContent && (
-        <p className="mt-3 line-clamp-2 text-sm text-gray-500">{truncate(project.textContent, 160)}</p>
+        <p className="mt-3 line-clamp-2 text-sm text-fg-subtle">{truncate(project.textContent, 160)}</p>
       )}
     </div>
   );
 }
-

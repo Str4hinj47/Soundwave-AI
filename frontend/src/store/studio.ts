@@ -18,6 +18,8 @@ interface VideoInfo {
   duration: number | null;
   width: number | null;
   height: number | null;
+  /** Solid background colour used when no video is attached. */
+  bgColor: string;
 }
 
 interface StudioState {
@@ -74,6 +76,7 @@ const initialVideo: VideoInfo = {
   duration: null,
   width: null,
   height: null,
+  bgColor: "#0A0F1C",
 };
 
 export const useStudio = create<StudioState>((set) => ({

@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="midnight" data-appearance="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Soundwave AI — professional text-to-speech with custom subtitles and video export. Powered by Kokoro TTS, running 100% in your browser." />
+    <meta
+      name="description"
+      content="Soundwave AI — studio-grade text-to-speech with Microsoft Neural voices, fully editable subtitles and video export. Pick your own theme and make it yours."
+    />
     <meta name="theme-color" content="#0A0F1C" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,6 +16,80 @@
       rel="stylesheet"
     />
     <title>Soundwave AI — Text-to-Speech, Subtitles &amp; Video Export</title>
+    <script>
+      /* Theme bootstrap — runs before first paint so the stored theme is
+         honoured without a flash of the default palette. Values mirror the
+         first tokens of each preset in src/lib/themes.ts (bg / surface /
+         border / fg channel triplets); React applies the full token set on
+         mount via src/store/theme.ts. */
+      (function () {
+        var PRESETS = {
+          midnight: ["dark", "10 15 28", "17 24 39", "39 51 73", "230 236 245"],
+          aurora: ["dark", "6 24 27", "12 36 39", "28 69 72", "226 245 243"],
+          sunset: ["dark", "26 14 22", "36 20 30", "76 44 58", "250 236 235"],
+          nebula: ["dark", "9 8 26", "18 15 41", "54 44 105", "235 232 255"],
+          daylight: ["light", "244 246 251", "255 255 255", "214 221 233", "27 35 50"],
+          sandstone: ["light", "250 246 240", "255 253 250", "231 218 201", "46 35 27"],
+          graphite: ["dark", "15 17 21", "24 27 33", "48 54 65", "232 235 240"]
+        };
+        try {
+          var raw = localStorage.getItem("sw.theme.v1");
+          var s = raw ? JSON.parse(raw) : null;
+          var COUNTERPART = {
+            midnight: { light: "daylight" },
+            aurora: { light: "daylight" },
+            nebula: { light: "daylight" },
+            graphite: { light: "daylight" },
+            sunset: { light: "sandstone" },
+            daylight: { dark: "midnight" },
+            sandstone: { dark: "sunset" }
+          };
+          var id = s && typeof s.themeId === "string" && PRESETS[s.themeId] ? s.themeId : "midnight";
+          if (s && s.mode === "system") {
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            var want = dark ? "dark" : "light";
+            if ((s.themeId ? PRESETS[s.themeId][0] : "dark") !== want) {
+              var alt = (COUNTERPART[id] || {})[want];
+              id = alt && PRESETS[alt] ? alt : (dark ? "midnight" : "daylight");
+            }
+          }
+          var p = PRESETS[id];
+          var RADII = {
+            sharp: ["6px", "5px", "4px"],
+            default: ["14px", "10px", "10px"],
+            round: ["22px", "999px", "14px"]
+          };
+          var DENSITIES = {
+            comfortable: ["20px", "16px", "44px", "12px"],
+            compact: ["14px", "12px", "38px", "8px"]
+          };
+          var r = RADII[s && s.radiusId] || RADII.default;
+          var d = DENSITIES[s && s.densityId] || DENSITIES.comfortable;
+          var root = document.documentElement;
+          root.dataset.theme = id;
+          root.dataset.appearance = p[0];
+          root.dataset.density = DENSITIES[s && s.densityId] ? s.densityId : "comfortable";
+          root.dataset.motion = s && s.reduceMotion ? "reduced" : "full";
+          root.style.colorScheme = p[0];
+          root.style.setProperty("--sw-bg", p[1]);
+          root.style.setProperty("--sw-bg-deep", p[1]);
+          root.style.setProperty("--sw-surface", p[2]);
+          root.style.setProperty("--sw-surface-inset", p[2]);
+          root.style.setProperty("--sw-border", p[3]);
+          root.style.setProperty("--sw-fg", p[4]);
+          root.style.setProperty("--sw-fg-strong", p[0] === "light" ? "9 15 27" : "255 255 255");
+          root.style.setProperty("--sw-radius-card", r[0]);
+          root.style.setProperty("--sw-radius-btn", r[1]);
+          root.style.setProperty("--sw-radius-input", r[2]);
+          root.style.setProperty("--sw-pad-card", d[0]);
+          root.style.setProperty("--sw-pad-panel", d[1]);
+          root.style.setProperty("--sw-control-h", d[2]);
+          root.style.setProperty("--sw-pad-row", d[3]);
+        } catch (e) {
+          /* private mode / storage disabled — defaults already apply */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

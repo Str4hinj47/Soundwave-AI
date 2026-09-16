@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createOfflineEngine, warmup, type EngineHandle } from "../lib/ttsEngine";
 import { decodeAudioBlob, encodeWav, estimateWordTimings, float32ToAudioBuffer, getAudioContext } from "../lib/audio";
 import { http } from "../lib/api";
@@ -49,13 +49,29 @@ const CLONE_PREFIX = "clone:";
 export const isCloneVoiceId = (id: string): boolean => id.startsWith(CLONE_PREFIX);
 export const cloneProfileIdOf = (voiceId: string): string => voiceId.slice(CLONE_PREFIX.length);
 
-/** Studio inserts <break time="500ms"/> tags; the edge-tts API escapes all
- *  markup, so convert pauses to punctuation and drop any other tags. */
+/**
+ * Normalise studio markup before synthesis.
+ *
+ * The Edge TTS endpoint escapes everything it is sent (the text is wrapped in
+ * a single SSML `<prosody>` element), so inline SSML *cannot* work. Instead:
+ *   - `<break time="500ms"/>` → a comma, which the voice renders as a pause;
+ *   - `{say:"word|phonetic"}` → the phonetic spelling ("say it like this");
+ *   - `{spell:ABC}`           → "A, B, C" so acronyms are spelled out;
+ *   - any remaining tag/directive is stripped so it is never read aloud.
+ */
 export function cleanTextForTTS(text: string): string {
   return text
     .replace(/<break[^>]*\/?>/gi, ", ")
+    .replace(/\{say:\s*"([^"|]*)\|([^"]*)"\s*\}/gi, (_m, _word: string, phonetic: string) => ` ${phonetic} `)
+    .replace(/\{say:\s*"([^"|]*)"\s*\}/gi, (_m, word: string) => ` ${word} `)
+    .replace(/\{spell:\s*([^}]*)\}/gi, (_m, letters: string) =>
+      ` ${String(letters).replace(/[^\p{L}\p{N}]+/gu, "").split("").join(", ")} `,
+    )
+    .replace(/\{pronounce:\s*"([^"|]*)\|([^"]*)"\s*\}/gi, (_m, _w: string, ph: string) => ` ${ph} `)
     .replace(/<[^>]*>/g, "")
+    .replace(/\{[^}]*\}/g, " ")
     .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
     .trim();
 }
 
@@ -194,6 +210,15 @@ export function useTTS(onComplete?: (r: TTSResult) => void): UseTTS {
     requestId.current = null;
     abortRef.current?.abort();
     setStatus("cancelled");
+  }, []);
+
+  // Leaving the page mid-generation must not leave the request running (or
+  // resolve into a component that no longer exists).
+  useEffect(() => {
+    return () => {
+      requestId.current = null;
+      abortRef.current?.abort();
+    };
   }, []);
 
   return {

@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Bell,
   ChevronDown,
-  CircleUserRound,
   CreditCard,
   FolderKanban,
   HelpCircle,
@@ -15,6 +13,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import { cn } from "../../lib/cn";
@@ -22,6 +21,7 @@ import { Logo } from "../Logo";
 import { useAuth } from "../../store/auth";
 import { initials } from "../../lib/format";
 import { Dropdown } from "../ui/Dropdown";
+import { ThemePicker } from "../theme/ThemePicker";
 import { toast } from "../../store/toast";
 
 interface NavItem {
@@ -35,10 +35,9 @@ const mainNav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, end: true },
   { to: "/projects", label: "My Projects", icon: <FolderKanban className="h-5 w-5" /> },
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-5 w-5" /> },
-  { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-5 w-5" /> },
 ];
 
-const studioNav: { to: string; label: string; icon: ReactNode; sub: { to: string; label: string }[] } = {
+const studioNav = {
   to: "/studio",
   label: "Studio",
   icon: <Sparkles className="h-5 w-5" />,
@@ -49,19 +48,42 @@ const studioNav: { to: string; label: string; icon: ReactNode; sub: { to: string
   ],
 };
 
+const secondaryNav: NavItem[] = [
+  { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-5 w-5" /> },
+  { to: "/help", label: "Help & Support", icon: <HelpCircle className="h-5 w-5" /> },
+];
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, signOut } = useAuth();
+  const { user, quota, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Global search shortcut: "/" focuses the project search field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        document.getElementById("shell-search")?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const studioActive = location.pathname.startsWith("/studio");
+  const usage = useMemo(() => {
+    if (!quota || quota.limit <= 0) return { pct: 0, label: "—" };
+    const pct = Math.min(100, Math.round((quota.used / quota.limit) * 100));
+    return { pct, label: `${pct}%` };
+  }, [quota]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -76,12 +98,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center justify-between border-b border-gray-800 px-4">
-        <NavLink to="/dashboard" className="flex items-center">
-          <Logo />
+      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+        <NavLink to="/dashboard" className="flex items-center" aria-label="Soundwave AI dashboard">
+          <Logo markOnly />
         </NavLink>
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-btn text-fg-muted hover:bg-surface-2 lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Close menu"
         >
@@ -90,75 +112,88 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
+        <p className="px-3 pb-1.5 sw-eyebrow">Workspace</p>
         <div className="space-y-1">
           {mainNav.map((item) => (
             <SidebarLink key={item.to} item={item} />
           ))}
 
-          {/* Studio section with sub-items */}
-          <div className="pt-2">
+          <div className="pt-1">
             <NavLink
               to={studioNav.to}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                studioActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-              )}
+              className={cn("sw-nav-link", studioActive && "sw-nav-link-active")}
             >
               {studioNav.icon}
               {studioNav.label}
             </NavLink>
-            {studioActive && (
-              <div className="ml-6 mt-1 space-y-1 border-l border-gray-800 pl-3">
-                {studioNav.sub.map((s) => (
-                  <NavLink
-                    key={s.to}
-                    to={s.to}
-                    end
-                    className={({ isActive }) =>
-                      cn(
-                        "block rounded-md px-3 py-2 text-sm transition-colors",
-                        isActive ? "text-blue-300" : "text-gray-500 hover:text-gray-200",
-                      )
-                    }
-                  >
-                    {s.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {studioActive && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
+                >
+                  <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+                    {studioNav.sub.map((s) => (
+                      <NavLink
+                        key={s.to}
+                        to={s.to}
+                        end
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-center gap-2 rounded-btn px-3 py-2 text-sm transition-colors",
+                            isActive
+                              ? "bg-primary/10 font-medium text-primary"
+                              : "text-fg-subtle hover:bg-surface-2 hover:text-fg",
+                          )
+                        }
+                      >
+                        {s.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+        </div>
 
-          <NavLink
-            to="/help"
-            className={({ isActive }) =>
-              cn(
-                "mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                isActive ? "bg-blue-500/10 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-              )
-            }
-          >
-            <HelpCircle className="h-5 w-5" />
-            Help & Support
-          </NavLink>
+        <p className="mt-6 px-3 pb-1.5 sw-eyebrow">Account</p>
+        <div className="space-y-1">
+          {secondaryNav.map((item) => (
+            <SidebarLink key={item.to} item={item} />
+          ))}
         </div>
       </nav>
 
-      <div className="border-t border-gray-800 p-3">
+      <div className="border-t border-border p-3">
         {user?.plan === "FREE" ? (
-          <div className="rounded-card border border-violet-500/30 bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-3">
-            <p className="text-sm font-semibold text-white">Upgrade to Pro</p>
-            <p className="mt-0.5 text-xs text-gray-400">200K chars, 1080p, no watermark.</p>
-            <button
-              onClick={() => navigate("/pricing")}
-              className="mt-2 w-full rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
-            >
-              Upgrade
-            </button>
+          <div className="relative overflow-hidden rounded-card border border-accent/30 p-3">
+            <span className="pointer-events-none absolute inset-0 sw-aurora opacity-40" aria-hidden="true" />
+            <div className="relative">
+              <p className="text-sm font-semibold text-fg-strong">Upgrade to Pro</p>
+              <p className="mt-0.5 text-xs text-fg-muted">200K chars, 1080p, no watermark.</p>
+              <button
+                onClick={() => navigate("/pricing")}
+                className="mt-2.5 w-full rounded-btn bg-gradient-to-r from-primary to-accent px-3 py-2 text-sm font-semibold text-primary-fg transition-all hover:brightness-110"
+              >
+                Upgrade
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-card border border-gray-800 bg-gray-900/60 px-3 py-2.5">
-            <span className="h-2 w-2 rounded-full bg-success" />
-            <span className="text-sm text-gray-300">{user?.plan} plan</span>
+          <div className="flex items-center gap-3 rounded-card border border-border bg-surface-inset px-3 py-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/15">
+              <span className="h-2 w-2 rounded-full bg-success" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-fg">{user?.plan} plan</p>
+              <p className="truncate text-xs text-fg-subtle">
+                {usage.pct}% of monthly characters used
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -166,9 +201,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className="min-h-screen bg-app">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-gray-800 bg-panel lg:block">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-border bg-surface/70 backdrop-blur-xl lg:block">
+        {sidebar}
+      </aside>
 
       {/* Mobile drawer */}
       <AnimatePresence>
@@ -182,11 +219,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
-              className="fixed inset-y-0 left-0 z-30 w-72 bg-panel lg:hidden"
+              className="fixed inset-y-0 left-0 z-30 w-72 border-r border-border bg-surface lg:hidden"
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
-              transition={{ type: "tween", duration: 0.25 }}
+              transition={{ type: "tween", duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
               {sidebar}
             </motion.aside>
@@ -196,49 +233,73 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 border-b border-gray-800 bg-navy/85 backdrop-blur-xl">
+        <header className="sticky top-0 z-10 border-b border-border bg-app/80 backdrop-blur-xl">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
             <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-btn text-fg-muted hover:bg-surface-2 lg:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            <form onSubmit={onSearch} className="relative hidden max-w-md flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+            <form onSubmit={onSearch} className="relative hidden max-w-md flex-1 md:block" role="search">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
               <input
-                ref={searchRef}
+                id="shell-search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search projects…"
-                className="w-full rounded-input border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600"
+                className="w-full rounded-input border border-border bg-surface-inset py-2 pl-9 pr-12 text-sm text-fg transition-colors placeholder:text-fg-subtle hover:border-border-strong focus:border-primary"
                 aria-label="Search projects"
               />
+              <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-fg-subtle lg:block">
+                /
+              </kbd>
             </form>
 
-            <div className="ml-auto flex items-center gap-1.5">
-              <button
-                aria-label="Notifications"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
-              >
-                <Bell className="h-5 w-5" />
-              </button>
+            <div className="ml-auto flex items-center gap-2">
+              {quota && (
+                <NavLink
+                  to="/settings/billing"
+                  className="hidden items-center gap-2.5 rounded-full border border-border px-3 py-1.5 transition-colors hover:border-border-strong sm:flex"
+                  title={`${quota.used} / ${quota.limit} characters used this month`}
+                >
+                  <span className="relative flex h-5 w-5 items-center justify-center">
+                    <svg viewBox="0 0 36 36" className="h-5 w-5 -rotate-90" aria-hidden="true">
+                      <circle cx="18" cy="18" r="15" fill="none" stroke="rgb(var(--sw-surface-3))" strokeWidth="6" />
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15"
+                        fill="none"
+                        stroke="rgb(var(--sw-primary))"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(usage.pct / 100) * 94.2} 94.2`}
+                      />
+                    </svg>
+                  </span>
+                  <span className="text-xs font-medium text-fg-muted">{usage.label}</span>
+                </NavLink>
+              )}
+
+              <ThemePicker />
 
               <Dropdown
                 align="right"
                 label="Account menu"
                 trigger={
-                  <button className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-gray-800">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-sm font-bold text-white">
+                  <button className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-surface-2" aria-label="Account menu">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-sm font-bold text-primary-fg">
                       {initials(user?.name ?? "U")}
                     </span>
-                    <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
+                    <ChevronDown className="hidden h-4 w-4 text-fg-subtle sm:block" />
                   </button>
                 }
                 items={[
-                  { key: "profile", label: "Profile", icon: <CircleUserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
+                  { key: "profile", label: "Profile", icon: <UserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
+                  { key: "appearance", label: "Appearance", icon: <Sparkles className="h-4 w-4" />, onClick: () => navigate("/settings/appearance") },
                   { key: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate("/settings/billing") },
                   { key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") },
                   { key: "logout", label: "Sign out", icon: <LogOut className="h-4 w-4" />, danger: true, onClick: handleSignOut },
@@ -259,12 +320,7 @@ function SidebarLink({ item }: { item: NavItem }) {
     <NavLink
       to={item.to}
       end={item.end}
-      className={({ isActive }) =>
-        cn(
-          "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-          isActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-        )
-      }
+      className={({ isActive }) => cn("sw-nav-link", isActive && "sw-nav-link-active")}
     >
       {item.icon}
       {item.label}
