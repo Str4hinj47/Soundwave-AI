@@ -65,6 +65,32 @@ export interface GeneratePluginResponse {
   instructions: string[];
 }
 
+export interface SoundwavePluginFile {
+  name: string;
+  size: number;
+  isPlugin: boolean;
+  path: string;
+}
+
+export interface SoundwavePluginMeta {
+  file: string;
+  isPlugin: boolean;
+  purpose: string;
+  name?: string;
+  triggers?: string[];
+  parameters?: Record<string, string> | any;
+  features?: string[];
+  example?: string;
+}
+
+export interface SoundwaveChatResponse {
+  answer: string;
+  sources: string[];
+  relatedPlugins: string[];
+  meta: { model: string; knowledgeCutoff: string; repo: string; latency: string };
+  followUp: string[];
+}
+
 export const jarvisApi = {
   getKnowledge: () => http.get<{ overview: JarvisOverview; structure: string; capabilities: JarvisCapability[]; actions: JarvisAction[]; coreModules: JarvisCoreModule[]; setup: any; bestPractices: any[]; quickPrompts: string[]; templates: { plugin: string; action: string } }>("/jarvis/knowledge"),
   getOverview: () => http.get<{ overview: JarvisOverview }>("/jarvis/overview"),
@@ -81,4 +107,14 @@ export const jarvisApi = {
     http.post<GeneratePluginResponse>("/jarvis/generate-plugin", { description, name }),
   generateAction: (description: string, name?: string) =>
     http.post<GeneratePluginResponse>("/jarvis/generate-action", { description, name }),
+
+  // Soundwave — teaching JARVIS to use Soundwave
+  getSoundwaveOverview: () => http.get<{ overview: any }>("/jarvis/soundwave/overview"),
+  getSoundwavePlugins: () => http.get<{ plugins: SoundwavePluginMeta[]; count: number }>("/jarvis/soundwave/plugins"),
+  getSoundwaveInstructions: () => http.get<{ instructions: string }>("/jarvis/soundwave/instructions"),
+  getSoundwaveKnowledge: () => http.get<{ overview: any; plugins: SoundwavePluginMeta[]; instructions: string }>("/jarvis/soundwave/knowledge"),
+  getSoundwavePluginFiles: () => http.get<{ files: SoundwavePluginFile[]; dir: string; count: number }>("/jarvis/soundwave/plugins/files"),
+  getSoundwavePluginFile: (filename: string) => http.get<{ filename: string; content: string; size: number }>(`/jarvis/soundwave/plugins/files/${filename}`),
+  soundwaveChat: (message: string, history?: { role: "user" | "assistant"; content: string }[]) =>
+    http.post<SoundwaveChatResponse>("/jarvis/soundwave/chat", { message, history }),
 };
