@@ -375,9 +375,19 @@ Use `soundwave_youtube url=... action=paste_guide` for full guide.
 |--------|---------|
 | `anything_llm_bridge.py` | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG. Config via ANYTHING_LLM_API_URL, ANYTHING_LLM_API_KEY |
 
-**Total: 30 plugins (29 + _soundwave_client) after Phase 1 vision fix — makes JARVIS impeccable at PC + Soundwave TTS/video**
+**Total: 35 plugins (34 + _soundwave_client) after Phase 2 input & workspace mastery — makes JARVIS impeccable at PC + Soundwave TTS/video**
 
-### Phase 1 Vision Fix — NEW (5 plugins, fixes biggest weakness)
+### Phase 2 Input & Workspace Mastery — NEW (5 plugins, second biggest weakness after vision)
+
+| Plugin | Actions | Purpose | Token |
+|--------|---------|---------|-------|
+| `keyboard_master_pro.py` | 12+ | Advanced keyboard — type with humanize delay, press/hotkey/hold/release, layout get/set via GetKeyboardLayout, text_expansion trigger→expansion, type_file, clear | Zero |
+| `mouse_master_pro.py` | 12+ | Advanced mouse — move with easing 60fps, click/drag/scroll, position + monitor info, multi_monitor, find_color hex/rgb/name, gesture shake/circle/swipe | Zero |
+| `workspace_master.py` | 12+ | Workspace save/restore & project workspaces — save windows pos/size + processes to ~/.jarvis_workspaces/*.json, restore, list/delete, create_project python/web/empty + git init, switch, current, auto_save every 5 min, export/import | Zero |
+| `ocr_master_pro.py` | 10+ | OCR pro multi-engine — Windows OCR winsdk fast, Tesseract, EasyOCR, PaddleOCR, vision fallback, screenshot/region/file/clipboard/window, engines, find_text | Zero-to-Low |
+| `file_watcher_pro.py` | 10+ | File & folder watcher with auto actions — watchdog or polling fallback, organize by ext to Images/Videos/Docs, backup with timestamp, notify plyer, custom, pause/resume | Zero |
+
+### Phase 1 Vision Fix — (5 plugins, fixes biggest weakness)
 
 | Plugin | Actions | Purpose | Token |
 |--------|---------|---------|-------|
