@@ -11,7 +11,21 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 - **Free & Open Source**: All plugins MIT, no subscriptions, uses pyautogui, pygetwindow, pycaw, psutil, mss, etc.
 - **Zero Token Optimization**: Inspired by upgraderguy777/jarvis-plugins — uses Windows Runtime API, accessibility trees, Win32, local fallbacks, downscaled vision
 
-## Plugins — Ultimate PC Control Suite (25 plugins)
+## Plugins — Ultimate PC Control Suite (30 plugins after Phase 1 vision fix)
+
+### Phase 1 Vision Fix — NEW (Fixes biggest weakness: accessibility tree first zero tokens, vision second low tokens)
+
+| Plugin | Actions | Purpose | Install | Token |
+|--------|---------|---------|---------|-------|
+| **accessibility_master.py** | 10+ | **FOUNDATION** — Windows UI Automation tree master, reads name/type/value/bounds x,y,w,h/enabled via pywinauto UIA Desktop(backend="uia") — zero tokens, instant, no vision. Actions: list, find, click, type, focus, active_window (ctypes GetForegroundWindow), describe (active + mouse near center + focused + elements), tree, get_value, is_enabled | `pip install pywinauto pyautogui comtypes` | Zero |
+| **screen_pro.py** | 5+ | Thread-safe screenshot with DPI awareness — fresh mss instance per call (fixes segfaults, mss uses GDI/COM not thread-safe), resize max_width LANCZOS, display_hint cached PRIMARY bitmap WxH virtual origin mouse same grid PNGs, DPI via GetDpiForSystem | `pip install mss Pillow` | Zero |
+| **screen_reader_pro.py** | 8+ | Text-based screen description for non-vision providers — active window title/app/rect via ctypes, mouse position near center, focused element, visible UI elements top N, click_by_name, type_into, clipboard | `pip install pywinauto pyautogui` | Zero |
+| **region_watcher_pro.py** | 5+ | Background screen change detection — daemon thread polling 1.5s, watches dict id→bbox label mode threshold stable_seconds last_sig was_changing stable_since fired, signature mss grab bbox RGB→L resize 24x24 np float32, process mean abs diff/255, change fires diff>=threshold stable fires was_changing+stable_seconds, plyer notification + emit_ui_event, stops when no watches | `pip install mss Pillow numpy plyer` | Zero |
+| **vision_bridge.py** | 6+ | Tree first vision second — fixes biggest weakness, strategy: tree via pywinauto zero tokens instant, vision fallback screenshot downscale 1400px max LANCZOS + Gemini 2.0 Flash 2-pass micro-crop orange rings low tokens. Modes auto/tree/vision. Actions: find, click, describe, status, help | `pip install pywinauto pyautogui mss Pillow google-genai` | Zero-to-Low |
+
+**Why vision fix matters:** LLMs can't see screen, need structured data. Accessibility tree gives name, type, bounds, enabled, value for every control — zero tokens, instant. Vision via 1400px downscale saves token bandwidth vs full-res. Fresh mss per call fixes segfaults. Display hint ties MSS captures (monitor 1) to pyautogui pixels — single line for system prompt, keeps model usage low. From ONEPUNCHMAN411/Jarvis control/accessibility.py 229 lines + screen_reader.py 331 lines + screen.py 106 lines + region_watcher.py 156 lines + upgraderguy777/jarvis-plugins screenshot_annotate.py 2-pass + discord_messenger.py 3-tier.
+
+## Plugins — Ultimate PC Control Suite (30 plugins)
 
 ### Core PC Mastery (11 new ultimate plugins)
 
@@ -58,7 +72,7 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 |--------|---------|
 | **anything_llm_bridge.py** | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG |
 
-**Total: 25 plugins (24 + _soundwave_client helper) — makes JARVIS impeccable at PC**
+**Total: 30 plugins (29 + _soundwave_client helper) after Phase 1 — 11 core + 5 community + 5 vision fix + 8 Soundwave + 1 bridge — makes JARVIS impeccable at PC**
 
 ## Installation — One Command
 

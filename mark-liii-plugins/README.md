@@ -375,7 +375,17 @@ Use `soundwave_youtube url=... action=paste_guide` for full guide.
 |--------|---------|
 | `anything_llm_bridge.py` | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG. Config via ANYTHING_LLM_API_URL, ANYTHING_LLM_API_KEY |
 
-**Total: 25 plugins (24 + _soundwave_client) — makes JARVIS impeccable at PC + Soundwave TTS/video**
+**Total: 30 plugins (29 + _soundwave_client) after Phase 1 vision fix — makes JARVIS impeccable at PC + Soundwave TTS/video**
+
+### Phase 1 Vision Fix — NEW (5 plugins, fixes biggest weakness)
+
+| Plugin | Actions | Purpose | Token |
+|--------|---------|---------|-------|
+| `accessibility_master.py` | 10+ | Windows UI Automation tree master — list/find/click/type/focus/active_window/describe/tree/get_value/is_enabled — zero tokens foundation | Zero |
+| `screen_pro.py` | 5+ | Thread-safe screenshot pro — fresh mss per call fixes segfaults, DPI awareness GetDpiForSystem, display_hint cached, resize max_width LANCZOS | Zero |
+| `screen_reader_pro.py` | 8+ | Text-based screen description for non-vision — active window, mouse near center, focused, visible elements, click_by_name, type_into | Zero |
+| `region_watcher_pro.py` | 5+ | Background region watcher — daemon thread 1.5s, signature 24x24 grayscale mean abs diff, change/stable modes, plyer notification, stops when empty | Zero |
+| `vision_bridge.py` | 6+ | Tree first vision second — tree via pywinauto zero tokens, vision fallback 1400px + Gemini 2-pass low tokens, modes auto/tree/vision | Zero-to-Low |
 
 ### One-Command Install for PC Mastery
 
