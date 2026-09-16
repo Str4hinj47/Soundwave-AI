@@ -60,7 +60,7 @@ export function VideoCompositor() {
 
   const [videoUrl, setVideoUrl] = useState<string | null>(studio.video.url);
   const [videoName, setVideoName] = useState<string | null>(studio.video.name);
-  const [videoFileKey, setVideoFileKey] = useState<string | null>(null);
+  const [videoFileKey, setVideoFileKey] = useState<string | null>(studio.video.fileKey);
   const [uploading, setUploading] = useState(false);
   const [ytUrl, setYtUrl] = useState("");
   const [ytImporting, setYtImporting] = useState(false);
@@ -247,7 +247,7 @@ export function VideoCompositor() {
         const url = URL.createObjectURL(file);
         setVideoUrl(url);
         setVideoName(file.name);
-        studio.setVideo({ blob: file, url, name: file.name });
+        studio.setVideo({ blob: file, url, name: file.name, fileKey: res.fileKey });
         toast.success("Video uploaded", file.name);
       } catch (e) {
         toast.error("Upload failed", (e as Error).message);
@@ -268,7 +268,7 @@ export function VideoCompositor() {
     setVideoUrl(null);
     setVideoName(null);
     setVideoFileKey(null);
-    studio.setVideo({ blob: null, url: null, name: null });
+    studio.setVideo({ blob: null, url: null, name: null, fileKey: null });
   };
 
   // A video attached via "Import from YouTube" is streamed back from our API.
@@ -292,7 +292,7 @@ export function VideoCompositor() {
       setVideoFileKey(res.fileKey);
       setVideoUrl(streamUrl);
       setVideoName(res.name);
-      studio.setVideo({ blob: null, url: streamUrl, name: res.name });
+      studio.setVideo({ blob: null, url: streamUrl, name: res.name, fileKey: res.fileKey });
       setYtUrl("");
       toast.success("YouTube video imported", "It is ready to use as your video background.");
     } catch (e) {
@@ -324,6 +324,15 @@ export function VideoCompositor() {
     setExportError(null);
     setDownloadUrl(null);
     pausePreview();
+    // A visible background without a server key means the upload reference
+    // was lost (very old session) — exporting now would silently produce the
+    // solid-color fallback instead of the video the user sees.
+    if (videoUrl && !videoFileKey) {
+      setExporting(false);
+      setExportStatus("");
+      setExportError("The background video is missing its upload reference. Remove it and attach the video again, then export.");
+      return;
+    }
     try {
       // 1. Upload client-generated audio for FFmpeg compositing (the only upload).
       const afd = new FormData();

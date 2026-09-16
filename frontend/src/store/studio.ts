@@ -12,6 +12,9 @@ interface VideoInfo {
   blob: Blob | null;
   url: string | null;
   name: string | null;
+  /** Server-side upload key — survives in-app navigation so the export
+   *  request can reference the video after returning to the page. */
+  fileKey: string | null;
   duration: number | null;
   width: number | null;
   height: number | null;
@@ -67,6 +70,7 @@ const initialVideo: VideoInfo = {
   blob: null,
   url: null,
   name: null,
+  fileKey: null,
   duration: null,
   width: null,
   height: null,
