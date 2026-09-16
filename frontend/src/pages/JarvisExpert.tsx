@@ -106,11 +106,11 @@ export function JarvisExpert() {
     {
       id: "sw-welcome",
       role: "assistant",
-      content: `**JARVIS ↔ Soundwave Bridge Online.** 🎙️➡️🎬
+      content: `**JARVIS ↔ Soundwave Bridge Online.** 🎙️➡️🎬 + 📋 YouTube Paste Ready
 
 I'm teaching **Mark LIII JARVIS** to use **Soundwave AI** — production TTS + video studio.
 
-**Soundwave has 6 Neural voices** (Jenny, Ana, Sonia, Christopher, Guy, Ryan) via free Edge TTS, same engine Mark LIII uses. I've created **7 drop-in plugins** for Mark LIII that let JARVIS:
+**Soundwave has 6 Neural voices** (Jenny, Ana, Sonia, Christopher, Guy, Ryan) via free Edge TTS, same engine Mark LIII uses. I've created **8 drop-in plugins** for Mark LIII that let JARVIS:
 
 - **soundwave_tts** — Generate speech with Jenny etc., save MP3 + auto-play
 - **soundwave_voices** — List/describe/recommend voices, play samples
@@ -118,7 +118,14 @@ I'm teaching **Mark LIII JARVIS** to use **Soundwave AI** — production TTS + v
 - **soundwave_projects** — Manage projects in ~/Soundwave/projects/
 - **soundwave_video** — Burn subtitles into video, 16:9 + 9:16 portrait for Shorts/TikTok
 - **soundwave_clone** — Voice cloning via OmniVoice sidecar
-- **soundwave_youtube** — YouTube import as background via yt-dlp
+- **soundwave_youtube** — YouTube import as background via yt-dlp (now with paste_guide)
+- **soundwave_youtube_paste** — ⭐ NEW: Paste YouTube link into Video Editor — exact UI flow, 3 methods api/browser/clipboard/auto
+
+**YouTube Paste Workflow (NEW):**
+- UI: /studio/video → Video Background → Import from YouTube card → input aria-label="YouTube video URL" placeholder "Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…" + Import button
+- Backend: POST /api/v1/upload/youtube {url} timeout 300s → fileKey UUIDv7 → streamUrl /api/v1/upload/file/:key Range → Badge violet YouTube
+- JARVIS methods: api (fastest, direct API), browser (open UI + playwright fill + click Import), clipboard (pyperclip copy + ctrl+v + enter)
+- Plugin: soundwave_youtube_paste url=https://... method=auto → tries api then clipboard
 
 **Ask me:**
 - "How to install Soundwave plugins into Mark LIII?"
@@ -126,6 +133,8 @@ I'm teaching **Mark LIII JARVIS** to use **Soundwave AI** — production TTS + v
 - "How to make video with subtitles portrait?"
 - "How to clone my voice?"
 - "Import YouTube video"
+- "Paste YouTube link https://... into video editor" ⭐ NEW
+- "How to paste a YouTube link into Soundwave video editor?"
 
 All plugins are in \`mark-liii-plugins/\` folder — ready to copy to Mark-LIII/plugins/.`,
     },
@@ -336,7 +345,7 @@ All plugins are in \`mark-liii-plugins/\` folder — ready to copy to Mark-LIII/
                   </div>
                   <div className="border-t border-gray-800 p-4">
                     <div className="flex gap-2"><div className="relative flex-1"><input value={swInput} onChange={(e) => setSwInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSoundwaveSend(); } }} placeholder="Ask how JARVIS uses Soundwave: TTS, voices, video, cloning..." className="w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 pr-12 text-sm text-white placeholder-gray-500 focus:border-violet-500/50 focus:outline-none" /><button onClick={handleSoundwaveSend} disabled={!swInput.trim() || swThinking} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 p-2 text-white hover:from-violet-400 hover:to-purple-500 disabled:opacity-50"><Send className="h-4 w-4" /></button></div></div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">{["How to install plugins?", "Generate speech with Jenny", "Make video portrait 9:16", "How to clone voice?", "Import YouTube video"].map((q) => <button key={q} onClick={() => { setSwInput(q); setTimeout(() => { const ev = new KeyboardEvent("keydown", { key: "Enter" }); document.dispatchEvent(ev); }, 100); jarvisApi.soundwaveChat(q).then((r) => setSoundwaveMessages((prev) => [...prev, { id: `sw-a-${Date.now()}`, role: "assistant", content: r.answer }])); }} className="rounded-full bg-gray-800 px-3 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200 border border-gray-700">{q}</button>)}</div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">{["How to install plugins?", "Generate speech with Jenny", "Make video portrait 9:16", "How to clone voice?", "Import YouTube video", "Paste YouTube link into video editor ⭐"].map((q) => <button key={q} onClick={() => { setSwInput(q); setTimeout(() => { const ev = new KeyboardEvent("keydown", { key: "Enter" }); document.dispatchEvent(ev); }, 100); jarvisApi.soundwaveChat(q).then((r) => setSoundwaveMessages((prev) => [...prev, { id: `sw-a-${Date.now()}`, role: "assistant", content: r.answer }])); }} className="rounded-full bg-gray-800 px-3 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200 border border-gray-700">{q}</button>)}</div>
                   </div>
                 </div>
               )}
@@ -380,6 +389,46 @@ python main.py
                 </pre>
               </div>
 
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-black/40 to-black p-5">
+                <h3 className="font-semibold text-white flex items-center gap-2"><Youtube className="h-5 w-5 text-red-400" /> ⭐ NEW: Paste YouTube Link into Video Editor — Exact Workflow for JARVIS</h3>
+                <div className="mt-3 space-y-3 text-xs text-gray-300">
+                  <div className="rounded-lg bg-black/60 border border-gray-800 p-3">
+                    <div className="text-white font-medium">UI Location — VideoCompositor.tsx /studio/video</div>
+                    <div className="mt-2 text-gray-400 space-y-1">
+                      <div>• Page: <code className="text-cyan-300">/studio/video</code> — left column Video Background section (rounded-card border-gray-800 bg-panel p-5)</div>
+                      <div>• If no video: drag & drop zone + <span className="text-white">Import from YouTube card</span> (Youtube icon red)</div>
+                      <div>• Card: mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4 → Title + Form + Input + Button</div>
+                      <div>• Input: <code className="text-violet-300">aria-label="YouTube video URL"</code> placeholder <code className="text-yellow-300">"Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…"</code> class h-10 w-full rounded-input border-gray-700 bg-gray-900</div>
+                      <div>• Button: <code className="text-white">Import</code> with Youtube icon h-10 type submit size sm loading ytImporting</div>
+                      <div>• Importing: ProgressBar indeterminate + "Downloading from YouTube — long videos can take a minute."</div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-black/60 border border-gray-800 p-3">
+                    <div className="text-white font-medium">Backend — importYouTube()</div>
+                    <pre className="mt-2 overflow-x-auto text-[11px] text-gray-300">{
+`const res = await http.post<{fileKey, name, size}>("/upload/youtube", { url }, { timeout: 300_000 });
+const streamUrl = \`/api/v1/upload/file/\${res.fileKey}\`;
+setVideoFileKey(res.fileKey); setVideoUrl(streamUrl); setVideoName(res.name);
+studio.setVideo({ blob: null, url: streamUrl, name: res.name, fileKey: res.fileKey });
+// Badge violet YouTube, videoFromYouTube = videoUrl.startsWith("/api/v1/upload/file/")
+`}</pre>
+                  </div>
+                  <div className="rounded-lg bg-black/60 border border-gray-800 p-3">
+                    <div className="text-white font-medium">JARVIS 3 Methods (plugin soundwave_youtube_paste.py)</div>
+                    <div className="mt-2 space-y-2">
+                      <div><span className="text-green-300 font-medium">A) API Direct (fastest, recommended):</span><br/>
+                      <code className="text-cyan-300">from _soundwave_client import api_request; res = api_request("POST", "/api/v1/upload/youtube", json_data={"{"}"url": "https://..."{"}"}, timeout=300); fileKey = res["fileKey"]</code></div>
+                      <div><span className="text-blue-300 font-medium">B) Browser Automation:</span><br/>
+                      browser_control open url=http://localhost:5173/studio/video → wait 3-4s → focus [aria-label="YouTube video URL"] via playwright → fill url → click button:has-text("Import") → wait Badge YouTube<br/>
+                      <code className="text-gray-400">await page.goto("http://localhost:5173/studio/video"); await page.wait_for_selector('[aria-label="YouTube video URL"]'); await page.fill('[aria-label="YouTube video URL"]', url); await page.click('button:has-text("Import")');</code></div>
+                      <div><span className="text-yellow-300 font-medium">C) Clipboard:</span><br/>
+                      <code className="text-gray-400">pyperclip.copy(url) + pyautogui.hotkey('ctrl','v') + press enter — input aria-label="YouTube video URL"</code></div>
+                    </div>
+                  </div>
+                  <div className="text-gray-500">Supported: youtube.com/watch?v=..., youtu.be/..., /shorts/..., m.youtube.com with &t=30s &list=... — yt-dlp vendored vendor/yt-dlp/yt-dlp needs python3, YTDLP_COOKIES for age/bot-gated, YTDLP_MAX_DURATION 1200s cap</div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
                   <h3 className="font-semibold text-white flex items-center gap-2"><Mic className="h-4 w-4 text-cyan-400" /> Voice Commands for JARVIS</h3>
@@ -391,6 +440,7 @@ python main.py
                     <div><span className="text-white">Video:</span> "Make video with subtitles portrait 9:16"</div>
                     <div><span className="text-white">Clone:</span> "Clone my voice", "List cloned voices"</div>
                     <div><span className="text-white">YouTube:</span> "Import YouTube video https://..."</div>
+                    <div className="rounded bg-violet-500/10 border border-violet-500/20 p-2 mt-2"><span className="text-violet-300">Paste YouTube ⭐ NEW:</span> "Paste YouTube link https://youtube.com/watch?v=... into video editor" → soundwave_youtube_paste method=auto</div>
                   </div>
                 </div>
                 <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
@@ -550,15 +600,27 @@ python main.py
             </div>
           </div>
 
+          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5">
+            <h3 className="font-semibold text-white flex items-center gap-2"><Youtube className="h-5 w-5 text-red-400" /> Paste YouTube Workflow for JARVIS ⭐</h3>
+            <div className="mt-3 space-y-2 text-xs text-gray-300">
+              <div><span className="text-white">UI:</span> /studio/video → Video Background → Import from YouTube card → input <code className="text-violet-300">[aria-label="YouTube video URL"]</code> + Import button</div>
+              <div><span className="text-white">API:</span> POST /api/v1/upload/youtube {"{"}url{"}"} timeout 300s → fileKey → /api/v1/upload/file/:key Range</div>
+              <div><span className="text-white">JARVIS:</span> soundwave_youtube_paste url=... method=auto (api→clipboard fallback)</div>
+              <div><span className="text-white">Browser:</span> browser_control open + playwright fill + click Import</div>
+              <div><span className="text-white">Badge:</span> YouTube violet appears, videoName + Remove button</div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900/30 p-5">
             <h3 className="font-semibold text-white flex items-center gap-2"><Clapperboard className="h-4 w-4 text-violet-400" /> Soundwave Workflow for JARVIS</h3>
             <div className="mt-3 space-y-2 text-xs text-gray-400">
               <div><span className="text-white">1. TTS:</span> soundwave_tts text="..." voice=Jenny → MP3 + SRT + auto-play</div>
               <div><span className="text-white">2. Projects:</span> soundwave_projects list / create</div>
               <div><span className="text-white">3. Video:</span> soundwave_video prepare text="..." aspect=9:16 → project folder</div>
-              <div><span className="text-white">4. YouTube:</span> soundwave_youtube url=... download</div>
+              <div><span className="text-white">4. YouTube:</span> soundwave_youtube url=... download OR soundwave_youtube_paste url=... method=api ⭐</div>
               <div><span className="text-white">5. Export:</span> Soundwave UI http://localhost:5173/studio/video → upload + style + export MP4</div>
               <div><span className="text-white">6. Clone:</span> soundwave_clone clone_info + generate</div>
+              <div><span className="text-white">7. Paste:</span> /studio/video → Video Background → Import from YouTube → paste link → Import → fileKey → Badge YouTube</div>
             </div>
           </div>
         </div>

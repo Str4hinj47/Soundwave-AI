@@ -289,3 +289,195 @@ Frontend: /jarvis page has mode toggle Mark LIII vs Soundwave, Soundwave chat, p
 **JARVIS + Soundwave = Full Media Studio**
 
 Now JARVIS can say "Generate speech with Jenny" and create studio-quality voiceover via Soundwave's Edge TTS, then "Make video with subtitles portrait" and prepare a TikTok-ready project with MP3+SRT+video_project.json, ready for FFmpeg export in Soundwave UI.
+
+## ⭐ NEW: Paste YouTube Link into Video Editor — Exact Workflow for JARVIS
+
+This is the #1 requested workflow: user copies YouTube URL, wants it as background video in Soundwave's Video Compositor.
+
+### Frontend UI — VideoCompositor.tsx Exact Location
+
+**Page**: `/studio/video` — VideoCompositor component, max-w-7xl, left column preview + timeline + video background + audio track, right column export settings
+
+**Video Background Section** (left column, `rounded-card border border-gray-800 bg-panel p-5`):
+- Title: "Video Background" + Badge (YouTube violet or Uploaded green dot)
+- If video exists: shows videoName truncate text-sm text-white + text-xs text-gray-500 "MP4/MOV/WEBM/AVI · max X MB" + Remove button (Trash2 icon, size sm variant outline)
+- If NO video:
+  - Drag & drop zone: onDrop, onDragOver preventDefault, class `mt-3 flex cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-gray-700 px-6 py-10 text-center hover:border-blue-500/50`, onClick inputRef.current.click(), role button tabIndex 0 onKeyDown Enter → click, Upload icon, text "Drag & drop a video, or click to browse" + "MP4, MOV, WEBM, AVI · up to X MB", ProgressBar indeterminate if uploading, hidden input type file accept video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi onChange onFile
+  - **Import from YouTube card**: `mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4`
+    - Title: `<Youtube icon h-4 w-4 text-red-400> Import from YouTube text-sm font-medium text-gray-200`
+    - Form: `mt-2.5 flex flex-col gap-2 sm:flex-row`, onSubmit e.preventDefault() void importYouTube()
+      - Input: value ytUrl, onChange setYtUrl, disabled ytImporting, placeholder "Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…", aria-label "YouTube video URL", class `h-10 w-full rounded-input border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder-gray-500 hover:border-gray-600 focus:border-blue-500 disabled:opacity-60`
+      - Button: type submit size sm loading ytImporting icon Youtube h-4 w-4 class `h-10 shrink-0 sm:w-auto w-full`, text {ytImporting ? "Importing…" : "Import"}
+    - When importing: mt-3 ProgressBar indeterminate + text-xs text-gray-500 "Downloading from YouTube — long videos can take a minute."
+    - Note: mt-2 text-xs text-gray-500 "The video is downloaded straight to your project. Only import content you own or have permission to use."
+
+**importYouTube() function** (in VideoCompositor.tsx):
+```ts
+const importYouTube = async () => {
+  const url = ytUrl.trim();
+  if (!url) { toast.warning("No link", "Paste a YouTube link first."); return; }
+  setYtImporting(true);
+  try {
+    const res = await http.post<{ fileKey: string; name: string; size: number }>("/upload/youtube", { url }, { timeout: 300_000 }); // 5 min for long videos
+    const streamUrl = `/api/v1/upload/file/${res.fileKey}`;
+    setVideoFileKey(res.fileKey);
+    setVideoUrl(streamUrl);
+    setVideoName(res.name);
+    studio.setVideo({ blob: null, url: streamUrl, name: res.name, fileKey: res.fileKey });
+    setYtUrl("");
+    toast.success("YouTube video imported", "It is ready to use as your video background.");
+  } catch (e) {
+    toast.error("YouTube import failed", (e as Error).message);
+  } finally {
+    setYtImporting(false);
+  }
+};
+```
+
+**Backend** (server/src/lib/ytdlp.ts + routes/upload.ts):
+- Vendored yt-dlp zipapp vendor/yt-dlp/yt-dlp (needs python3), auto-detected, override via YTDLP_PATH env, YTDLP_COOKIES optional cookies.txt for bot/age-gated, YTDLP_MAX_DURATION caps length default 1200s, YTDLP_TIMEOUT_MS 240s
+- POST /api/v1/upload/youtube with {url} → uses yt-dlp to download, returns fileKey UUIDv7, stored under uploads dir, served via GET /api/v1/upload/file/:key Range supported
+- videoFromYouTube = videoUrl != null && videoUrl.startsWith("/api/v1/upload/file/") → Badge tone violet
+
+**After import**:
+- videoRef src=streamUrl, muted playsInline, onLoadedMetadata sets videoDuration, onEnded pauses if no audio
+- previewRef measures previewW via ResizeObserver, k = previewW/1280 for subtitle scaling
+- Timeline shows video duration + audio waveform + subtitle cues
+- Export: POST /api/v1/export/video with videoFileKey + audioFileKey + subtitleData + exportSettings, job QUEUED→PROCESSING→COMPLETED, SSE progress, download
+
+### JARVIS Paste Methods — 3 Ways
+
+**A) API Direct (fastest, recommended for JARVIS, no UI):**
+```python
+from _soundwave_client import api_request, resolve_api_url
+api_url = resolve_api_url()  # env SOUNDWAVE_API_URL or config/api_keys.json or default http://localhost:4000
+res = api_request("POST", "/api/v1/upload/youtube", json_data={"url": "https://youtube.com/watch?v=..."}, timeout=300)
+file_key = res["fileKey"]  # UUIDv7
+name = res["name"]
+stream_url = f"/api/v1/upload/file/{file_key}"
+# Now video ready as background, use as videoFileKey in export job
+```
+
+**B) Browser Automation (opens UI and pastes):**
+Mark LIII has browser_control (open URLs, navigate tabs, Playwright) + computer_control (keyboard shortcuts, mouse, window management, pyautogui, pygetwindow, pywinauto)
+```python
+# Step 1: Open Soundwave Video Compositor
+# browser_control action=open url=http://localhost:5173/studio/video
+# or
+import webbrowser
+webbrowser.open("http://localhost:5173/studio/video")
+# Wait 3-4s for React SPA load
+
+# Step 2: Focus YouTube input
+# Input: [aria-label="YouTube video URL"], placeholder "Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…"
+# In Video Background section → Import from YouTube card → form → input
+# Via playwright (Mark LIII has playwright):
+# await page.goto("http://localhost:5173/studio/video")
+# await page.wait_for_selector('[aria-label="YouTube video URL"]', timeout=10000)
+# await page.fill('[aria-label="YouTube video URL"]', 'https://youtube.com/watch?v=...')
+# await page.click('button:has-text("Import")')
+# await page.wait_for_selector('text=YouTube', timeout=120000)  # Badge appears
+
+# Via computer_control + pyautogui:
+import pyautogui, pyperclip, time
+pyperclip.copy("https://youtube.com/watch?v=...")
+time.sleep(0.5)
+# Focus input: Tab navigate or click at position
+pyautogui.hotkey('ctrl', 'v')  # or 'command', 'v' on macOS
+time.sleep(0.3)
+pyautogui.press('enter')
+# Wait for ProgressBar + "Downloading from YouTube..."
+```
+
+**C) Clipboard:**
+```python
+import pyperclip
+pyperclip.copy("https://youtube.com/watch?v=...")
+# Then computer_control action=hotkey key=ctrl+v + press_key enter
+# Input has aria-label="YouTube video URL"
+```
+
+**Supported URL formats:**
+- https://www.youtube.com/watch?v=dQw4w9WgXcQ
+- https://youtu.be/dQw4w9WgXcQ
+- https://www.youtube.com/shorts/abc123
+- https://m.youtube.com/watch?v=...
+- With extra params: &t=30s, &list=... — yt-dlp handles
+
+**Error handling:**
+- No link: toast.warning "No link" "Paste a YouTube link first."
+- Invalid: yt-dlp fails, backend returns 400 with message
+- Too long: YTDLP_MAX_DURATION default 1200s (20min) — refuses longer, returns 400
+- Bot/age-gated: needs YTDLP_COOKIES env with cookies.txt export, or fails with bot detection message
+- Timeout: 300s frontend timeout for long videos, backend YTDLP_TIMEOUT_MS 240s
+
+### New Plugin: soundwave_youtube_paste.py
+
+**File**: `mark-liii-plugins/soundwave_youtube_paste.py` — dedicated paste plugin with 3 methods auto fallback
+
+**PLUGIN**:
+- name: soundwave_youtube_paste
+- description: Pastes a YouTube link into Soundwave AI's Video Editor to import as background video. Exact workflow for YouTube import: user copies YouTube URL, pastes into 'Import from YouTube' input in Video Background section, clicks Import, video downloaded via yt-dlp. Supports youtube.com/watch?v=…, youtu.be/…, youtube.com/shorts/… formats. Can do via Soundwave API directly (fastest, no UI), via browser automation (opens UI and pastes), or via clipboard. Trigger phrases: paste YouTube link, import YouTube into editor, YouTube to video editor, paste link into video editor, add YouTube background, YouTube in Soundwave video.
+- params: url required (youtube.com/watch?v=…, youtu.be/…, /shorts/…), method api/browser/clipboard/auto default auto (tries api then clipboard+browser), auto_play bool
+- PLUGIN_SETTINGS: namespace soundwave, title Soundwave YouTube Paste, fields api_url, ui_url, default_method, auto_play
+
+**Logic**:
+- Validates youtube.com/youtu.be
+- via_api(): from _soundwave_client import api_request, resolve_api_url; api_request POST /api/v1/upload/youtube json {url} timeout 300 → fileKey/name/size/streamUrl; logs via player.write_log()
+- via_browser(): webbrowser.open ui_url = api_url.replace(":4000",":5173")+"/studio/video"; checks browser_control available via actions.browser_control import; provides playwright selectors [aria-label="YouTube video URL"] fill + click button:has-text("Import") + wait violet badge, fallback computer_control type_text/hotkey/enter, pyautogui sequence
+- via_clipboard(): pyperclip.copy(url) + pyautogui.hotkey ctrl+v + press enter, instructions for focusing input in Video Background → Import from YouTube card
+- Auto: tries via_api() then fallback to via_clipboard() + via_browser() instructions
+- Never raises, returns spoken string with fileKey, streamUrl, next steps
+
+**Install**: `pip install pyperclip pyautogui` (Mark LIII already has playwright, pyautogui in requirements)
+
+**Voice commands**:
+- "Paste YouTube link https://youtube.com/watch?v=dQw4w9WgXcQ into Soundwave video editor" → soundwave_youtube_paste url=https://... method=auto
+- "Paste https://youtu.be/... into video editor" → same
+- "Import YouTube https://... as background in Soundwave video editor" → same
+- "Add YouTube background https://..." → same
+
+**Example flow**:
+1. User: "Paste YouTube link https://www.youtube.com/watch?v=dQw4w9WgXcQ into Soundwave video editor"
+2. JARVIS ack: "On it — pasting that YouTube link into Soundwave's Video Editor now..." (in user's language)
+3. Calls soundwave_youtube_paste url=https://... method=auto
+   - Tries via_api(): POST /api/v1/upload/youtube {url} timeout 300 → {fileKey, name, size}
+   - If API fails, fallback to via_clipboard(): pyperclip.copy(url) + instructions to focus input [aria-label="YouTube video URL"] and hotkey ctrl+v + enter
+4. Returns: "✅ Pasted YouTube link into Soundwave Video Editor via API: URL https://... → FileKey abc123 (UUIDv7) → Name Rick Astley - Never Gonna Give You Up → Stream URL /api/v1/upload/file/abc123 → Next: In Soundwave UI at http://localhost:5173/studio/video, video appears as background with YouTube badge violet. Then generate voiceover in Studio, add subtitles, export via FFmpeg with 16:9 or 9:16 portrait."
+5. User sees video in Soundwave UI Video Compositor left column Video Background section with YouTube badge violet, videoName, Remove button, preview via video element src=streamUrl Range supported.
+
+### Enhanced soundwave_youtube.py
+
+Updated existing plugin with `paste_guide` action and full paste UI details:
+
+- Now supports 4 actions: info, paste_guide, download, soundwave_import
+- paste_guide explains exact UI flow with selectors, importYouTube() function, 3 methods, backend details, supported URLs, plugins
+- info includes both classic workflow and paste workflow
+- download and soundwave_import mention paste UI location
+
+### Frontend — JarvisExpert.tsx Updates
+
+- Welcome message now lists 8 plugins including soundwave_youtube_paste ⭐ NEW with paste workflow summary
+- Added dedicated section "⭐ NEW: Paste YouTube Link into Video Editor — Exact Workflow for JARVIS" with:
+  - UI Location with exact selectors and classes
+  - Backend importYouTube() code snippet
+  - 3 Methods with code examples (API direct, Browser automation with playwright, Clipboard)
+  - Supported URL formats and yt-dlp config
+- Voice commands list includes paste command with violet highlight
+- Added separate workflow card "Paste YouTube Workflow for JARVIS ⭐" with UI/API/JARVIS/Browser/Badge steps
+- Updated Soundwave Workflow to include YouTube paste as step 4 and step 7
+- Quick prompts now include "Paste YouTube link into video editor ⭐"
+
+### Backend — soundwaveKnowledge.ts + jarvis.ts Updates
+
+- `SOUNDWAVE_OVERVIEW.api` now marks POST /api/v1/upload/youtube as "THIS IS PASTE YOUTUBE LINK FLOW"
+- New `youtubePasteWorkflow` field with full exact workflow documentation
+- `SOUNDWAVE_JARVIS_PLUGINS` now includes soundwave_youtube_paste with full pasteWorkflow description
+- `SOUNDWAVE_JARVIS_INSTRUCTIONS` now has section 4 "PASTE YOUTUBE LINK INTO VIDEO EDITOR — THE MAIN WORKFLOW" as primary workflow
+- `jarvis.ts` POST /soundwave/chat now handles q.includes("youtube") || "paste" || "link" with isPaste detection:
+  - If paste: returns exact UI flow with VideoCompositor.tsx selectors, importYouTube() function, backend details, 3 methods with code, supported URLs, plugin info
+  - Else: classic YouTube import + mentions new plugin
+  - followUp includes "Paste YouTube link into video editor" and "How to paste a YouTube link into Soundwave video editor?"
+
+Now JARVIS is truly an expert at pasting YouTube links into Soundwave's Video Editor — knows exact input aria-label, placeholder, button, API endpoint, timeout, fileKey handling, badge, and 3 automation paths.
+

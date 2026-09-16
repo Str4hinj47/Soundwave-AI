@@ -28,7 +28,8 @@ Repo: https://github.com/Str4hinj47/Soundwave-AI (this repo)
 | `soundwave_projects.py` | Manage Soundwave projects (TTS/SUBTITLE/VIDEO) — list, create, show, duplicate, delete, stats | "List my Soundwave projects" |
 | `soundwave_video.py` | Video compositing — burn subtitles into video, 16:9 + 9:16 portrait, FFmpeg workflow, YouTube import | "Make video with subtitles, portrait 9:16" |
 | `soundwave_clone.py` | Voice cloning via OmniVoice sidecar — status, list, clone info, generate with cloned voice | "Clone my voice", "List cloned voices" |
-| `soundwave_youtube.py` | YouTube import as video background via yt-dlp | "Import YouTube video https://..." |
+| `soundwave_youtube.py` | YouTube import as video background via yt-dlp (now with paste_guide action + exact UI flow) | "Import YouTube video https://..." |
+| `soundwave_youtube_paste.py` | ⭐ NEW: Paste YouTube link into Video Editor — exact UI flow, 3 methods api/browser/clipboard/auto | "Paste YouTube link https://youtube.com/watch?v=... into video editor" |
 
 All plugins follow Mark LIII's self-describing skills architecture:
 - `PLUGIN` dict with `name` (regex `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`), `description` (Gemini routing), `parameters` (type OBJECT)
@@ -255,3 +256,85 @@ Same as Mark LIII: CC BY-NC 4.0 (personal & non-commercial). Soundwave AI is MIT
 ---
 
 **Made for JARVIS** — Now JARVIS can use Soundwave AI as its voice studio. Say "Generate speech with Jenny" and JARVIS creates studio-quality voiceover via Soundwave's Edge TTS engine.
+
+## ⭐ NEW: Paste YouTube Link into Video Editor
+
+**The #1 workflow**: User copies YouTube URL, wants it as background video in Soundwave's Video Compositor at `/studio/video`.
+
+### Exact UI Flow (from `frontend/src/pages/VideoCompositor.tsx`)
+
+**Page**: `/studio/video` — VideoCompositor, left column Video Background section
+
+**Video Background Section** (`rounded-card border border-gray-800 bg-panel p-5`):
+- Title: "Video Background" + Badge (YouTube violet or Uploaded green)
+- If no video:
+  - Drag & drop zone: "Drag & drop a video, or click to browse" + hidden file input
+  - **Import from YouTube card**: `mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4`
+    - Title: `<Youtube icon h-4 w-4 text-red-400> Import from YouTube`
+    - Form: `mt-2.5 flex flex-col gap-2 sm:flex-row`, onSubmit importYouTube()
+      - Input: value ytUrl, placeholder "Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…", aria-label "YouTube video URL", class `h-10 w-full rounded-input border border-gray-700 bg-gray-900`
+      - Button: Import with Youtube icon h-10 size sm type submit loading ytImporting
+    - When importing: ProgressBar indeterminate + "Downloading from YouTube — long videos can take a minute."
+- If video exists: videoName truncate + Badge + Remove button
+
+**importYouTube() function**:
+```ts
+const res = await http.post<{ fileKey: string; name: string; size: number }>("/upload/youtube", { url }, { timeout: 300_000 });
+const streamUrl = `/api/v1/upload/file/${res.fileKey}`;
+setVideoFileKey(res.fileKey); setVideoUrl(streamUrl); setVideoName(res.name);
+studio.setVideo({ blob: null, url: streamUrl, name: res.name, fileKey: res.fileKey });
+// Badge violet YouTube, videoFromYouTube = videoUrl.startsWith("/api/v1/upload/file/")
+```
+
+**Backend**: POST `/api/v1/upload/youtube` {url} → {fileKey UUIDv7, name, size}, yt-dlp vendored zipapp vendor/yt-dlp/yt-dlp needs python3, YTDLP_COOKIES, YTDLP_MAX_DURATION 1200s, timeout 240s, stream via GET `/api/v1/upload/file/:key` Range
+
+### JARVIS 3 Methods
+
+**A) API Direct (fastest, recommended, no UI)**:
+```python
+from _soundwave_client import api_request
+res = api_request("POST", "/api/v1/upload/youtube", json_data={"url": "https://youtube.com/watch?v=..."}, timeout=300)
+file_key = res["fileKey"]
+```
+
+**B) Browser Automation (opens UI and pastes)**:
+- browser_control action=open url=http://localhost:5173/studio/video, wait 3-4s React SPA load
+- Focus input `[aria-label="YouTube video URL"]` via playwright or computer_control
+- Playwright exact:
+```python
+await page.goto("http://localhost:5173/studio/video")
+await page.wait_for_selector('[aria-label="YouTube video URL"]', timeout=10000)
+await page.fill('[aria-label="YouTube video URL"]', 'https://youtube.com/watch?v=...')
+await page.click('button:has-text("Import")')
+await page.wait_for_selector('text=YouTube', timeout=120000)  # Badge violet
+```
+- computer_control: type_text text=url or hotkey ctrl+v + press enter
+
+**C) Clipboard**:
+```python
+import pyperclip
+pyperclip.copy("https://youtube.com/watch?v=...")
+# Then computer_control hotkey ctrl+v + enter, input aria-label="YouTube video URL"
+```
+
+### Plugin: soundwave_youtube_paste.py
+
+- **Params**: url required (youtube.com/watch?v=…, youtu.be/…, /shorts/…), method api/browser/clipboard/auto default auto, auto_play bool
+- **Auto**: tries api then clipboard fallback
+- **Voice commands**:
+  - "Paste YouTube link https://youtube.com/watch?v=dQw4w9WgXcQ into Soundwave video editor"
+  - "Paste https://youtu.be/... into video editor"
+  - "Import YouTube https://... as background in Soundwave video editor"
+
+Supports youtube.com/watch?v=..., youtu.be/..., /shorts/..., m.youtube.com with &t=30s &list=...
+
+### Existing soundwave_youtube.py Enhanced
+
+Now supports 4 actions:
+- info: classic workflow
+- paste_guide: exact UI paste flow with selectors, importYouTube(), 3 methods, backend, supported URLs
+- download: direct yt-dlp to ~/Soundwave/youtube/
+- soundwave_import: via API POST /api/v1/upload/youtube
+
+Use `soundwave_youtube url=... action=paste_guide` for full guide.
+
