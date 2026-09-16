@@ -375,9 +375,19 @@ Use `soundwave_youtube url=... action=paste_guide` for full guide.
 |--------|---------|
 | `anything_llm_bridge.py` | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG. Config via ANYTHING_LLM_API_URL, ANYTHING_LLM_API_KEY |
 
-**Total: 40 plugins (39 + _soundwave_client) after Phase 3 intelligence & self-healing — makes JARVIS impeccable at PC + self-improving**
+**Total: 45 plugins (44 + _soundwave_client) after Phase 4 file & system deep mastery — makes JARVIS impeccable at PC + self-improving + deep system admin**
 
-### Phase 3 Intelligence & Self-Healing — NEW (5 plugins, makes JARVIS self-improving)
+### Phase 4 File & System Deep Mastery — NEW (5 plugins, deep system admin)
+
+| Plugin | Actions | Purpose | Token |
+|--------|---------|---------|-------|
+| `file_organizer_pro.py` | 12+ | Smart file organizer by type/date/content/size/project, organize_photos by EXIF year/month, organize_by_date, find_duplicates by hash/content/size, clean_empty, largest, recent, rules list/add/remove keyword→dest | Zero |
+| `batch_renamer_pro.py` | 12+ | Advanced batch rename pattern {n}/{date}/{exif_date}/{name}/{ext}, regex find/replace $1 $2, exif rename, case lower/upper/title, trim, prefix/suffix, number padding, clean | Zero |
+| `system_services_pro.py` | 15+ | System services/startup/registry/env vars control — services list/start/stop/status via sc query/systemctl, startup list/add/remove via registry HKCU Run, registry get/set/list via winreg, env list/get/set, tasks list/run, info | Zero |
+| `audio_device_pro.py` | 12+ | Per-app audio & device switching — devices output/input, volume get/set master, app_volume list/get/set per-app via pycaw, switch_output/input via PowerShell AudioDevice/pactl/SwitchAudioSource, mute, mic, sessions | Zero |
+| `power_manager_pro.py` | 12+ | Battery deep & power plans & sleep/wake — battery status/health/cycles design/full capacity wear via WMI powercfg, power_plans list/get/set via powercfg, sleep/hibernate delay, wake list/set, performance balanced/performance/power_saver, brightness, uptime | Zero |
+
+### Phase 3 Intelligence & Self-Healing — (5 plugins, makes JARVIS self-improving)
 
 | Plugin | Actions | Purpose | Token |
 |--------|---------|---------|-------|
