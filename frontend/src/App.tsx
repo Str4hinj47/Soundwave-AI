@@ -21,6 +21,7 @@ import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
+import { JarvisExpert } from "./pages/JarvisExpert";
 import { NotFound } from "./pages/NotFound";
 
 function ScrollToTop() {
@@ -181,6 +182,16 @@ export default function App() {
             <RequireAuth>
               <AppShell>
                 <Help />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/jarvis"
+          element={
+            <RequireAuth>
+              <AppShell>
+                <JarvisExpert />
               </AppShell>
             </RequireAuth>
           }

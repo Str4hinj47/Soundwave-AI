@@ -15,6 +15,7 @@ import exportRoutes from "./routes/export.js";
 import userRoutes from "./routes/user.js";
 import billingRoutes from "./routes/billing.js";
 import apiKeyRoutes from "./routes/apiKeys.js";
+import jarvisRoutes from "./routes/jarvis.js";
 
 export function createApp() {
   const app = express();
@@ -52,6 +53,7 @@ export function createApp() {
   app.use("/api/v1/user", userRoutes);
   app.use("/api/v1/billing", billingRoutes);
   app.use("/api/v1/api-keys", apiKeyRoutes);
+  app.use("/api/v1/jarvis", jarvisRoutes);
 
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");
