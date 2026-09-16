@@ -11,9 +11,21 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 - **Free & Open Source**: All plugins MIT, no subscriptions, uses pyautogui, pygetwindow, pycaw, psutil, mss, etc.
 - **Zero Token Optimization**: Inspired by upgraderguy777/jarvis-plugins — uses Windows Runtime API, accessibility trees, Win32, local fallbacks, downscaled vision
 
-## Plugins — Ultimate PC Control Suite (35 plugins after Phase 2 input & workspace mastery)
+## Plugins — Ultimate PC Control Suite (40 plugins after Phase 3 intelligence & self-healing)
 
-### Phase 2 Input & Workspace Mastery — NEW (Second biggest weakness after vision: keyboard/mouse basic, no workspace save/restore, OCR basic, no file watcher)
+### Phase 3 Intelligence & Self-Healing — NEW (Makes JARVIS self-improving: logs, recovers, workflows, learns, proactive)
+
+| Plugin | Actions | Purpose | Install | Token |
+|--------|---------|---------|---------|-------|
+| **action_logger.py** | 12+ | Action audit trail & replay — log action to ~/.jarvis_action_log.jsonl JSON Lines timestamp action params result duration success, list filter by action/success, search query fuzzy, stats total success rate top actions failure reasons avg duration last 24h, export json/csv, clear confirm, replay id via importlib, tail, failures. From Mark LIII memory_manager + undo journals | stdlib | Zero |
+| **error_recovery.py** | 10+ | Auto-retry & fallback — retry action retries backoff exponential 1s 2s 4s, fallback strategies tree,vision,ask e.g., find via tree accessibility_master then vision vision_bridge then ask user, classify error not_found/permission/timeout/invalid_params/missing_dependency/network/unknown + fix, heal specific pip install pywinauto etc., wrap action with auto recovery try→classify→retry→fallback→heal, history success rate. From vision_bridge tree first + discord_messenger 3-tier | stdlib | Zero-to-Low |
+| **workflow_engine.py** | 12+ | Multi-step workflows — create name steps JSON array [{action: app_launcher_pro params: {action: launch name: chrome}} {action: browser_master params: {action: navigate url: https://gmail.com}}] trigger manual/schedule cron 0 9 * * */event file_created, stored ~/.jarvis_workflows/{name}.json, run name vars JSON, list/show/delete/edit/add_step/remove_step/export/import/triggers, conditionals if file_exists then continue else skip, loops for_each simple, runs logged ~/.jarvis_workflow_runs.jsonl, success_rate. From ONEPUNCHMAN411 macro_executor + automation_master workflow JSON + dev_agent | stdlib | Zero |
+| **self_learner.py** | 10+ | Learn from corrections & preferences — correct original correction context e.g., click File→Edit Notepad stored ~/.jarvis_corrections.jsonl counts same correction 3+ threshold suggest proactively, learn fact category preferences/projects/relationships/wishes/notes/identity stored ~/.jarvis_learned_facts.json + ~/.jarvis_preferences.json, recall query fuzzy, preferences list, corrections list, forget query, suggest action params improved based on past corrections count, stats total corrections top corrected learning rate, export/import. From Mark LIII memory_manager | stdlib | Zero-to-Low |
+| **proactive_assistant.py** | 10+ | Proactive suggestions & checks — check proactive battery low <20% not plugged suggest power saver, disk full <10% free suggest cleanup largest files, large files >100MB in Downloads 3+ suggest organize, recent failures 3+ failures last 20 suggest error_recovery history, time_based morning 8-10am suggest morning_routine evening backup late night dark mode, learned preferences, returns 1-3 sentences like PROACTIVE_CHECK, suggest list, enable interval 30/disable/status background daemon thread every N min notification via plyer log ~/.jarvis_proactive.json, history limit, feedback id accept/dismiss learns, triggers list. From Mark LIII PROACTIVE_CHECK + STARTUP_BRIEFING + system_monitor_pro alerts | `pip install psutil plyer` | Zero-to-Low |
+
+**Why intelligence matters:** After vision and input fixed, JARVIS still fails when action fails and gives up, repeats same multi-step task, doesn't learn from corrections, reactive only. Action logger gives audit trail for debugging/self-improvement, error recovery makes JARVIS self-healing via retry/fallback/heal, workflow engine automates complex tasks like morning routine, self learner remembers corrections and preferences, proactive assistant suggests actions like battery low, disk full, large files, time-based — makes JARVIS truly impeccable and self-improving.
+
+### Phase 2 Input & Workspace Mastery — (Second biggest weakness after vision: keyboard/mouse basic, no workspace save/restore, OCR basic, no file watcher)
 
 | Plugin | Actions | Purpose | Install | Token |
 |--------|---------|---------|---------|-------|
@@ -84,7 +96,7 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 |--------|---------|
 | **anything_llm_bridge.py** | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG |
 
-**Total: 35 plugins (34 + _soundwave_client helper) after Phase 2 — 11 core + 5 community + 5 vision fix + 5 input/workspace + 8 Soundwave + 1 bridge — makes JARVIS impeccable at PC**
+**Total: 40 plugins (39 + _soundwave_client helper) after Phase 3 — 11 core + 5 community + 5 vision fix + 5 input/workspace + 5 intelligence + 8 Soundwave + 1 bridge — makes JARVIS impeccable at PC and self-improving**
 
 ## Installation — One Command
 

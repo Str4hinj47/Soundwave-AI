@@ -375,9 +375,19 @@ Use `soundwave_youtube url=... action=paste_guide` for full guide.
 |--------|---------|
 | `anything_llm_bridge.py` | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG. Config via ANYTHING_LLM_API_URL, ANYTHING_LLM_API_KEY |
 
-**Total: 35 plugins (34 + _soundwave_client) after Phase 2 input & workspace mastery — makes JARVIS impeccable at PC + Soundwave TTS/video**
+**Total: 40 plugins (39 + _soundwave_client) after Phase 3 intelligence & self-healing — makes JARVIS impeccable at PC + self-improving**
 
-### Phase 2 Input & Workspace Mastery — NEW (5 plugins, second biggest weakness after vision)
+### Phase 3 Intelligence & Self-Healing — NEW (5 plugins, makes JARVIS self-improving)
+
+| Plugin | Actions | Purpose | Token |
+|--------|---------|---------|-------|
+| `action_logger.py` | 12+ | Action audit trail & replay — log to JSONL, list/search/stats/export/clear/replay/tail/failures, max 10k auto-trim | Zero |
+| `error_recovery.py` | 10+ | Auto-retry & fallback — retry with exponential backoff, fallback tree→vision→ask, classify error, heal suggestions, wrap with auto recovery, history | Zero-to-Low |
+| `workflow_engine.py` | 12+ | Multi-step workflows — create name steps JSON, run with vars, list/show/delete/edit/add_step/remove_step/export/import/triggers, conditionals file_exists, runs logged, success rate | Zero |
+| `self_learner.py` | 10+ | Learn from corrections & preferences — correct original→correction context, learn fact category, recall query, preferences, corrections, forget, suggest improved params based on 3+ corrections, stats, export/import | Zero-to-Low |
+| `proactive_assistant.py` | 10+ | Proactive suggestions & checks — check battery low/disk full/large files/recent failures/time-based/learned, suggest, enable/disable/status background thread, history, feedback accept/dismiss, triggers | Zero-to-Low |
+
+### Phase 2 Input & Workspace Mastery — (5 plugins, second biggest weakness after vision)
 
 | Plugin | Actions | Purpose | Token |
 |--------|---------|---------|-------|
