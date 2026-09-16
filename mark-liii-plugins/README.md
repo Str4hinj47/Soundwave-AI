@@ -338,3 +338,66 @@ Now supports 4 actions:
 
 Use `soundwave_youtube url=... action=paste_guide` for full guide.
 
+
+## 💻 PC Mastery Suite — Make JARVIS Impeccable at Using Your PC (NEW)
+
+**User has anythingLLM for non-PC tasks, JARVIS focuses 100% on PC control — 50+ actions, free & open source, zero tokens.**
+
+### Community Plugins (5 from upgraderguy777/jarvis-plugins — MIT, zero-token optimized)
+
+| Plugin | OS | Token Impact | Purpose |
+|--------|----|--------------|---------|
+| `notification_reader.py` | Windows 10 1607+ / 11 | Zero | Reads Windows notification center — Discord, Slack, WhatsApp, Outlook, etc. Actions: check, list, status, watch (background watcher), unwatch, watches |
+| `screen_recorder.py` | Windows Full / macOS Linux Voice only | Zero | Real screen recording video over time. Voice: start/stop/pause/resume/status. Hotkeys Win+Alt+R, Win+Alt+P. Auto audio muxing via ffmpeg |
+| `screenshot_annotate.py` | Cross-platform | Low (2-pass) | Visual teaching — screenshot + Gemini finds UI element + draws orange rings + spoken directions. 2-pass: downscale 1400px + micro-crop |
+| `discord_messenger.py` | Windows 10/11 | Zero-to-Low | Discord Desktop control — DMs, channels, @mentions. 3-tier: aliases deep links, accessibility tree via pywinauto, vision fallback |
+| `magi_system.py` | Cross-platform | Ultra-Low (Flash-Lite) | NGE MAGI — 3 personas: MELCHIOR-1 (Scientist), BALTHASAR-2 (Mother), CASPER-3 (Woman). Modes: quick, thinking, max with early consensus exit |
+
+### Ultimate PC Control (11 new — makes JARVIS impeccable)
+
+| Plugin | Actions | Purpose | Install |
+|--------|---------|---------|---------|
+| `pc_master.py` | 50+ | **MASTER** — volume, brightness, WiFi, Bluetooth, power, display, audio, keyboard, mouse, window snap, file search/organize, process list/kill, clipboard history, screenshot, network, startup, dark mode | `pip install pyautogui pygetwindow pycaw psutil screen-brightness-control` |
+| `file_commander.py` | 15+ | File management — search, recent, organize by type, batch rename {n}/{date}, duplicates MD5, disk usage, largest/oldest, tree, stats, open/reveal | stdlib |
+| `window_manager_pro.py` | 15+ | Window management — list, minimize/maximize/close, snap left/right/top/bottom/max, move x,y, resize w,h, always on top (Win32), focus, transparency, virtual desktop, multi-monitor, cascade, tile | `pip install pygetwindow pyautogui screeninfo` |
+| `process_commander.py` | 12+ | Process management — list, top, search, kill, kill_all, start, restart, priority, affinity, monitor, tree, stats | `pip install psutil` |
+| `clipboard_master.py` | 13+ | Clipboard intelligence — history 50 auto-tracked, get/set/clear, translate (Gemini), summarize, explain, fix, search, pin/unpin, save/load, OCR | `pip install pyperclip` |
+| `automation_master.py` | 10+ | Macros & automation — record (pynput), stop, play (pyautogui), list, delete, hotkey, workflow JSON, schedule via OS scheduler | `pip install pynput pyautogui` |
+| `browser_master.py` | 15+ | Browser automation — open, navigate, back/forward/refresh, new_tab/close_tab/switch_tab/list_tabs, bookmarks (Chrome JSON), fill selector, click selector, screenshot, pdf, download, autofill, Playwright exact | `pip install playwright && playwright install chromium` |
+| `system_monitor_pro.py` | 12+ | Enhanced monitoring — status (CPU per core, RAM, disk partitions, battery, uptime, alerts), cpu, ram, disk, gpu (GPUtil/nvidia-smi), network IO, battery, temperature, processes, top, sensors | `pip install psutil GPUtil` |
+| `app_launcher_pro.py` | 9+ | Intelligent app launcher — launch by name (per-OS map), list, recent 20, frequent count, pin/unpin favorites, search, kill | stdlib |
+| `screen_master.py` | 10+ | Screen control — screenshot (mss), capture_window, capture_region, annotate (Gemini vision 2-pass), ocr (pytesseract), record_start/stop/status, compare | `pip install mss Pillow pyautogui pytesseract opencv-python` |
+| `network_commander.py` | 12+ | Network control — status (local+public IP), wifi_list, wifi_connect SSID password, wifi_disconnect, ip, speedtest, scan (nmap/arp), ping, traceroute, dns, hosts, firewall | `pip install requests speedtest-cli` |
+
+### Bridge
+
+| Plugin | Purpose |
+|--------|---------|
+| `anything_llm_bridge.py` | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG. Config via ANYTHING_LLM_API_URL, ANYTHING_LLM_API_KEY |
+
+**Total: 25 plugins (24 + _soundwave_client) — makes JARVIS impeccable at PC + Soundwave TTS/video**
+
+### One-Command Install for PC Mastery
+
+```bash
+pip install pyautogui pygetwindow pycaw comtypes psutil screen-brightness-control mss Pillow pyperclip pynput screeninfo GPUtil requests speedtest-cli opencv-python sounddevice winsdk pywinauto pytesseract
+pip install playwright && playwright install chromium
+# notification_reader auto-installs winsdk
+cp mark-liii-plugins/*.py /path/to/Mark-LIII/plugins/
+python main.py
+```
+
+### Voice Commands — PC Mastery
+
+- "Set volume to 50", "Set brightness to 80", "System status", "CPU usage"
+- "Find file report in Documents", "Organize my Downloads", "Batch rename files to IMG_{n}"
+- "List open windows", "Snap Chrome to left", "Make YouTube always on top"
+- "List processes", "Kill Chrome", "Start notepad"
+- "Clipboard history", "Translate clipboard to Serbian", "Take screenshot"
+- "Open YouTube", "New tab GitHub", "Where is the export button"
+- "Network status", "List WiFi networks", "Speed test"
+- "Record macro open_chrome_search", "Play macro", "Press ctrl+shift+t"
+- "Check my notifications", "Any new Discord messages"
+- "Ask MAGI should I deploy this"
+
+See `docs/PC_MASTERY.md` for full 500+ line guide.
