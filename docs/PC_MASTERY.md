@@ -11,9 +11,21 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 - **Free & Open Source**: All plugins MIT, no subscriptions, uses pyautogui, pygetwindow, pycaw, psutil, mss, etc.
 - **Zero Token Optimization**: Inspired by upgraderguy777/jarvis-plugins — uses Windows Runtime API, accessibility trees, Win32, local fallbacks, downscaled vision
 
-## Plugins — Ultimate PC Control Suite (30 plugins after Phase 1 vision fix)
+## Plugins — Ultimate PC Control Suite (35 plugins after Phase 2 input & workspace mastery)
 
-### Phase 1 Vision Fix — NEW (Fixes biggest weakness: accessibility tree first zero tokens, vision second low tokens)
+### Phase 2 Input & Workspace Mastery — NEW (Second biggest weakness after vision: keyboard/mouse basic, no workspace save/restore, OCR basic, no file watcher)
+
+| Plugin | Actions | Purpose | Install | Token |
+|--------|---------|---------|---------|-------|
+| **keyboard_master_pro.py** | 12+ | Advanced keyboard mastery — type with delay humanize random variation, press key count interval, hotkey ctrl+c ctrl+shift+t, hold/release keyDown/keyUp, layout get/set via GetKeyboardLayout/PowerShell/setxkbmap, language, text_expansion add/list/remove trigger→expansion stored ~/.jarvis_text_expansions.json, type_file, clear ctrl+a delete. From ONEPUNCHMAN411 keyboard.py | `pip install pyautogui pynput` | Zero |
+| **mouse_master_pro.py** | 12+ | Advanced mouse mastery — move x,y duration easing linear/easeIn/easeOut/easeInOut 60fps, click x,y button left/right/middle clicks interval, drag from→to duration button easing, scroll amount vertical/horizontal, position + monitor info, multi_monitor list via screeninfo+mss which monitor mouse is on, find_color hex #FF0000 or rgb or name via screenshot pixel search, gesture shake/circle/swipe_left/right/up/down. From ONEPUNCHMAN411 mouse.py | `pip install pyautogui screeninfo mss Pillow` | Zero |
+| **workspace_master.py** | 12+ | Workspace save/restore & project workspaces — save name include windows/apps/files to ~/.jarvis_workspaces/{name}.json list open windows via pygetwindow title pos x,y,w,h minimized/maximized + processes + cwd + active window, restore move windows to saved positions resize focus, list/delete, create_project name path template python/web/empty + git init + README + open VS Code/Explorer, switch save _previous restore target, current open windows active processes cwd recent, auto_save enable/disable/status every 5 min background thread _autosave, export/import JSON. From ONEPUNCHMAN411 workspace.py + app_launch + process_watcher | `pip install pygetwindow psutil` | Zero |
+| **ocr_master_pro.py** | 10+ | OCR pro multi-engine fallback — engines priority Windows OCR winsdk fast zero tokens Windows 10+, Tesseract pytesseract zero tokens needs binary, EasyOCR local heavy 80+ langs, PaddleOCR local, fallback vision_bridge 2-pass Gemini low tokens. Actions: screenshot monitor lang, region x,y,w,h lang, file path lang, clipboard ImageGrab, window title lang, engines list status, find_text text region lang return x,y center. From ONEPUNCHMAN411 ocr_engine.py brain + screen_master OCR | `pip install pytesseract winsdk easyocr mss Pillow` | Zero-to-Low |
+| **file_watcher_pro.py** | 10+ | File & folder watcher with auto actions — background thread watchdog Observer or polling mtime fallback, watches dict id→path label mode created/modified/deleted/all action organize/backup/notify/custom dest events paused created, organize moves by ext to Images/Videos/Docs/etc, backup copies to dest with timestamp, notify plyer, custom emit event. Actions: add path label mode action dest returns id, list, remove id, status watchdog/polling, events id limit, pause/resume. Similar pattern to region_watcher_pro. From ONEPUNCHMAN411 file_organizer.py + process_watcher.py | `pip install watchdog plyer` | Zero |
+
+**Why input & workspace mastery matters:** After vision fix, next weakness is input basic + no workspace memory. Keyboard humanize makes typing look human, layout switching for multilingual, text expansion saves time. Mouse easing makes movement natural, multi-monitor awareness fixes pyautogui primary-only limitation, find_color for pixel-perfect automation. Workspace save/restore remembers PC setup — crucial for coding/writing projects, session continuity. OCR multi-engine gives 99% accuracy vs single tesseract, Windows OCR fastest zero tokens. File watcher auto-organizes Downloads, backs up important files — proactive PC assistant.
+
+### Phase 1 Vision Fix — (Fixes biggest weakness: accessibility tree first zero tokens, vision second low tokens)
 
 | Plugin | Actions | Purpose | Install | Token |
 |--------|---------|---------|---------|-------|
@@ -72,7 +84,7 @@ This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open 
 |--------|---------|
 | **anything_llm_bridge.py** | Delegate non-PC tasks to AnythingLLM — status, chat, list_workspaces, list_docs. JARVIS does PC, AnythingLLM does docs/RAG |
 
-**Total: 30 plugins (29 + _soundwave_client helper) after Phase 1 — 11 core + 5 community + 5 vision fix + 8 Soundwave + 1 bridge — makes JARVIS impeccable at PC**
+**Total: 35 plugins (34 + _soundwave_client helper) after Phase 2 — 11 core + 5 community + 5 vision fix + 5 input/workspace + 8 Soundwave + 1 bridge — makes JARVIS impeccable at PC**
 
 ## Installation — One Command
 
