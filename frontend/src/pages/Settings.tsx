@@ -16,6 +16,8 @@ import { http } from "../lib/api";
 import { cn } from "../lib/cn";
 import { formatBytes, formatNumber } from "../lib/format";
 import { PLANS, type Plan } from "../lib/plans";
+import { STANDALONE } from "../lib/env";
+import { StandaloneSettings } from "./StandaloneSettings";
 import { Button } from "../components/ui/Button";
 import { TextField } from "../components/ui/TextField";
 import { Select } from "../components/ui/Select";
@@ -31,6 +33,7 @@ const TABS = [
 ];
 
 export function Settings() {
+  if (STANDALONE) return <StandaloneSettings />;
   const location = useLocation();
   const navigate = useNavigate();
   const { refreshQuota } = useAuth();

@@ -18,6 +18,8 @@ import { useStudio } from "../store/studio";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
+import { STANDALONE } from "../lib/env";
+import { exportVideoStandalone, type StandaloneExportInput } from "../lib/standaloneExport";
 import { cn } from "../lib/cn";
 import { formatBytes, formatDuration } from "../lib/format";
 import { decodeAudioBlob } from "../lib/audio";
@@ -82,6 +84,7 @@ export function VideoCompositor() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState<string>("");
+  const [exportExt, setExportExt] = useState<"mp4" | "webm">("mp4");
   const [exportError, setExportError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
@@ -240,15 +243,25 @@ export function VideoCompositor() {
       }
       setUploading(true);
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await http.upload<{ fileKey: string }>("/upload/video", fd);
-        setVideoFileKey(res.fileKey);
+        // Standalone build: the export reads the blob from memory — no upload.
+        const fileKey = STANDALONE
+          ? null
+          : (
+              await http.upload<{ fileKey: string }>(
+                "/upload/video",
+                (() => {
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  return fd;
+                })(),
+              )
+            ).fileKey;
+        setVideoFileKey(fileKey);
         const url = URL.createObjectURL(file);
         setVideoUrl(url);
         setVideoName(file.name);
-        studio.setVideo({ blob: file, url, name: file.name, fileKey: res.fileKey });
-        toast.success("Video uploaded", file.name);
+        studio.setVideo({ blob: file, url, name: file.name, fileKey });
+        toast.success("Video ready", file.name);
       } catch (e) {
         toast.error("Upload failed", (e as Error).message);
       } finally {
@@ -326,13 +339,53 @@ export function VideoCompositor() {
     pausePreview();
     // A visible background without a server key means the upload reference
     // was lost (very old session) — exporting now would silently produce the
-    // solid-color fallback instead of the video the user sees.
-    if (videoUrl && !videoFileKey) {
+    // solid-color fallback instead of the video the user sees. (Standalone
+    // exports read the blob straight from memory, keys don't exist.)
+    if (!STANDALONE && videoUrl && !videoFileKey) {
       setExporting(false);
       setExportStatus("");
       setExportError("The background video is missing its upload reference. Remove it and attach the video again, then export.");
       return;
     }
+
+    // ── Single-file standalone build: render + encode entirely in-browser ──
+    if (STANDALONE) {
+      try {
+        const result = await exportVideoStandalone({
+          videoBlob: studio.video.blob,
+          audioBlob: studio.audioBlob,
+          cues: cues.map(({ start, end, text }) => ({ start, end, text })),
+          style,
+          resolution: resolution as StandaloneExportInput["resolution"],
+          aspect: aspect as StandaloneExportInput["aspect"],
+          format: format as StandaloneExportInput["format"],
+          quality: quality as StandaloneExportInput["quality"],
+          fps,
+          audioVolume: audioVolume / 100,
+          fadeIn,
+          fadeOut,
+          videoEnd: !fitToVoice && trimEnd > 0 ? Math.min(trimEnd, naturalMax) : undefined,
+          bgColor,
+          onProgress: (frac, msg) => {
+            setExportProgress(Math.round(frac * 100));
+            setExportStatus(msg);
+          },
+        });
+        setExportExt(result.ext);
+        setExportProgress(100);
+        setExportStatus("COMPLETED");
+        setDownloadUrl(result.url);
+        toast.success("Export complete", "Your video is ready to download.");
+      } catch (e) {
+        setExportStatus("FAILED");
+        setExportError((e as Error).message);
+        toast.error("Export failed", (e as Error).message);
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+
     try {
       // 1. Upload client-generated audio for FFmpeg compositing (the only upload).
       const afd = new FormData();
@@ -397,6 +450,13 @@ export function VideoCompositor() {
 
   const downloadExport = () => {
     if (!downloadUrl) return;
+    if (downloadUrl.startsWith("blob:")) {
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `soundwave-video.${exportExt}`;
+      a.click();
+      return;
+    }
     window.location.href = downloadUrl;
   };
 
@@ -571,7 +631,8 @@ export function VideoCompositor() {
                   <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
                 </div>
 
-                {/* Import straight from YouTube */}
+                {/* Import straight from YouTube — needs the server build (yt-dlp). */}
+                {!STANDALONE && (
                 <div className="mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4">
                   <p className="flex items-center gap-2 text-sm font-medium text-gray-200">
                     <Youtube className="h-4 w-4 text-red-400" /> Import from YouTube
@@ -605,6 +666,7 @@ export function VideoCompositor() {
                     The video is downloaded straight to your project. Only import content you own or have permission to use.
                   </p>
                 </div>
+                )}
 
                 <div className="mt-4 flex items-center gap-3">
                   <span className="text-sm text-gray-400">Or use a solid background:</span>

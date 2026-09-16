@@ -1,4 +1,6 @@
 import type { ApiError } from "./types";
+import { STANDALONE } from "./env";
+import { standaloneApi } from "./standaloneApi";
 
 // ── API client ──────────────────────────────────────────────────────────────
 // Uses httpOnly cookies for auth (credentials: include). On a 401 the client
@@ -72,6 +74,10 @@ export interface RequestOptions {
 }
 
 export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  // Single-file standalone build: serve every API call in-browser — no server.
+  if (STANDALONE) {
+    return standaloneApi<T>(path, { method: opts.method, body: opts.body, formData: opts.formData, signal: opts.signal });
+  }
   const method = (opts.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { Accept: "application/json" };
   let body: BodyInit | undefined;

@@ -4,6 +4,7 @@ node_modules/
 # builds
 dist/
 frontend/dist/
+frontend/dist-standalone/
 server/dist/
 *.tsbuildinfo
 

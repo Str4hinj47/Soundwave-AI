@@ -4,6 +4,8 @@ import { Mic, Play, Square } from "lucide-react";
 import { Navbar } from "../components/layout/Navbar";
 import { Badge } from "../components/ui/Badge";
 import { DEFAULT_VOICES } from "../lib/voices";
+import { STANDALONE } from "../lib/env";
+import { synthesizeBrowserEdge } from "../lib/edgeTtsBrowser";
 import { cn } from "../lib/cn";
 import { useAuth } from "../store/auth";
 
@@ -29,7 +31,38 @@ export function VoiceLibrary({ standalone = true }: { standalone?: boolean }) {
     );
   }, [query, gender, accent]);
 
+  // Standalone build has no pre-generated server samples — synthesize a short
+  // preview line on demand instead (cached per voice for the session).
+  const sampleCache = useRef(new Map<string, string>());
+  const synthSample = async (id: string): Promise<void> => {
+    if (playing === id) {
+      audioRef.current?.pause();
+      setPlaying(null);
+      return;
+    }
+    setPlaying(id);
+    try {
+      let url = sampleCache.current.get(id);
+      if (!url) {
+        const res = await synthesizeBrowserEdge(`Hi! I'm ${id.split("-").slice(-1)[0]}. This is how I sound narrating your videos.`, id, {}, { timeoutMs: 25_000 });
+        const bytes = Uint8Array.from(atob(res.audioBase64), (c) => c.charCodeAt(0));
+        url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+        sampleCache.current.set(id, url);
+      }
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        void audioRef.current.play();
+      }
+    } catch {
+      setPlaying(null);
+    }
+  };
+
   const toggle = (id: string, url: string) => {
+    if (STANDALONE) {
+      void synthSample(id);
+      return;
+    }
     if (playing === id) {
       audioRef.current?.pause();
       setPlaying(null);
