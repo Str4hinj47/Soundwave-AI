@@ -22,8 +22,8 @@ PLUGIN = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "Action: generate_yt_short, check_site, start_site, ensure_site, guide, status, resume, clear_state, live_updates, generate_script, add_text, choose_voice, generate_voice, tiktok_style, auto_generate_subtitles, find_gameplay, add_background, export_default, download_video, full_workflow",
-                "enum": ["generate_yt_short", "check_site", "start_site", "ensure_site", "guide", "status", "resume", "clear_state", "live_updates", "generate_script", "add_text", "choose_voice", "generate_voice", "tiktok_style", "auto_generate_subtitles", "find_gameplay", "add_background", "export_default", "download_video", "full_workflow", "make_short"]
+                "description": "Action: generate_yt_short, check_site, start_site, ensure_site, guide, status, resume, clear_state, live_updates, open_progress, generate_script, add_text, choose_voice, generate_voice, tiktok_style, auto_generate_subtitles, find_gameplay, add_background, export_default, download_video, full_workflow",
+                "enum": ["generate_yt_short", "check_site", "start_site", "ensure_site", "guide", "status", "resume", "clear_state", "live_updates", "open_progress", "generate_script", "add_text", "choose_voice", "generate_voice", "tiktok_style", "auto_generate_subtitles", "find_gameplay", "add_background", "export_default", "download_video", "full_workflow", "make_short"]
             },
             "topic": {
                 "type": "STRING",
@@ -68,6 +68,15 @@ from pathlib import Path
 # --- State file for persistence across session restarts ---
 STATE_FILE = Path.home() / ".jarvis_yt_short_state.json"
 PROGRESS_FILE = Path.home() / ".jarvis_yt_short_progress.log"
+# Visible progress HTML tab that user can watch live
+VISIBLE_PROGRESS_HTML = Path.home() / "Downloads" / "Jarvis 54" / "Mark-LIV" / "yt_short_live_progress.html"
+# Fallback locations for visible progress
+VISIBLE_PROGRESS_FALLBACKS = [
+    Path.home() / "Downloads" / "Jarvis 54" / "yt_short_live_progress.html",
+    Path.home() / "Downloads" / "Soundwave-AI-arena-01a08864-soundwave-ai" / "yt_short_live_progress.html",
+    Path.home() / "Downloads" / "Soundwave-AI-arena-01a0a795-soundwave-ai" / "Soundwave-AI-arena-01a0a795-soundwave-ai" / "Mark-LIV" / "yt_short_live_progress.html",
+    Path.home() / ".jarvis_yt_short_live_progress.html",
+]
 
 DEFAULT_PATHS = [
     (r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a08864-soundwave-ai\server",
@@ -110,6 +119,169 @@ STEPS = [
 def _now():
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
+def _get_visible_html_path():
+    for p in VISIBLE_PROGRESS_FALLBACKS:
+        try:
+            # Try to ensure parent exists
+            p.parent.mkdir(parents=True, exist_ok=True)
+            # Prefer path that exists or first
+            if p.parent.exists():
+                return p
+        except:
+            continue
+    return VISIBLE_PROGRESS_HTML
+
+def _create_visible_progress_html(state, extra_log=""):
+    """Creates a visible HTML file that auto-refreshes every 2 sec and shows live progress — user can watch in browser tab"""
+    html_path = _get_visible_html_path()
+    try:
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        progress = state.get("progress", "0/11")
+        step = state.get("current_step", 0)
+        name = state.get("current_step_name", "")
+        status = state.get("status", "")
+        last = state.get("last_update", "")
+        topic = state.get("topic", "")
+        voice = state.get("voice", "")
+        bg = state.get("background_type", "")
+        script = state.get("script", "")[:500]
+        yt = state.get("youtube_url", "")
+        heartbeat = state.get("heartbeat", 0)
+        age = int(time.time() - heartbeat) if heartbeat else -1
+
+        # Build steps visual
+        steps_html = ""
+        for i, s in enumerate(STEPS, 1):
+            cls = "done" if i < step else "current" if i == step else "pending"
+            icon = "✅" if i < step else "🔄" if i == step else "⏳"
+            steps_html += f'<div class="step {cls}"><span class="icon">{icon}</span> <b>{i}/{len(STEPS)} {s}</b></div>\n'
+
+        # Read last 20 lines of progress log
+        log_tail = ""
+        try:
+            if PROGRESS_FILE.exists():
+                with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+                    lines = f.readlines()[-20:]
+                    log_tail = "".join(f"<div>{l.strip()}</div>" for l in lines)
+        except:
+            pass
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>YT Short Live Progress — {progress} {name}</title>
+<meta http-equiv="refresh" content="2">
+<style>
+body {{ background:#0A0F1C; color:#fff; font-family:Inter, sans-serif; padding:20px; }}
+.card {{ background:#151B2A; border:1px solid #2A344A; border-radius:12px; padding:20px; margin-bottom:20px; }}
+.step {{ padding:8px 12px; margin:4px 0; border-radius:8px; }}
+.step.done {{ background:#10B98120; border:1px solid #10B98140; }}
+.step.current {{ background:#3B82F620; border:1px solid #3B82F640; animation: pulse 1.5s infinite; }}
+.step.pending {{ background:#1F2937; border:1px solid #374151; opacity:0.6; }}
+@keyframes pulse {{ 0%{{opacity:1}} 50%{{opacity:0.7}} 100%{{opacity:1}} }}
+.badge {{ display:inline-block; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; }}
+.badge.green {{ background:#10B981; color:#fff; }}
+.badge.violet {{ background:#8B5CF6; color:#fff; }}
+.badge.blue {{ background:#3B82F6; color:#fff; }}
+h1 {{ color:#fff; }}
+pre {{ white-space:pre-wrap; word-break:break-word; background:#0F141F; padding:12px; border-radius:8px; }}
+.log {{ font-family:monospace; font-size:12px; max-height:300px; overflow-y:auto; background:#0F141F; padding:12px; border-radius:8px; }}
+.error {{ background:#EF444420; border:1px solid #EF444440; color:#FCA5A5; padding:12px; border-radius:8px; }}
+</style>
+</head>
+<body>
+<h1>🎬 YT Short Live Progress — {progress} {name}</h1>
+<p>Last update: {last} ({age}s ago) — auto-refreshes every 2 sec — keep this tab visible to watch JARVIS work</p>
+
+<div class="card">
+<h2>Current Status</h2>
+<p><span class="badge blue">{progress}</span> <b>{name}</b>: {status}</p>
+<p>Topic: <b>{topic}</b> | Voice: <b>{voice}</b> | Background: <b>{bg}</b></p>
+<p>Script preview: <pre>{script}</pre></p>
+<p>YouTube URL: <b>{yt or 'Not yet found — searching...'}</b></p>
+</div>
+
+<div class="card">
+<h2>Steps — Live</h2>
+{steps_html}
+</div>
+
+<div class="card">
+<h2>Export Default (Your Settings)</h2>
+<p><span class="badge violet">Portrait 9:16 Shorts TikTok</span> <span class="badge green">720p (720×1280)</span> <span class="badge blue">MP4 H.264</span> Medium 60fps End-with-voice ON ~1.8MB</p>
+<p>Your screenshot default — JARVIS must explicitly set these, auto-loaded may be Landscape 30fps</p>
+</div>
+
+<div class="card">
+<h2>Live Log Tail (last 20)</h2>
+<div class="log">{log_tail or 'No log yet...'}</div>
+</div>
+
+<div class="card">
+<h2>What to do if download fails?</h2>
+<p>If stuck on last step [11/11] download_video but never downloads:</p>
+<ul>
+<li>Check if Export Video button was disabled — needs audioBlob + cues. If no audio, generate_voice failed. Check PowerShell windows for errors.</li>
+<li>Check if export failed — look for red error box "Export failed" in Video page. Common: video file too large, or FFmpeg missing, or audio not uploaded.</li>
+<li>Check browser download bar — Chrome may block multiple downloads, allow it.</li>
+<li>Check http://localhost:5173/studio/video — does Download Video button appear? If not, export still running or failed.</li>
+<li>Try manual: click Export Video yourself, wait 1-2 min, then Download Video.</li>
+<li>Say "status" to JARVIS to see state file, "live_updates" for log tail, "resume" to continue.</li>
+</ul>
+<div class="error">
+<b>Debug for download:</b><br>
+- Ensure backend running at :4000 (single-user ENTERPRISE)<br>
+- Ensure frontend at :5173<br>
+- Ensure audio generated (hasAudio true)<br>
+- Ensure subtitles auto-generated (cues.length >0)<br>
+- Ensure background video imported (Badge YouTube violet)<br>
+- Then Export Video should be enabled, not disabled<br>
+- If disabled, JARVIS will log why
+</div>
+</div>
+
+<div class="card">
+<p><i>Extra log:</i> {extra_log}</p>
+<p>State file: {STATE_FILE}<br>Progress file: {PROGRESS_FILE}<br>HTML: {html_path}</p>
+<p><b>Keep this tab visible to watch JARVIS work live — it refreshes every 2 seconds.</b></p>
+</div>
+
+</body>
+</html>
+"""
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return html_path
+    except Exception as e:
+        return None
+
+def _open_visible_tab(html_path):
+    """Opens the visible progress HTML in existing Chrome tab — user can watch live"""
+    try:
+        import subprocess, platform
+        # Try to open via start (Windows) or open (macOS) or xdg-open (Linux)
+        system = platform.system()
+        if system == "Windows":
+            # Use start to open in default browser (should be existing Chrome if Chrome is default)
+            # Better: use window_manager_pro focus Chrome then navigate to file:// URL
+            # For now, try os.startfile
+            try:
+                os.startfile(str(html_path))
+                return f"Opened visible progress tab via startfile: {html_path}"
+            except:
+                # Fallback via powershell Start-Process
+                subprocess.Popen(["powershell", "-Command", f"Start-Process '{html_path}'"])
+                return f"Opened visible progress tab via PowerShell: {html_path}"
+        elif system == "Darwin":
+            subprocess.Popen(["open", str(html_path)])
+            return f"Opened visible tab macOS: {html_path}"
+        else:
+            subprocess.Popen(["xdg-open", str(html_path)])
+            return f"Opened visible tab Linux: {html_path}"
+    except Exception as e:
+        return f"Failed to open visible tab: {e} — manually open {html_path} in Chrome"
+
 def _save_state(state):
     try:
         state["last_update"] = _now()
@@ -119,6 +291,8 @@ def _save_state(state):
         # Also append to progress log for live tail
         with open(PROGRESS_FILE, "a", encoding="utf-8") as pf:
             pf.write(f"[{state['last_update']}] Step {state.get('current_step',0)}/{len(STEPS)} {state.get('current_step_name','')} — {state.get('status','')}\n")
+        # Update visible HTML tab so user can watch live
+        _create_visible_progress_html(state)
     except Exception as e:
         pass
 
@@ -142,19 +316,19 @@ def _clear_state():
         return False
 
 def _live_update(player, step_idx, step_name, message, state):
-    """Live update after every completed step — writes to log, state file, and tries plyer notification"""
+    """Live update after every completed step — writes to log, state file, visible HTML tab, and tries plyer notification"""
     total = len(STEPS)
     progress = f"{step_idx}/{total}"
     full_msg = f"[{progress}] {step_name}: {message}"
 
-    # Save to state file
+    # Save to state file (also updates visible HTML)
     state["current_step"] = step_idx
     state["current_step_name"] = step_name
     state["status"] = message
     state["progress"] = progress
     _save_state(state)
 
-    # Write to JARVIS log
+    # Write to JARVIS log (activity log below head)
     if player and hasattr(player, 'write_log'):
         try:
             player.write_log(full_msg)
@@ -170,6 +344,12 @@ def _live_update(player, step_idx, step_name, message, state):
                 message=message[:200],
                 timeout=5
             )
+    except:
+        pass
+
+    # Ensure visible HTML exists and is updated (user can watch live in browser tab)
+    try:
+        _create_visible_progress_html(state, extra_log=full_msg)
     except:
         pass
 
@@ -410,9 +590,25 @@ Progress log: ~/.jarvis_yt_short_progress.log — use action=live_updates to tai
         except Exception as e:
             return f"Failed to read progress log: {e}"
 
+    if action == "open_progress":
+        state = _load_state() or {"current_step":0,"current_step_name":"none","status":"No active workflow","progress":"0/11","topic":"","voice":"","background_type":"","script":"","youtube_url":""}
+        html_path = _create_visible_progress_html(state, extra_log="Manually opened visible progress tab")
+        if html_path:
+            open_msg = _open_visible_tab(html_path)
+            return f"Opened visible progress tab you can watch live:\n{html_path}\n{open_msg}\n\nThis HTML auto-refreshes every 2 sec and shows live progress 1/11 to 11/11, current step, topic, voice, background, script preview, YouTube URL, log tail, and debug for download failures.\n\nKeep this tab visible to watch JARVIS work — it updates after every completed step via _save_state()."
+        else:
+            return f"Failed to create visible progress HTML at {VISIBLE_PROGRESS_HTML}"
+
     if action == "clear_state":
         ok = _clear_state()
-        return f"Cleared state file {STATE_FILE} and progress log {PROGRESS_FILE}: {'OK' if ok else 'failed or not exist'}. Ready for new workflow."
+        # Also try to remove visible HTML
+        try:
+            hp = _get_visible_html_path()
+            if hp.exists():
+                hp.unlink()
+        except:
+            pass
+        return f"Cleared state file {STATE_FILE} and progress log {PROGRESS_FILE} and visible HTML: {'OK' if ok else 'failed or not exist'}. Ready for new workflow."
 
     if action == "resume":
         state = _load_state()
@@ -469,8 +665,6 @@ To prevent forgetting again, this version saves state after EVERY step to {STATE
         # Initialize or resume state
         state = _load_state()
         if state and state.get("current_step", 0) > 0 and state.get("current_step", 0) < len(STEPS):
-            # Existing incomplete workflow — resume but update topic if new provided
-            # If user gave new topic different from saved, start fresh? For now resume with new topic if provided explicitly
             if parameters.get("topic"):
                 state["topic"] = topic
             if parameters.get("voice"):
@@ -494,12 +688,22 @@ To prevent forgetting again, this version saves state after EVERY step to {STATE
                 "created": _now()
             }
             _save_state(state)
-            # Clear old progress log
             try:
                 if PROGRESS_FILE.exists():
                     PROGRESS_FILE.unlink()
             except:
                 pass
+
+        # --- CREATE VISIBLE PROGRESS TAB THAT USER CAN WATCH LIVE ---
+        try:
+            html_path = _create_visible_progress_html(state, extra_log="Starting YT Short autopilot — opening visible progress tab...")
+            if html_path:
+                open_msg = _open_visible_tab(html_path)
+                log(open_msg)
+                # Also try to open in existing Chrome via window_manager_pro focus + navigate to file:// URL
+                # The open_msg already opened via default browser, which should be visible
+        except Exception as e:
+            log(f"Failed to create visible progress tab: {e}")
 
         # Step 0: check site
         both, front, back = _check_site()
