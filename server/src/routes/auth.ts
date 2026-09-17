@@ -179,7 +179,8 @@ router.post("/refresh", async (req, res, next) => {
 
 // ── Session ─────────────────────────────────────────────────────────────────
 router.get("/session", requireAuth, (req, res) => {
-  res.json(publicUser(req.user!));
+  // `singleUser` tells the UI to hide accounts/billing/pricing chrome.
+  res.json({ ...publicUser(req.user!), singleUser: config.singleUserMode });
 });
 
 router.get("/sessions", requireAuth, async (req, res, next) => {

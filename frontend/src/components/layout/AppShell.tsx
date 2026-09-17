@@ -144,7 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="border-t border-gray-800 p-3">
-        {user?.plan === "FREE" ? (
+        {user?.singleUser ? null : user?.plan === "FREE" ? (
           <div className="rounded-card border border-violet-500/30 bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-3">
             <p className="text-sm font-semibold text-white">Upgrade to Pro</p>
             <p className="mt-0.5 text-xs text-gray-400">200K chars, 1080p, no watermark.</p>
@@ -237,12 +237,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
                   </button>
                 }
-                items={[
-                  { key: "profile", label: "Profile", icon: <CircleUserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
-                  { key: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate("/settings/billing") },
-                  { key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") },
-                  { key: "logout", label: "Sign out", icon: <LogOut className="h-4 w-4" />, danger: true, onClick: handleSignOut },
-                ]}
+                items={
+                  user?.singleUser
+                    ? [{ key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") }]
+                    : [
+                        { key: "profile", label: "Profile", icon: <CircleUserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
+                        { key: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate("/settings/billing") },
+                        { key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") },
+                        { key: "logout", label: "Sign out", icon: <LogOut className="h-4 w-4" />, danger: true, onClick: handleSignOut },
+                      ]
+                }
               />
             </div>
           </div>

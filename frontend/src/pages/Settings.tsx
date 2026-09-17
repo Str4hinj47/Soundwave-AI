@@ -36,12 +36,26 @@ export function Settings() {
   if (STANDALONE) return <StandaloneSettings />;
   const location = useLocation();
   const navigate = useNavigate();
-  const { refreshQuota } = useAuth();
+  const { user, refreshQuota } = useAuth();
   const active = location.pathname.includes("/billing") ? "billing" : location.pathname.includes("/preferences") ? "preferences" : "profile";
 
   useEffect(() => {
     void refreshQuota();
   }, [refreshQuota]);
+
+  if (user?.singleUser) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <h1 className="text-3xl font-bold text-white">Settings</h1>
+        <p className="mt-1 text-sm text-gray-400">
+          Simple edition — one local account, everything unlocked (4K, no watermark, no character limits).
+        </p>
+        <div className="mt-6 space-y-5">
+          <PreferencesTab />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl">

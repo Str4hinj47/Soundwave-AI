@@ -11,6 +11,7 @@ export default defineConfig({
       // Pin feature-affecting config so a developer's local .env never
       // changes test outcomes (dotenv only fills variables not already set).
       DEFAULT_SIGNUP_PLAN: "FREE",
+      SINGLE_USER_MODE: "false",
       VOICECLONE_URL: "",
       VOICECLONE_TOKEN: "",
       JWT_ACCESS_SECRET: "test-access-secret-for-vitest",

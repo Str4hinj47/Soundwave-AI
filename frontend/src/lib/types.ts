@@ -125,6 +125,8 @@ export interface UserProfile {
   plan: Plan;
   avatarUrl: string | null;
   emailVerified: boolean;
+  /** Present and true in the simple single-user edition (SINGLE_USER_MODE). */
+  singleUser?: boolean;
 }
 
 export interface QuotaStatus {

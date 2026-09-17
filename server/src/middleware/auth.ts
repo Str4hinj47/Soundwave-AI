@@ -13,6 +13,7 @@ import {
   verifyRefreshToken,
 } from "../lib/auth.js";
 import { getStore } from "../lib/store.js";
+import { ensureSingleUser } from "../lib/singleUser.js";
 import type { StoredUser } from "../lib/store.js";
 import { PLANS, type Plan } from "../lib/plans.js";
 
@@ -105,8 +106,11 @@ async function resolveUser(req: Request, res: Response): Promise<StoredUser | nu
 
 export const requireAuth: RequestHandler = async (req, res, next) => {
   try {
-    checkCsrf(req);
-    const user = await resolveUser(req, res);
+    // Single-user: no auth cookies exist at all, so there is nothing worth
+    // forging for CSRF either — skip the double-submit check entirely.
+    if (!config.singleUserMode) checkCsrf(req);
+    let user = await resolveUser(req, res);
+    if (!user && config.singleUserMode) user = await ensureSingleUser();
     if (!user) {
       clearAuthCookies(res);
       throw new ApiError(401, "UNAUTHORIZED", "Please sign in to continue.");

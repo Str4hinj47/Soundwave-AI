@@ -17,6 +17,11 @@ export const config = {
   isProd: (env.NODE_ENV ?? "development") === "production",
   port: int("PORT", 4000),
   appUrl: str("APP_URL", "http://localhost:5173"),
+  // ── Simple single-user edition ───────────────────────────────────────────
+  // true  (default): no sign-in, no CSRF, no payments — one local user with
+  //                  full ENTERPRISE access; the app opens straight in Studio.
+  // false: the full multi-user version with accounts, plans and billing.
+  singleUserMode: (env.SINGLE_USER_MODE ?? "true").toLowerCase() !== "false",
   databaseUrl: str("DATABASE_URL", ""),
   // In production these MUST be present (validated at startup).
   jwtAccessSecret: str("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
@@ -69,14 +74,15 @@ const REQUIRED_DEV = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
 /** Validate config — crash in dev if JWT secrets are using defaults. */
 export function validateConfig(): void {
-  const required = config.isProd ? REQUIRED_PROD : REQUIRED_DEV;
+  // Dev + single-user needs no JWT signing at all (no auth exists).
+  const required = config.isProd ? REQUIRED_PROD : config.singleUserMode ? [] : REQUIRED_DEV;
   const missing = required.filter((k) => !env[k] || env[k]!.length === 0);
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
 
   // In development, ensure JWT secrets are not the default values
-  if (!config.isProd) {
+  if (!config.isProd && !config.singleUserMode) {
     const defaultAccess = "dev-access-secret-change-me";
     const defaultRefresh = "dev-refresh-secret-change-me";
     if (config.jwtAccessSecret === defaultAccess) {

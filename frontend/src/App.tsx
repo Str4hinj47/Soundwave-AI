@@ -58,13 +58,30 @@ function RequireAuth({ children }: { children: ReactNode }) {
 function PublicOnly({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading && !user) return <FullPageLoader />;
+  if (user?.singleUser) return <Navigate to="/studio" replace />;
   if (user) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
+}
+
+// Home: the full version shows the marketing landing; the single-user
+// edition dives straight into the Studio (no sign-in, no pricing).
+function HomeGate() {
+  const { user, loading } = useAuth();
+  if (loading && !user) return <FullPageLoader />;
+  if (user?.singleUser) return <Navigate to="/studio" replace />;
+  return <Landing />;
 }
 
 // The Voice Library is a public page (linked from the landing site), but when
 // a signed-in user opens it from the sidebar it must stay inside the AppShell
 // — otherwise the left navigation tabs vanish for that route.
+function PricingGate() {
+  const { user, loading } = useAuth();
+  if (loading && !user) return <FullPageLoader />;
+  if (user?.singleUser) return <Navigate to="/studio" replace />;
+  return <Pricing />;
+}
+
 function VoiceLibraryRoute() {
   const { user, loading } = useAuth();
   if (loading && !user) return <FullPageLoader />;
@@ -91,8 +108,8 @@ export default function App() {
       <ScrollToTop />
       <ToastHost />
       <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/" element={<HomeGate />} />
+        <Route path="/pricing" element={<PricingGate />} />
         <Route path="/voices" element={<VoiceLibraryRoute />} />
         <Route
           path="/signin"
