@@ -1,8 +1,10 @@
-# Soundwave AI — Mark LIII Plugins
+# Soundwave AI — Mark LIII & Mark LIV Plugins
 
-**Teach JARVIS (Mark LIII) to use Soundwave AI** — production-grade TTS and video compositing studio.
+**Teach JARVIS (Mark LIII & Mark LIV) to use Soundwave AI** — production-grade TTS and video compositing studio.
 
-These are drop-in plugins for [FatihMakes/Mark-LIII](https://github.com/FatihMakes/Mark-LIII) (MARK LIII, 1.2k★, Gemini 3.1 Flash Live). Drop a single `.py` file into `Mark-LIII/plugins/` — JARVIS learns a new skill on next launch, no core edits.
+These are drop-in plugins for [FatihMakes/Mark-LIII](https://github.com/FatihMakes/Mark-LIII) (LIII, 1.2k★, Gemini 3.1 Flash Live) and [FatihMakes/Mark-LIV](https://github.com/FatihMakes/Mark-LIV) (LIV, newest, holographic head with lip-sync ~50 mouth shapes/sec, brows, eyes saccades, blinks, QPainter software rendering 25KB asset, no GPU, no new deps, one rule set every alphabet, HUD toggle head vs reactor core). Drop a single `.py` file into `Mark-LIII/plugins/` or `Mark-LIV/plugins/` — JARVIS learns a new skill on next launch, no core edits. **All 45 plugins are 100% compatible with both LIII and LIV** — same PLUGIN architecture (PLUGIN dict + run()), same plugin_loader.py (285 lines).
+
+This repo now includes `Mark-LIV/` folder with all 45 plugins pre-installed (48 files), ready to run — same as `Mark-LIII/` in jarvis branch. Transfer from LIII to LIV is just copy *.py.
 
 ## What is Soundwave AI?
 

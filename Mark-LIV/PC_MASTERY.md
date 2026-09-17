@@ -2,11 +2,7 @@
 
 **User has anythingLLM for non-PC tasks, JARVIS focuses 100% on PC control.**
 
-This guide makes JARVIS (Mark LIII & Mark LIV) impeccable at using your PC — free & open source, zero external API for most actions, optimized for free-tier Gemini.
-
-**✅ Mark LIV Support (Newest):** All 45 plugins are 100% compatible with [FatihMakes/Mark-LIV](https://github.com/FatihMakes/Mark-LIV) — same PLUGIN architecture (PLUGIN dict + run()), same plugin_loader.py (285 lines, PluginRecord, get_tool_declarations, run, settings_schemas). Mark LIV adds holographic head with lip-sync (real measured human geometry via MediaPipe, QPainter software rendering, 25KB asset, ~50 mouth shapes/sec from audio formants + transcript, no new deps, no GPU, one rule set for every alphabet Turkish/English/German/French/Spanish/Polish/Vietnamese/Czech/Russian/Ukrainian/Greek). To use with Mark LIV: `git clone https://github.com/FatihMakes/Mark-LIV.git`, `pip install -r requirements.txt` (PyQt6, sounddevice, numpy, google-genai, requests, bs4, playwright, pyautogui, pyperclip, pygetwindow, pillow, opencv), then `cp mark-liii-plugins/*.py Mark-LIV/plugins/` — same as Mark LIII. This repo now includes `Mark-LIV/` folder with all 45 plugins pre-installed (48 files with __init__ + _template), ready to run.
-
-**Mark LIII vs Mark LIV:** Mark LIII = 53 with Gemini 3.1 Flash Live, HUD reactor core. Mark LIV = 54 with face, holographic head, lip-sync readable, brows ride phrase, eyes saccades, blinks, looks away while thinking, meets eyes while listening, lids fall while asleep, HUD toggle head vs reactor core via ⚙ → HUD. Plugin system identical — transfer is just copy *.py.
+This guide makes JARVIS (Mark LIII) impeccable at using your PC — free & open source, zero external API for most actions, optimized for free-tier Gemini.
 
 ## Philosophy
 
