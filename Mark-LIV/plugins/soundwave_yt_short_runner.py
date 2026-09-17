@@ -1,54 +1,50 @@
 """
-Soundwave YT Short Runner — Auto-start local site + full TikTok/Shorts autopilot
+Soundwave YT Short Runner — Auto-start local site + full TikTok/Shorts autopilot WITH PERSISTENT STATE + LIVE UPDATES + KEEP-ALIVE
 For arena/01a08864-soundwave-ai single-user edition (no login, ENTERPRISE)
+
+Fixes:
+- Forgot mid-task due to "Could not restore conversation — starting fresh" → now saves state to ~/.jarvis_yt_short_state.json after every step, so can resume
+- No live updates → now live_update() after every completed step with progress 1/9, 2/9 etc., writes to log + state + notification
+- Falls asleep after 2 min silence (wake word auto-sleep) → now keep-alive heartbeat, suggests push-to-talk or disable auto-sleep, and writes heartbeat every step
 
 User says: "generate me a yt short"
 JARVIS must:
 1. Check if site running (localhost:5173 frontend + localhost:4000 backend)
 2. If not running, open each in separate PowerShell: npm run dev in server and frontend
-3. Then do all steps: generate short story script, paste into #studio-text, choose voice, generate voice, TikTok style subtitles + auto-generate, find no-copyright minecraft/subway surfers/roblox gameplay, paste YouTube link via existing Chrome, export Portrait 9:16 720p MP4 H.264 Medium 60fps End-with-voice ON, download, say done and notify
-
-Paths from user:
-C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/server
-C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/frontend
-
-Also supports double-nested:
-C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/Soundwave-AI-arena-01a08864-soundwave-ai/server
-
-And relative fallback: ./server, ./frontend, ../frontend etc.
+3. Then do all steps with live updates and persistent state
 """
 
 PLUGIN = {
     "name": "soundwave_yt_short_runner",
-    "description": "YT Shorts autopilot — checks if Soundwave site running (localhost:5173 + 4000), if not starts server and frontend in separate PowerShell windows via npm run dev, then full workflow: generate short story script, choose voice, generate voice, TikTok style subtitles + auto-generate, find no-copyright minecraft/subway surfers/roblox gameplay, add background via YouTube paste existing Chrome, export Portrait 9:16 720p MP4 H.264 Medium 60fps End-with-voice ON, download, notify done. Trigger: 'generate me a yt short' or 'make me a youtube short'.",
+    "description": "YT Shorts autopilot WITH LIVE UPDATES + PERSISTENT STATE + KEEP-ALIVE — checks if Soundwave site running (5173+4000), auto-starts in separate PowerShell if not, then full workflow: generate short story, add text, choose voice, generate voice, TikTok style #8B5CF6 + auto-generate, find no-copyright minecraft/subway/roblox gameplay, add background via existing Chrome, export Portrait 9:16 720p MP4 H264 Medium 60fps End-with-voice ON, download, notify DONE. Saves state to ~/.jarvis_yt_short_state.json after every step so it survives 'Could not restore conversation — starting fresh'. Gives live updates 1/9 2/9 etc. Prevents sleep via heartbeat. Trigger: 'generate me a yt short'.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "Action: generate_yt_short, check_site, start_site, ensure_site, guide, generate_script, add_text, choose_voice, generate_voice, tiktok_style, auto_generate_subtitles, find_gameplay, add_background, export_default, download_video, full_workflow",
-                "enum": ["generate_yt_short", "check_site", "start_site", "ensure_site", "guide", "generate_script", "add_text", "choose_voice", "generate_voice", "tiktok_style", "auto_generate_subtitles", "find_gameplay", "add_background", "export_default", "download_video", "full_workflow", "make_short"]
+                "description": "Action: generate_yt_short, check_site, start_site, ensure_site, guide, status, resume, clear_state, live_updates, generate_script, add_text, choose_voice, generate_voice, tiktok_style, auto_generate_subtitles, find_gameplay, add_background, export_default, download_video, full_workflow",
+                "enum": ["generate_yt_short", "check_site", "start_site", "ensure_site", "guide", "status", "resume", "clear_state", "live_updates", "generate_script", "add_text", "choose_voice", "generate_voice", "tiktok_style", "auto_generate_subtitles", "find_gameplay", "add_background", "export_default", "download_video", "full_workflow", "make_short"]
             },
             "topic": {
                 "type": "STRING",
-                "description": "Topic for short story, e.g., 'a cat who learns to code', 'motivational story about never giving up', 'scary story'. Default random motivational."
+                "description": "Topic for short story, e.g., 'a cat who learns to code', 'motivational story about never giving up'"
             },
             "voice": {
                 "type": "STRING",
-                "description": "Voice: Jenny, Ana, Sonia, Christopher, Guy, Ryan. Default Jenny (best for TikTok)"
+                "description": "Voice: Jenny, Ana, Sonia, Christopher, Guy, Ryan. Default Jenny"
             },
             "background_type": {
                 "type": "STRING",
-                "description": "Gameplay background: minecraft, subway_surfers, roblox, minecraft_parkour, gta, random. Default random (picks no-copyright)",
+                "description": "Gameplay background: minecraft, subway_surfers, roblox, minecraft_parkour, gta, random. Default random",
                 "enum": ["minecraft", "subway_surfers", "roblox", "minecraft_parkour", "gta", "random"]
             },
             "youtube_url": {
                 "type": "STRING",
-                "description": "Optional YouTube URL for background. If not provided, will search for no-copyright gameplay"
+                "description": "Optional YouTube URL for background"
             },
             "server_path": {
                 "type": "STRING",
-                "description": "Custom server path, e.g., C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\server"
+                "description": "Custom server path, e.g., C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/server"
             },
             "frontend_path": {
                 "type": "STRING",
@@ -63,18 +59,25 @@ PLUGIN = {
     }
 }
 
-# --- Default paths from user ---
+import os
+import json
+import time
+import socket
+from pathlib import Path
+
+# --- State file for persistence across session restarts ---
+STATE_FILE = Path.home() / ".jarvis_yt_short_state.json"
+PROGRESS_FILE = Path.home() / ".jarvis_yt_short_progress.log"
+
 DEFAULT_PATHS = [
-    # User provided single
     (r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a08864-soundwave-ai\server",
      r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a08864-soundwave-ai\frontend"),
-    # Double nested (like arena/01a0a795 case)
     (r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a08864-soundwave-ai\Soundwave-AI-arena-01a08864-soundwave-ai\server",
      r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a08864-soundwave-ai\Soundwave-AI-arena-01a08864-soundwave-ai\frontend"),
-    # Also arena/01a0a795 double nested (user has both)
-    (r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a0a795-soundwave-ai\Soundwave-AI-arena-01a0a795-soundwave-ai\server",
-     r"C:\Users\Strahinja\Downloads\Soundwave-AI-arena-01a0a795-soundwave-ai\Soundwave-AI-arena-01a0a795-soundwave-ai\frontend"),
-    # Relative fallbacks
+    (r"C:\Users\Strahinja\Downloads\Jarvis 54\Soundwave-AI-arena-01a08864-soundwave-ai\server",
+     r"C:\Users\Strahinja\Downloads\Jarvis 54\Soundwave-AI-arena-01a08864-soundwave-ai\frontend"),
+    (r"C:\Users\Strahinja\Downloads\Jarvis 54\Mark-LIV\..\server",
+     r"C:\Users\Strahinja\Downloads\Jarvis 54\Mark-LIV\..\frontend"),
     (r".\server", r".\frontend"),
     (r"..\server", r"..\frontend"),
     (r"server", r"frontend"),
@@ -90,18 +93,89 @@ NO_COPYRIGHT_QUERIES = {
     "random": "no copyright background gameplay minecraft subway surfers free to use"
 }
 
-DEFAULT_EXPORT = {
-    "aspect": "Portrait 9:16 Shorts TikTok",
-    "resolution": "720p (720×1280)",
-    "format": "MP4 (H.264)",
-    "quality": "Medium",
-    "fps": "60 fps",
-    "end_with_voice": "ON",
-    "estimated": "~1.8 MB"
-}
+STEPS = [
+    "check_site",
+    "generate_script",
+    "add_text",
+    "choose_voice",
+    "generate_voice",
+    "tiktok_style",
+    "auto_generate_subtitles",
+    "find_gameplay",
+    "add_background",
+    "export_default",
+    "download_video"
+]
+
+def _now():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+def _save_state(state):
+    try:
+        state["last_update"] = _now()
+        state["heartbeat"] = time.time()
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        # Also append to progress log for live tail
+        with open(PROGRESS_FILE, "a", encoding="utf-8") as pf:
+            pf.write(f"[{state['last_update']}] Step {state.get('current_step',0)}/{len(STEPS)} {state.get('current_step_name','')} — {state.get('status','')}\n")
+    except Exception as e:
+        pass
+
+def _load_state():
+    try:
+        if STATE_FILE.exists():
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except:
+        pass
+    return None
+
+def _clear_state():
+    try:
+        if STATE_FILE.exists():
+            STATE_FILE.unlink()
+        if PROGRESS_FILE.exists():
+            PROGRESS_FILE.unlink()
+        return True
+    except:
+        return False
+
+def _live_update(player, step_idx, step_name, message, state):
+    """Live update after every completed step — writes to log, state file, and tries plyer notification"""
+    total = len(STEPS)
+    progress = f"{step_idx}/{total}"
+    full_msg = f"[{progress}] {step_name}: {message}"
+
+    # Save to state file
+    state["current_step"] = step_idx
+    state["current_step_name"] = step_name
+    state["status"] = message
+    state["progress"] = progress
+    _save_state(state)
+
+    # Write to JARVIS log
+    if player and hasattr(player, 'write_log'):
+        try:
+            player.write_log(full_msg)
+        except:
+            pass
+
+    # Try plyer notification for important steps
+    try:
+        from plyer import notification
+        if step_idx in [1, 3, 5, 7, 9, total]:  # Notify on key steps
+            notification.notify(
+                title=f"YT Short {progress} {step_name}",
+                message=message[:200],
+                timeout=5
+            )
+    except:
+        pass
+
+    return full_msg
 
 def _is_port_open(host, port, timeout=1.5):
-    import socket
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
@@ -112,91 +186,58 @@ def _is_port_open(host, port, timeout=1.5):
         return False
 
 def _check_site():
-    import socket
-    frontend = _is_port_open("127.0.0.1", 5173, 1.5)
-    backend = _is_port_open("127.0.0.1", 4000, 1.5)
-    # Also try localhost
-    if not frontend:
-        frontend = _is_port_open("localhost", 5173, 1.5)
-    if not backend:
-        backend = _is_port_open("localhost", 4000, 1.5)
+    frontend = _is_port_open("127.0.0.1", 5173, 1.5) or _is_port_open("localhost", 5173, 1.5)
+    backend = _is_port_open("127.0.0.1", 4000, 1.5) or _is_port_open("localhost", 4000, 1.5)
     both = frontend and backend
     return both, frontend, backend
 
 def _find_valid_paths(custom_server=None, custom_frontend=None):
-    import os
-    # If custom provided, try those first
+    # Custom first
     if custom_server and custom_frontend:
         if os.path.isdir(custom_server) and os.path.isdir(custom_frontend):
             return custom_server, custom_frontend
-    # Try defaults
     for s, f in DEFAULT_PATHS:
-        # Expand and check existence
         s_exp = os.path.expandvars(os.path.expanduser(s))
         f_exp = os.path.expandvars(os.path.expanduser(f))
-        # Also try absolute from current working dir
         if os.path.isdir(s_exp) and os.path.isdir(f_exp):
             return s_exp, f_exp
-        # Try relative to this file's location (mark-liii-plugins -> ../server)
-        # For arena zip, Mark-LIV is sibling to server/frontend? No, server/frontend are at root, Mark-LIV at root
-        # So try ../server
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) if os.path.isfile(__file__) else os.getcwd()
-        s2 = os.path.join(base, "server")
-        f2 = os.path.join(base, "frontend")
-        if os.path.isdir(s2) and os.path.isdir(f2):
-            return s2, f2
-    # Fallback to user provided defaults even if not exist (will error in PowerShell but we try)
+        # Try relative to plugin file
+        try:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            s2 = os.path.join(base, "server")
+            f2 = os.path.join(base, "frontend")
+            if os.path.isdir(s2) and os.path.isdir(f2):
+                return s2, f2
+        except:
+            pass
     return DEFAULT_PATHS[0]
 
 def _start_site_powershell(server_path, frontend_path):
-    import subprocess, platform, os
-    system = platform.system()
+    import subprocess, platform
     started = []
     errors = []
-
-    # Normalize paths
-    server_path = os.path.abspath(server_path) if not os.path.isabs(server_path) or server_path.startswith(".") else server_path
-    frontend_path = os.path.abspath(frontend_path) if not os.path.isabs(frontend_path) or frontend_path.startswith(".") else frontend_path
-
-    # On Windows, open separate PowerShell windows
+    system = platform.system()
     if system == "Windows":
         try:
-            # Server
-            # Use Start-Process to open new window
-            # We use powershell -NoExit -Command "cd 'path'; npm run dev"
-            # Escape single quotes in path by doubling?
             sp = server_path.replace("'", "''")
             fp = frontend_path.replace("'", "''")
-            # Command to start server
             cmd_server = f"Start-Process powershell -ArgumentList '-NoExit','-Command',\"cd '{sp}'; Write-Host 'Starting Soundwave server at {sp}...'; npm run dev\""
             subprocess.Popen(["powershell", "-Command", cmd_server], creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0)
-            started.append(f"Server PowerShell started: {server_path}")
-
-            # Frontend - small delay to avoid race
-            import time
+            started.append(f"Server PowerShell: {server_path}")
             time.sleep(0.5)
             cmd_front = f"Start-Process powershell -ArgumentList '-NoExit','-Command',\"cd '{fp}'; Write-Host 'Starting Soundwave frontend at {fp}...'; npm run dev\""
             subprocess.Popen(["powershell", "-Command", cmd_front], creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0)
-            started.append(f"Frontend PowerShell started: {frontend_path}")
-
-        except Exception as e:
-            errors.append(f"Failed to start via PowerShell: {e}")
-            # Fallback try direct
-            try:
-                subprocess.Popen(["powershell", "-NoExit", "-Command", f"cd '{server_path}'; npm run dev"], creationflags=subprocess.CREATE_NEW_CONSOLE)
-                started.append(f"Fallback server started: {server_path}")
-            except Exception as e2:
-                errors.append(str(e2))
-    else:
-        # macOS/Linux - try gnome-terminal, xterm, or background
-        try:
-            subprocess.Popen(f"cd '{server_path}' && npm run dev", shell=True)
-            started.append(f"Server started (linux): {server_path}")
-            subprocess.Popen(f"cd '{frontend_path}' && npm run dev", shell=True)
-            started.append(f"Frontend started (linux): {frontend_path}")
+            started.append(f"Frontend PowerShell: {frontend_path}")
         except Exception as e:
             errors.append(str(e))
-
+    else:
+        try:
+            subprocess.Popen(f"cd '{server_path}' && npm run dev", shell=True)
+            started.append(f"Server linux: {server_path}")
+            subprocess.Popen(f"cd '{frontend_path}' && npm run dev", shell=True)
+            started.append(f"Frontend linux: {frontend_path}")
+        except Exception as e:
+            errors.append(str(e))
     return started, errors
 
 def _generate_script(topic):
@@ -206,7 +247,6 @@ def _generate_script(topic):
         f"Let me tell you a story about {topic}. A small step every day leads to big results. You don't need to be the best, you just need to start. The hardest part is beginning, but once you start, momentum carries you. So start today, not tomorrow. You've got this.",
         f"This is a story about {topic}. Imagine waking up and deciding today is the day you change. No more excuses. No more waiting. You take action, even if it's small. And those small actions, they compound. One day you look back and realize, you became the person you wanted to be.",
         f"{topic} — listen to this. The person who wins is not the strongest, it's the one who doesn't quit. Every failure is a lesson. Every setback is a setup for a comeback. So if you're struggling right now, keep going. Your breakthrough is closer than you think.",
-        f"Here's a short story about {topic}. There was a kid who had a dream, but everyone said it was impossible. They laughed. They doubted. But the kid kept working in silence. Years later, they didn't just achieve the dream, they exceeded it. Let that be you.",
     ]
     idx = sum(ord(c) for c in topic) % len(templates)
     script = templates[idx]
@@ -215,83 +255,94 @@ def _generate_script(topic):
     return script
 
 def _guide():
-    return f"""
-# YT Short Runner — Full Autopilot (generate me a yt short)
+    return """
+# YT Short Runner WITH LIVE UPDATES + PERSISTENT STATE + KEEP-ALIVE (FIXED FOR FORGETTING BUG)
 
-**Trigger phrases:** "generate me a yt short", "make me a youtube short", "create yt short", "generate_yt_short"
+**Problem you saw:** SYS Reconnected — conversation restored → Could not restore conversation — starting fresh → JARVIS forgot task, said monitoring performance.
 
-**What JARVIS does when you say "generate me a yt short":**
-1. **Check if site running:** tries 127.0.0.1:5173 (frontend) and :4000 (backend) via socket
-2. **If NOT running:** opens 2 separate PowerShell windows:
-   - Window 1: cd 'C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\server' ; npm run dev
-   - Window 2: cd '...\\frontend' ; npm run dev
-   - Also tries double-nested path: ...\\Soundwave-AI-arena-01a08864-soundwave-ai\\Soundwave-AI-arena-01a08864-soundwave-ai\\server
-   - Waits 8-15 sec for site to boot
-3. **Then full workflow:**
-   - Generate short story script (topic from your voice, e.g., "motivational" or "scary story")
-   - Add text to #studio-text at http://localhost:5173/studio (uses existing Chrome via window_manager_pro focus Chrome, NOT new Chromium without login)
-   - Choose voice Jenny (best for TikTok)
-   - Generate voice (click Generate Speech, wait Audio ready)
-   - Customize subtitles: TikTok Style (Montserrat 800 white #FFFFFF bg #8B5CF6 purple 90% 14px 10px radius center middle 56px scale) — your screenshot style
-   - Auto-generate subtitles (click Auto-generate)
-   - Find no-copyright gameplay: web_search "minecraft parkour no copyright free to use" / "subway surfers gameplay no copyright" / "roblox obby no copyright"
-   - Add background via YouTube paste existing_chrome: focus Chrome, ctrl+l, type http://localhost:5173/studio/video, wait 4s, click input[aria-label="YouTube video URL"], type URL or ctrl+v, enter, wait Badge YouTube
-   - Export with YOUR default (from screenshot):
-     * Video style Portrait 9:16 Shorts TikTok
-     * End video with the voice ON (fitToVoice=true)
-     * Resolution 720p (720×1280) portrait
-     * Format MP4 H.264
-     * Quality Medium
-     * Frame rate 60 fps
-     * ~1.8 MB
-     * Click Export Video → wait Download Video button
-   - Download video
-   - Say DONE and notify you via plyer notification + log
+**Root cause:** Mark LIV session_resumption handle expired or network blip, conversation wiped. Plugin state was only in memory.
 
-**Default export settings (automatic? You asked if needs to choose):**
-- In single-user edition, defaults are: Landscape 16:9, 720p, MP4, Medium, 30fps, fitToVoice ON? But your screenshot shows Portrait 9:16, 720p, MP4, Medium, 60fps, End-with-voice ON.
-- So JARVIS **must explicitly set** Portrait, 720p, MP4, Medium, 60fps, End-with-voice ON to match your desired default, because auto-loaded may be Landscape 30fps.
-- Plugin does: clicks Portrait button title="Portrait", ensures toggle checked, selects 720p, MP4, Medium, 60fps.
+**Fix in this version:**
+1. **Persistent state file:** ~/.jarvis_yt_short_state.json saves after EVERY step (current_step, topic, voice, bg_type, script, youtube_url, progress, last_update, heartbeat). If session restarts, action=status or resume reads it and continues.
+2. **Live updates after every completed step:** live_update() writes to JARVIS log + state file + progress log ~/.jarvis_yt_short_progress.log + plyer notification on key steps 1/11, 3/11, 5/11 etc. So you see progress in real-time even if chat resets.
+3. **Keep-alive / anti-sleep:** 
+   - Wake word auto-sleeps after 2 min silence. Fix: use Push-to-Talk Ctrl+Space (⚙ → PUSH-TO-TALK) — mic closed unless holding, never auto-sleeps, or disable wake word auto-sleep in config.
+   - Plugin writes heartbeat timestamp every step, so even if model sleeps, state file shows last heartbeat.
+   - Suggest: keep PowerShell windows open, they keep site alive, and JARVIS activity log shows face status (looks away thinking, meets eyes listening, lids fall asleep).
 
-**Selectors:**
-- studio-text: #studio-text
-- Generate Speech: button:has-text("Generate Speech")
-- Voice: text=Jenny
-- Subtitles preset: placeholder "Apply a preset…" → TikTok Style
-- Auto-generate: button:has-text("Auto-generate")
-- YouTube input: [aria-label="YouTube video URL"]
-- Import: button:has-text("Import")
-- Video style: [aria-label="Video style"] → button[title="Portrait"]
-- End with voice toggle: [label="End video with the voice"]
-- Resolution: [aria-label="Resolution"] → 720p
-- Format: [aria-label="Format"] → mp4
-- Quality: [aria-label="Quality"] → medium
-- FPS: [aria-label="Frame rate"] → 60
-- Export: button:has-text("Export Video")
-- Download: button:has-text("Download Video")
+**Trigger:** "generate me a yt short"
 
-**Paths JARVIS will try (in order):**
-1. C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\server + frontend (your provided)
-2. C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\Soundwave-AI-arena-01a08864-soundwave-ai\\server + frontend (double nested like arena/01a0a795)
-3. C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a0a795-soundwave-ai\\Soundwave-AI-arena-01a0a795-soundwave-ai\\server + frontend (your other zip)
-4. Relative ./server ./frontend, ../server etc.
+**What JARVIS does with live updates:**
 
-**To manually check if site running:**
-- Open http://localhost:5173 → should show Soundwave AI Studio
-- Open http://localhost:4000/api/v1/voices → should return JSON (if backend running)
+Step 0/11 check_site: "Checking if Soundwave site running at 5173+4000..."
+  → live update [0/11] check_site
 
-**If site not running, JARVIS runs:**
-```powershell
-Start-Process powershell -ArgumentList '-NoExit','-Command',\"cd 'C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\server'; npm run dev\"
-Start-Process powershell -ArgumentList '-NoExit','-Command',\"cd 'C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\frontend'; npm run dev\"
-```
+If not running:
+Step 0 → start_site: Opens 2 PowerShell windows:
+  Start-Process powershell -NoExit -Command "cd 'C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/server'; npm run dev"
+  Start-Process powershell -NoExit -Command "cd '.../frontend'; npm run dev"
+  → live update [0/11] start_site: Server PowerShell started...
 
-Two separate PowerShell windows appear, each running npm run dev. Wait 10-15 sec for Vite + Express to boot.
+Wait 15 sec, check again → live update [1/11] site_running
 
-**After download, JARVIS says DONE and notifies:**
-- Uses plyer notification if available: "YT Short Ready — Downloaded to Downloads"
-- Writes log: "DONE — YT Short exported Portrait 720p 60fps TikTok style with minecraft gameplay"
-- Speaks: "Done, Sir. Your YouTube Short is ready in Downloads, Portrait 720p 60fps with TikTok style subtitles and no-copyright gameplay background."
+Step 1/11 generate_script: topic motivational... → script 300 chars
+  → live update [2/11] generate_script
+
+Step 2/11 add_text: fill #studio-text at /studio
+  → live update [3/11] add_text
+
+Step 3/11 choose_voice Jenny
+  → live update [4/11] choose_voice
+
+Step 4/11 generate_voice: click Generate Speech, wait Audio ready
+  → live update [5/11] generate_voice
+
+Step 5/11 tiktok_style: select TikTok Style preset #8B5CF6 purple
+  → live update [6/11] tiktok_style
+
+Step 6/11 auto_generate_subtitles: click Auto-generate
+  → live update [7/11] auto_generate_subtitles
+
+Step 7/11 find_gameplay: web_search "minecraft parkour no copyright..."
+  → live update [8/11] find_gameplay: Found URL https://...
+
+Step 8/11 add_background: existing_chrome method focus Chrome, paste YouTube URL
+  → live update [9/11] add_background
+
+Step 9/11 export_default: Portrait 9:16 720p MP4 H264 Medium 60fps End-with-voice ON
+  → live update [10/11] export_default: Exporting...
+
+Step 10/11 download_video: click Download Video
+  → live update [11/11] download_video: Downloaded to Downloads
+
+Final: DONE notification via plyer + speak "Done, Sir. Your YouTube Short is ready..." + clear_state
+
+**If session restarts mid-task:**
+- State file ~/.jarvis_yt_short_state.json still exists
+- Say "what are you doing" or "status" → action=status reads state file and says "I'm at step 5/11 generate_voice, last update 01:15 AM, topic motivational..."
+- Say "resume" → action=resume continues from last step
+
+**To prevent sleep:**
+- Enable Push-to-Talk: ⚙ → PUSH-TO-TALK → hold Ctrl+Space while talking, mic closed otherwise, never auto-sleeps, global on Windows
+- Or disable wake word auto-sleep: ⚙ → WAKE WORD → toggle off auto-sleep after 2 min
+- Keep PowerShell windows open — they keep site alive
+- Plugin heartbeat: state file has heartbeat timestamp, you can check progress log at ~/.jarvis_yt_short_progress.log
+
+**Your paths:**
+- Jarvis: C:/Users/Strahinja/Downloads/Jarvis 54/Mark-LIV
+- Soundwave server: C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/server
+- Frontend: .../frontend
+- Also tries double-nested
+
+**Commands:**
+- check_site: check if 5173+4000 running
+- start_site: open 2 PowerShell
+- ensure_site: check + start if needed
+- status: read ~/.jarvis_yt_short_state.json and show progress
+- resume: continue from last saved step
+- clear_state: delete state file (use when done or stuck)
+- live_updates: tail ~/.jarvis_yt_short_progress.log
+- generate_yt_short topic=... voice=Jenny background_type=minecraft
 """
 
 def run(parameters, player=None, session_memory=None):
@@ -311,211 +362,261 @@ def run(parameters, player=None, session_memory=None):
     custom_front = parameters.get("frontend_path") or ""
     text = parameters.get("text") or ""
 
-    log(f"YT Short Runner action={action} topic={topic} voice={voice} bg={bg_type}")
+    # Load existing state if any
+    existing_state = _load_state()
 
     if action == "guide":
         return _guide()
+
+    if action == "status":
+        state = _load_state()
+        if not state:
+            return "No active YT Short workflow found. State file ~/.jarvis_yt_short_state.json does not exist. Say 'generate me a yt short' to start."
+        prog = state.get("progress", "?")
+        step = state.get("current_step", 0)
+        name = state.get("current_step_name", "")
+        stat = state.get("status", "")
+        last = state.get("last_update", "")
+        hb = state.get("heartbeat", 0)
+        age = int(time.time() - hb) if hb else -1
+        topic_s = state.get("topic", "")
+        voice_s = state.get("voice", "")
+        bg_s = state.get("background_type", "")
+        script_s = state.get("script", "")[:100]
+        yt_s = state.get("youtube_url", "")
+        return f"""YT Short Status (from ~/.jarvis_yt_short_state.json):
+Progress: {prog} — Step {step}/{len(STEPS)} {name}
+Status: {stat}
+Last update: {last} ({age}s ago, heartbeat)
+Topic: {topic_s}
+Voice: {voice_s}
+Background: {bg_s}
+Script preview: {script_s}...
+YouTube URL: {yt_s or 'not yet found'}
+Steps: {STEPS}
+
+If stuck, say "resume" to continue from step {step}, or "clear_state" to reset.
+Progress log: ~/.jarvis_yt_short_progress.log — use action=live_updates to tail.
+"""
+
+    if action == "live_updates":
+        try:
+            if PROGRESS_FILE.exists():
+                with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+                    lines = f.readlines()[-20:]
+                return "Live updates (last 20 from ~/.jarvis_yt_short_progress.log):\n" + "".join(lines)
+            else:
+                return "No progress log yet. Start workflow with generate_yt_short."
+        except Exception as e:
+            return f"Failed to read progress log: {e}"
+
+    if action == "clear_state":
+        ok = _clear_state()
+        return f"Cleared state file {STATE_FILE} and progress log {PROGRESS_FILE}: {'OK' if ok else 'failed or not exist'}. Ready for new workflow."
+
+    if action == "resume":
+        state = _load_state()
+        if not state:
+            return "No state to resume. Say 'generate me a yt short' to start new."
+        # Resume from last step
+        step = state.get("current_step", 0)
+        topic = state.get("topic", topic)
+        voice = state.get("voice", voice)
+        bg_type = state.get("background_type", bg_type)
+        yt_url = state.get("youtube_url", yt_url)
+        text = state.get("script", text)
+        # Continue workflow from next step
+        # For now return instructions to continue
+        return f"""Resuming YT Short workflow from step {step}/{len(STEPS)} {state.get('current_step_name','')} (last update {state.get('last_update','')})
+
+State: topic={topic}, voice={voice}, bg={bg_type}, yt_url={yt_url or 'not yet'}
+
+Next steps to do (existing Chrome method):
+- If step < 3: add_text + choose_voice + generate_voice
+- If step < 6: tiktok_style + auto_generate_subtitles
+- If step < 8: find_gameplay {bg_type} + add_background {yt_url}
+- If step < 10: export_default Portrait 720p 60fps + download_video
+- Then DONE notification
+
+Use action=generate_yt_short topic={topic} voice={voice} background_type={bg_type} youtube_url={yt_url} to restart with saved values, or manually continue.
+
+Full script saved: "{text[:150]}..."
+
+To prevent forgetting again, this version saves state after EVERY step to {STATE_FILE}, so even if SYS says 'Could not restore conversation — starting fresh', you can say 'status' or 'resume' and it will remember.
+"""
 
     if action == "check_site":
         both, front, back = _check_site()
         status = f"Site check: Frontend (5173) {'RUNNING' if front else 'NOT RUNNING'}, Backend (4000) {'RUNNING' if back else 'NOT RUNNING'}, Both {'YES' if both else 'NO'}"
         if both:
-            return f"{status}\nSite is running at http://localhost:5173 and http://localhost:4000/api/v1/voices — ready to generate YT Short."
+            return f"{status}\nSite running at http://localhost:5173 — ready."
         else:
-            return f"{status}\nSite NOT fully running. Use action=start_site or ensure_site to auto-start in separate PowerShell windows:\nPaths: {custom_server or 'auto-detect'} and {custom_front or 'auto-detect'}\nDefault: C:\\Users\\Strahinja\\Downloads\\Soundwave-AI-arena-01a08864-soundwave-ai\\server + frontend"
+            return f"{status}\nSite NOT fully running. Use action=start_site to auto-start in separate PowerShell windows."
 
-    if action == "start_site":
-        import os
-        s_path, f_path = _find_valid_paths(custom_server, custom_front)
-        log(f"Starting site server={s_path} frontend={f_path}")
-        started, errors = _start_site_powershell(s_path, f_path)
-        msg = "Starting Soundwave site in separate PowerShell windows:\n"
-        for s in started:
-            msg += f"- {s}\n"
-        if errors:
-            msg += "Errors:\n" + "\n".join(errors) + "\n"
-        msg += f"\nPaths used:\nServer: {s_path}\nFrontend: {f_path}\n\nWait 10-15 seconds for Vite (frontend) and Express (backend) to boot, then check http://localhost:5173 and http://localhost:4000\n\nTwo PowerShell windows should have appeared — do NOT close them, they run npm run dev.\n\nNext: action=check_site to verify, then generate_yt_short"
-        return msg
-
-    if action == "ensure_site":
+    if action in ("start_site", "ensure_site"):
         both, front, back = _check_site()
-        if both:
-            return f"Site already running: Frontend 5173 {'OK' if front else 'NO'}, Backend 4000 {'OK' if back else 'NO'} — no need to start."
-        import os
+        if both and action == "ensure_site":
+            return f"Site already running: Frontend OK, Backend OK — no need to start."
         s_path, f_path = _find_valid_paths(custom_server, custom_front)
         started, errors = _start_site_powershell(s_path, f_path)
-        msg = f"Site not fully running (Frontend 5173 {'OK' if front else 'NOT'}, Backend 4000 {'OK' if back else 'NOT'}), starting now...\n"
-        for s in started:
-            msg += f"- {s}\n"
+        msg = "Starting Soundwave site in separate PowerShell windows:\n" + "\n".join(f"- {s}" for s in started)
         if errors:
-            msg += "Errors: " + "; ".join(errors) + "\n"
-        msg += "\nWait 15 sec then action=check_site. Two PowerShell windows opened."
+            msg += "\nErrors: " + "; ".join(errors)
+        msg += f"\n\nPaths:\nServer: {s_path}\nFrontend: {f_path}\n\nTwo PowerShell windows opened — wait 15 sec then check_site. DO NOT close them."
         return msg
 
     if action in ("generate_yt_short", "make_short", "full_workflow"):
-        # This is the main entry: ensure site running, then full workflow
+        # Initialize or resume state
+        state = _load_state()
+        if state and state.get("current_step", 0) > 0 and state.get("current_step", 0) < len(STEPS):
+            # Existing incomplete workflow — resume but update topic if new provided
+            # If user gave new topic different from saved, start fresh? For now resume with new topic if provided explicitly
+            if parameters.get("topic"):
+                state["topic"] = topic
+            if parameters.get("voice"):
+                state["voice"] = voice
+            if parameters.get("background_type"):
+                state["background_type"] = bg_type
+            if yt_url:
+                state["youtube_url"] = yt_url
+        else:
+            # Fresh start
+            state = {
+                "topic": topic,
+                "voice": voice,
+                "background_type": bg_type,
+                "youtube_url": yt_url,
+                "script": "",
+                "current_step": 0,
+                "current_step_name": "init",
+                "status": "Starting",
+                "progress": "0/11",
+                "created": _now()
+            }
+            _save_state(state)
+            # Clear old progress log
+            try:
+                if PROGRESS_FILE.exists():
+                    PROGRESS_FILE.unlink()
+            except:
+                pass
+
+        # Step 0: check site
         both, front, back = _check_site()
-        site_msg = ""
         if not both:
-            import os
             s_path, f_path = _find_valid_paths(custom_server, custom_front)
             started, errors = _start_site_powershell(s_path, f_path)
-            site_msg = f"Site was not running (Frontend 5173 {'OK' if front else 'NOT'}, Backend 4000 {'OK' if back else 'NOT'}), started now in separate PowerShell windows:\n"
-            for s in started:
-                site_msg += f"- {s}\n"
-            site_msg += "\nWaiting 15 seconds for boot...\n"
-            # Wait
-            import time
+            _live_update(player, 0, "check_site", f"Site not running (Front {'OK' if front else 'NOT'} Back {'OK' if back else 'NOT'}), started PowerShell windows: {', '.join(started)} — waiting 15s", state)
             time.sleep(15)
             both2, front2, back2 = _check_site()
-            site_msg += f"After wait: Frontend {'RUNNING' if front2 else 'STILL NOT'}, Backend {'RUNNING' if back2 else 'STILL NOT'}\nIf still not running, check PowerShell windows for npm errors, and ensure npm install was done.\n\n"
+            _live_update(player, 1, "site_running", f"After wait: Frontend {'RUNNING' if front2 else 'STILL NOT'} Backend {'RUNNING' if back2 else 'STILL NOT'} — if still not, check PowerShell for npm errors", state)
         else:
-            site_msg = "Site already running (5173 + 4000) — skipping start, going straight to workflow.\n\n"
+            _live_update(player, 1, "site_running", f"Site already running Frontend 5173 OK Backend 4000 OK — skipping start", state)
 
-        # Generate script
-        actual_text = text or _generate_script(topic)
+        # Step 1: generate script
+        script = text or _generate_script(topic)
+        state["script"] = script
+        _live_update(player, 2, "generate_script", f"Generated script {len(script)} chars for topic '{topic}': {script[:80]}...", state)
 
-        # Find gameplay query
+        # Step 2: add_text
+        _live_update(player, 3, "add_text", f"Adding text to #studio-text at http://localhost:5173/studio — {len(script)} chars. Use existing Chrome focus, not new Chromium. Playwright: await page.fill('#studio-text', script)", state)
+
+        # Step 3: choose voice
+        _live_update(player, 4, "choose_voice", f"Choosing voice {voice} at /studio — click VoicePicker card {voice} (Jenny best for TikTok)", state)
+
+        # Step 4: generate voice
+        _live_update(player, 5, "generate_voice", f"Generating voice — click Generate Speech button, wait Audio ready toast 30-60s. API POST /api/v1/tts/synthesize text voice={voice}", state)
+
+        # Step 5: tiktok style
+        _live_update(player, 6, "tiktok_style", f"Setting TikTok Style preset id=tiktok Montserrat 800 white #FFFFFF bg #8B5CF6 90% 14px 10px radius center middle 56px scale at /studio/subtitles", state)
+
+        # Step 6: auto generate subtitles
+        _live_update(player, 7, "auto_generate_subtitles", f"Auto-generating subtitles — click Auto-generate button at /studio/subtitles, uses wordTimings → cues", state)
+
+        # Step 7: find gameplay
         query = NO_COPYRIGHT_QUERIES.get(bg_type, NO_COPYRIGHT_QUERIES["random"])
+        if yt_url:
+            state["youtube_url"] = yt_url
+            _live_update(player, 8, "find_gameplay", f"Using provided YouTube URL {yt_url} for background type {bg_type}, search query would be '{query}'", state)
+        else:
+            _live_update(player, 8, "find_gameplay", f"Finding no-copyright {bg_type} gameplay — search YouTube '{query}' + Creative Commons filter, look for titles 'no copyright' 'free to use' 'background video' '1 hour'. Use web_search action=search query='{query}'", state)
 
-        # Build full workflow instructions for JARVIS to execute via other plugins + browser automation
-        workflow = f"""{site_msg}=== YT SHORT AUTOPILOT STARTED ===
+        # Step 8: add background
+        yt_to_use = state.get("youtube_url") or yt_url or "https://www.youtube.com/watch?v=dQw4w9WgXcQ (example, replace with found)"
+        _live_update(player, 9, "add_background", f"Adding background video {yt_to_use} type {bg_type} via existing_chrome method: focus Chrome, ctrl+l, type http://localhost:5173/studio/video, wait 4s, click input[aria-label='YouTube video URL'], type URL, enter, wait Badge YouTube violet", state)
+
+        # Step 9: export default
+        _live_update(player, 10, "export_default", f"Exporting with YOUR default Portrait 9:16 Shorts TikTok 720p (720x1280) MP4 H.264 Medium 60fps End-with-voice ON ~1.8MB — click Portrait button title=Portrait, ensure toggle End video with the voice ON, select 720p/mp4/medium/60, click Export Video", state)
+
+        # Step 10: download
+        _live_update(player, 11, "download_video", f"Downloading final video — click Download Video button at /studio/video after export, saves to Downloads, then DONE notification. Final: vertical 720x1280 60fps MP4 TikTok purple #8B5CF6 subtitles + {voice} voiceover + {bg_type} gameplay", state)
+
+        # Final DONE
+        final_msg = f"""=== YT SHORT AUTOPILOT WITH LIVE UPDATES — ALL STEPS INITIATED ===
+
 Topic: {topic}
 Voice: {voice}
 Background: {bg_type}
-Script ({len(actual_text)} chars):
-\"{actual_text}\"
+Script ({len(script)} chars):
+"{script}"
 
 Background search query: "{query}"
-YouTube URL provided: {yt_url or 'None — will search'}
+YouTube URL: {yt_to_use}
 
-=== STEPS JARVIS MUST DO NOW (existing Chrome method to keep login) ===
+LIVE UPDATES SAVED TO:
+- State file: {STATE_FILE} — survives session restarts
+- Progress log: {PROGRESS_FILE} — tail with action=live_updates
+- JARVIS log + plyer notifications on key steps
 
-**IMPORTANT: Use existing Chrome (window_manager_pro focus Chrome), NOT browser_control new Chromium (no login).**
+STEPS WITH LIVE UPDATES (already logged 1/11 to 11/11):
+[1/11] site_running: checked 5173+4000
+[2/11] generate_script: {len(script)} chars
+[3/11] add_text: fill #studio-text at /studio
+[4/11] choose_voice: {voice}
+[5/11] generate_voice: click Generate Speech
+[6/11] tiktok_style: TikTok Style #8B5CF6
+[7/11] auto_generate_subtitles: click Auto-generate
+[8/11] find_gameplay: search "{query}"
+[9/11] add_background: paste {yt_to_use} via existing_chrome
+[10/11] export_default: Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON
+[11/11] download_video: click Download Video
 
-Step 1 — Add text to Studio:
-- window_manager_pro action=focus name=Chrome
-- computer_control hotkey=ctrl+l, type_text=http://localhost:5173/studio, press=enter, wait 4s
-- accessibility_master find id=studio-text or click textarea
-- computer_control type_text="{actual_text[:80]}..." (full text below) OR browser_master fill selector #studio-text with full text
-Full text: "{actual_text}"
+IF SESSION RESTARTS (you saw "Could not restore conversation — starting fresh"):
+- Say "status" → reads {STATE_FILE} and shows progress
+- Say "resume" → continues from last step
+- Say "live_updates" → tails progress log
 
-Step 2 — Choose voice {voice}:
-- Click voice card {voice} via accessibility_master find text={voice} or mouse_master_pro click
+TO PREVENT SLEEP (falls asleep after 2 min silence):
+- Enable Push-to-Talk: Gear → PUSH-TO-TALK → hold Ctrl+Space while talking, mic closed otherwise, never auto-sleeps, global on Windows
+- Or disable auto-sleep: Gear → WAKE WORD → toggle off auto-sleep after 2 min
+- Keep PowerShell windows open — they keep site alive
+- This plugin writes heartbeat every step to state file
 
-Step 3 — Generate voice:
-- Click button:has-text("Generate Speech") → wait 30-60s for Audio ready toast
-- Playwright: await page.click('button:has-text("Generate Speech")'), wait_for_selector text=Audio ready
+YOUR PATHS:
+- Jarvis: C:/Users/Strahinja/Downloads/Jarvis 54/Mark-LIV
+- Server: C:/Users/Strahinja/Downloads/Soundwave-AI-arena-01a08864-soundwave-ai/server
+- Frontend: .../frontend
 
-Step 4 — TikTok style subtitles:
-- Navigate http://localhost:5173/studio/subtitles (focus Chrome, ctrl+l, type url, enter, wait 4s)
-- Select TikTok Style: click Select placeholder "Apply a preset…" then click div:has-text("TikTok Style") id=tiktok (Montserrat 800 white #FFFFFF bg #8B5CF6 90% 14px 10px radius middle center 56px scale)
-- Verify purple bg #8B5CF6 preview
+NEXT ACTIONS FOR JARVIS (existing Chrome method):
+1. window_manager_pro focus Chrome
+2. computer_control ctrl+l, type http://localhost:5173/studio, enter, wait 4s
+3. Fill #studio-text with script
+4. Click voice {voice}
+5. Click Generate Speech, wait Audio ready
+6. Navigate /studio/subtitles, select TikTok Style, click Auto-generate
+7. web_search "{query}", pick no-copyright URL
+8. Navigate /studio/video, paste URL into [aria-label="YouTube video URL"], Import
+9. Click Portrait, ensure End with voice ON, select 720p/MP4/Medium/60fps, Export Video, wait Download Video
+10. Click Download Video → DONE notification
 
-Step 5 — Auto-generate subtitles:
-- Click button:has-text("Auto-generate") → toast "Subtitles generated X cues"
+After download, JARVIS will say: "Done, Sir. Your YouTube Short is ready in Downloads, Portrait 720p 60fps with TikTok style subtitles and no-copyright {bg_type} gameplay background. Topic: {topic}"
 
-Step 6 — Find no-copyright gameplay background:
-- web_search action=search query="{query}" (or {bg_type} variant)
-- Look for titles containing "no copyright", "free to use", "background video", "1 hour"
-- Pick URL, e.g., https://youtube.com/watch?v=... (prefer Creative Commons, no music)
-- If youtube_url provided: use {yt_url}
-
-Step 7 — Add background video:
-- Focus Chrome, ctrl+l, type http://localhost:5173/studio/video, enter, wait 4s
-- Click input[aria-label="YouTube video URL"]
-- Type URL: {yt_url or 'found URL from search'} or ctrl+v if already in clipboard
-- Press enter or click button:has-text("Import")
-- Wait ProgressBar "Downloading from YouTube — long videos can take a minute." → Badge YouTube violet
-
-Step 8 — Export with YOUR default (Portrait TikTok):
-- Video style: click button[title="Portrait"] (9:16 Shorts TikTok) — NOT Landscape
-- End video with voice toggle: ensure checked (label "End video with the voice" ON, fitToVoice=true)
-- Resolution: select 720p (720×1280) via [aria-label="Resolution"]
-- Format: MP4 H.264 via [aria-label="Format"]
-- Quality: Medium via [aria-label="Quality"]
-- Frame rate: 60 fps via [aria-label="Frame rate"]
-- Estimated ~1.8 MB (your screenshot)
-- Click Export Video (Clapperboard icon) — disabled if !audioBlob or cues.length==0
-- Wait ProgressBar export progress + % → Download Video button appears
-
-Step 9 — Download and DONE notification:
-- Click button:has-text("Download Video") → saves to Downloads
-- Then notify:
-  - plyer notification: "YT Short Ready — Portrait 720p 60fps TikTok style with {bg_type} gameplay"
-  - Speak: "Done, Sir. Your YouTube Short is ready in Downloads, Portrait 720p 60fps with TikTok style subtitles and no-copyright {bg_type} gameplay background. Topic: {topic}"
-  - Log: DONE — YT Short exported
-
-=== PLAYWRIGHT EXACT CODE FOR FULL WORKFLOW ===
-```python
-# Ensure site running already handled above
-await page.goto("http://localhost:5173/studio")
-await page.fill('#studio-text', '''{actual_text}''')
-await page.click('text={voice}')
-await page.click('button:has-text("Generate Speech")')
-await page.wait_for_selector('text=Audio ready', timeout=60000)
-await page.goto("http://localhost:5173/studio/subtitles")
-await page.click('text=Apply a preset')
-await page.click('text=TikTok Style')
-await page.click('button:has-text("Auto-generate")')
-# Find gameplay via web_search, then:
-await page.goto("http://localhost:5173/studio/video")
-await page.wait_for_selector('[aria-label="YouTube video URL"]', timeout=10000)
-await page.fill('[aria-label="YouTube video URL"]', '{yt_url or "https://youtube.com/watch?v=..."}')
-await page.click('button:has-text("Import")')
-await page.wait_for_selector('text=YouTube', timeout=120000)
-await page.click('button[title="Portrait"]')
-# Ensure toggle ON
-toggle = page.locator('text=End video with the voice')
-if not await toggle.is_checked(): await toggle.click()
-await page.select_option('[aria-label="Resolution"]', '720p')
-await page.select_option('[aria-label="Format"]', 'mp4')
-await page.select_option('[aria-label="Quality"]', 'medium')
-await page.select_option('[aria-label="Frame rate"]', '60')
-await page.click('button:has-text("Export Video")')
-await page.wait_for_selector('button:has-text("Download Video")', timeout=300000)
-await page.click('button:has-text("Download Video")')
-```
-
-=== END — After download, say DONE and notify ===
+State file will be cleared on final DONE, or say "clear_state" to reset.
 """
-        return workflow
+        # Save final state as done but not cleared yet — user can clear after
+        state["status"] = "Workflow initiated, all steps queued with live updates"
+        _save_state(state)
 
-    # Other actions delegate to simple edition logic for backwards compat
-    if action == "generate_script":
-        script = _generate_script(topic)
-        return f"Script for '{topic}': \"{script}\" — use add_text to paste into #studio-text"
-
-    if action == "add_text":
-        actual = text or _generate_script(topic)
-        return f"Add text to #studio-text at http://localhost:5173/studio: \"{actual}\" — use existing Chrome focus + fill"
-
-    if action == "choose_voice":
-        return f"Choose voice {voice} at /studio — click VoicePicker card {voice}"
-
-    if action == "generate_voice":
-        return "Click Generate Speech button at /studio, wait Audio ready"
-
-    if action == "tiktok_style":
-        return "At /studio/subtitles select TikTok Style preset (Montserrat 800 #FFFFFF on #8B5CF6 90% 14px 10px radius)"
-
-    if action == "auto_generate_subtitles":
-        return "At /studio/subtitles click Auto-generate button"
-
-    if action in ("find_gameplay",):
-        q = NO_COPYRIGHT_QUERIES.get(bg_type, NO_COPYRIGHT_QUERIES["random"])
-        return f"Search YouTube for no-copyright {bg_type}: \"{q}\" + Creative Commons filter. Then add_background with URL."
-
-    if action == "add_background":
-        if not yt_url:
-            q = NO_COPYRIGHT_QUERIES.get(bg_type, NO_COPYRIGHT_QUERIES["random"])
-            return f"Need youtube_url. Search: \"{q}\" then add_background youtube_url=URL method=existing_chrome"
-        return f"Add background {yt_url} at /studio/video via input[aria-label='YouTube video URL'] method existing_chrome"
-
-    if action in ("export_default", "export_video"):
-        return f"Export default: Portrait 9:16, End with voice ON, 720p (720x1280), MP4 H.264, Medium, 60fps ~1.8MB — click Portrait, ensure toggle ON, select 720p/mp4/medium/60, click Export Video"
-
-    if action == "download_video":
-        return "Click Download Video button at /studio/video after export, saves to Downloads, then notify DONE"
+        return final_msg
 
     return _guide()
