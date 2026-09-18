@@ -64,10 +64,30 @@ import json
 import time
 import socket
 from pathlib import Path
+from datetime import datetime
 
 # --- State file for persistence across session restarts ---
 STATE_FILE = Path.home() / ".jarvis_yt_short_state.json"
 PROGRESS_FILE = Path.home() / ".jarvis_yt_short_progress.log"
+JOURNAL_FILE = Path.home() / ".jarvis_task_journal.jsonl"
+
+def _append_journal(entry_type, description, task_id="yt_short", status="in_progress", progress="", metadata=None):
+    try:
+        entry={
+            "timestamp": time.time(),
+            "iso": datetime.now().isoformat(),
+            "type": entry_type,
+            "task_id": task_id,
+            "description": description[:500],
+            "status": status,
+            "progress": progress,
+            "metadata": metadata or {}
+        }
+        JOURNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(JOURNAL_FILE,"a",encoding="utf-8") as f:
+            f.write(json.dumps(entry,ensure_ascii=False)+"\n")
+    except:
+        pass
 # Visible progress HTML tab that user can watch live
 VISIBLE_PROGRESS_HTML = Path.home() / "Downloads" / "Jarvis 54" / "Mark-LIV" / "yt_short_live_progress.html"
 # Fallback locations for visible progress
@@ -315,6 +335,11 @@ def _save_state(state):
             pf.write(f"[{state['last_update']}] Step {state.get('current_step',0)}/{len(STEPS)} {state.get('current_step_name','')} — {state.get('status','')}\n")
         # Update visible HTML tab so user can watch live
         _create_visible_progress_html(state)
+        # Final fix: also append to task journal so session_memory_guardian can resume even if session wiped
+        try:
+            _append_journal("task_step", f"{state.get('current_step_name','')} — {state.get('status','')}", task_id="yt_short", status="in_progress" if state.get('current_step',0)<len(STEPS) else "done", progress=state.get('progress',''), metadata={"topic": state.get('topic',''), "voice": state.get('voice',''), "bg": state.get('background_type','')})
+        except:
+            pass
     except Exception as e:
         pass
 
