@@ -233,6 +233,28 @@ def generate_viral_script(topic="psychology", style="curiosity_gap", seed=""):
 
     # Build script using viral structure
     fact = random.choice(facts)
+    # Clean any leftover {placeholders} in fact — replace with concrete viral values
+    replacements = {
+        "{fact}": "honey never spoils after 3000 years",
+        "{topic}": topic,
+        "{popular_belief}": "Everything you knew about this",
+        "{everyday_thing}": "this one habit",
+        "{result}": "you everything",
+        "{specific_trait}": "can't sleep at night thinking about this",
+        "{common_struggle}": "feel stuck",
+        "{asset}": "Bitcoin",
+        "{paid alternative}": "ChatGPT Plus",
+        "{job}": "video editing",
+        "{unusual thing}": "waking up at 5 AM",
+        "{product/skill}": "this habit",
+    }
+    for ph, rep in replacements.items():
+        fact = fact.replace(ph, rep)
+        hook_template = hook_template.replace(ph, rep)
+    # Also handle any remaining {xxx} via regex — remove braces
+    import re as _re
+    fact = _re.sub(r"\{[^}]+\}", topic, fact)
+    hook_template = _re.sub(r"\{[^}]+\}", topic, hook_template)
 
     # Viral script examples based on niche
     if niche == VIRAL_NICHES["psychology"]:
@@ -255,19 +277,36 @@ def generate_viral_script(topic="psychology", style="curiosity_gap", seed=""):
             f"The most powerful army in history was destroyed by something from a grocery store. {fact} Wait for it.",
             f"{fact} And that's why history is stranger than fiction. Part 2 drops tomorrow.",
         ]
-    elif niche == VIRAL_NICHES["motivation"]:
-        scripts = [
-            f"Stop waiting for motivation. Motivation is weather, discipline is climate. {fact} Start today, not tomorrow.",
-            f"I did {fact.lower()} every day for 7 days. Here's what happened — and why 99% quit at 40%.",
-            f"You're doing motivation wrong. {fact} The person who wins isn't strongest, it's the one who doesn't quit at 40%.",
-        ]
     elif niche == VIRAL_NICHES["finance"]:
         scripts = [
             f"Everything you knew about saving money is wrong. {fact} The math is not even close.",
             f"Only 1% know this money rule: {fact} It feels illegal but it's just math.",
             f"Three money mistakes keeping you poor: One — {fact} Two — you budget but don't track. Three — you save but don't invest.",
+            f"Did you know that {fact.lower()} Most people save wrong because they never learned this.",
+        ]
+    elif niche == VIRAL_NICHES["ai"]:
+        scripts = [
+            f"Did you know this free AI tool is better than ChatGPT Plus and takes 10 seconds? {fact} Here's how.",
+            f"Only 1% know this AI trick: {fact} It feels illegal but it's just prompting.",
+            f"Three AI tools that feel illegal to know: One — {fact} Two — saves 5 hours weekly. Three — free forever.",
+            f"AI just made video editing 10x faster. {fact} Here's what to do instead of manual cuts.",
+        ]
+    elif niche == VIRAL_NICHES["horror"]:
+        scripts = [
+            f"At 2:13 AM, she heard footsteps in the attic. She lived alone. {fact} Then the lights went out.",
+            f"Did you know that {fact.lower()} Most people don't know this story, but it's 100% true.",
+            f"The last message said 'Don't look behind you.' {fact} He turned anyway. Follow for Part 2.",
+            f"Only 1% know this: {fact} And the reason will keep you up tonight.",
+        ]
+    elif niche == VIRAL_NICHES["motivation"]:
+        scripts = [
+            f"Stop waiting for motivation. Motivation is weather, discipline is climate. {fact} Start today, not tomorrow.",
+            f"I did waking up at 5 AM every day for 7 days. {fact} Here's what happened — and why 99% quit at 40%.",
+            f"You're doing motivation wrong. {fact} The person who wins isn't strongest, it's the one who doesn't quit at 40%.",
+            f"Three things that quietly kill your progress: One — {fact} Two — you wait for perfect. Three — you quit early.",
         ]
     else:
+        # Generic fallback — ensure no placeholders remain
         scripts = [f"{hook_template} {fact} Follow for more {topic} that feels illegal to know."]
 
     import hashlib
