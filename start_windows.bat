@@ -25,6 +25,9 @@ if not exist server\.env (
     copy server\.env.example server\.env >nul
 )
 
+:: Ensure DATABASE_URL is disabled for zero-infra local JSON store (no postgres needed)
+powershell -Command "if (Test-Path 'server\.env') { (Get-Content 'server\.env') -replace '^DATABASE_URL=postgresql:', '#DATABASE_URL=postgresql:' | Set-Content 'server\.env' }"
+
 :: Install server dependencies if needed
 if not exist server\node_modules (
     echo [INFO] Installing server dependencies...
