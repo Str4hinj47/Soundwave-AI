@@ -152,7 +152,9 @@ function drawCueFrame(
   t: number,
 ) {
   const scale = Math.min(W / 1280, H / 720);
-  const px = Math.round((style.fontSize ?? 48) * scale);
+  // Portrait: +35% size and centered-by-default captions (same as server). 
+  const portrait = H > W;
+  const px = Math.round((style.fontSize ?? 48) * scale * (portrait ? 1.35 : 1));
   const lineGap = px * (style.lineHeight ?? 1.2);
   const margin = Math.round((style.margin ?? 40) * scale);
   ctx.save();
@@ -192,15 +194,18 @@ function drawCueFrame(
   const blockH = lines.length > 0 ? lineGap * (lines.length - 1) + px : px;
 
   const animScale = anim.scaleMul;
+  const noCustomPos = style.customX == null && style.customY == null;
+  const effH = portrait && noCustomPos ? "center" : style.hAlign;
+  const effV = portrait && noCustomPos ? "middle" : style.vAlign;
   const cx =
     style.customX != null ? (style.customX / 100) * W
-    : style.hAlign === "left" ? margin + blockW / 2
-    : style.hAlign === "right" ? W - margin - blockW / 2
+    : effH === "left" ? margin + blockW / 2
+    : effH === "right" ? W - margin - blockW / 2
     : W / 2;
   const cy =
     style.customY != null ? (style.customY / 100) * H
-    : style.vAlign === "top" ? margin + blockH / 2
-    : style.vAlign === "middle" ? H / 2
+    : effV === "top" ? margin + blockH / 2
+    : effV === "middle" ? H / 2
     : H - margin - blockH / 2;
 
   ctx.globalAlpha = alpha;

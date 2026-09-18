@@ -8,6 +8,8 @@ import type {
 } from "../lib/types";
 import { DEFAULT_SUBTITLE_STYLE } from "../lib/subtitlePresets";
 
+export type VideoAspect = "16:9" | "9:16";
+
 interface VideoInfo {
   blob: Blob | null;
   url: string | null;
@@ -36,6 +38,8 @@ interface StudioState {
   projectName: string;
   // Video compositor state
   video: VideoInfo;
+  /** Shared 16:9/9:16 frame — Subtitle Editor preview and Compositor export agree. */
+  aspect: VideoAspect;
   // Session generation history
   history: GenerationRecord[];
 
@@ -61,6 +65,7 @@ interface StudioState {
   setStyle: (s: Partial<SubtitleStyle>) => void;
   setProjectName: (n: string) => void;
   setVideo: (v: Partial<VideoInfo>) => void;
+  setAspect: (a: VideoAspect) => void;
   addHistory: (r: GenerationRecord) => void;
   removeHistory: (id: string) => void;
   reset: () => void;
@@ -89,6 +94,7 @@ export const useStudio = create<StudioState>((set) => ({
   activeCueId: null,
   projectName: "Untitled Project",
   video: initialVideo,
+  aspect: (localStorage.getItem("sw.aspect") === "9:16" ? "9:16" : "16:9") as VideoAspect,
   history: [],
 
   setResult: (p) =>
@@ -121,6 +127,10 @@ export const useStudio = create<StudioState>((set) => ({
   setStyle: (p) => set((s) => ({ subtitleStyle: { ...s.subtitleStyle, ...p } })),
   setProjectName: (n) => set({ projectName: n }),
   setVideo: (v) => set((s) => ({ video: { ...s.video, ...v } })),
+  setAspect: (a) => {
+    localStorage.setItem("sw.aspect", a);
+    set({ aspect: a });
+  },
   addHistory: (r) => set((s) => ({ history: [r, ...s.history].slice(0, 50) })),
   removeHistory: (id) => set((s) => ({ history: s.history.filter((h) => h.id !== id) })),
   reset: () =>

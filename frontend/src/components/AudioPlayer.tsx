@@ -16,6 +16,7 @@ export interface AudioPlayerHandle {
 interface AudioPlayerProps {
   audioBuffer: AudioBuffer | null;
   onTimeUpdate?: (t: number) => void;
+  onPlayStateChange?: (playing: boolean) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
   onDownload?: () => void;
@@ -24,7 +25,7 @@ interface AudioPlayerProps {
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function AudioPlayer(
-  { audioBuffer, onTimeUpdate, onEnded, autoPlay = false, onDownload },
+  { audioBuffer, onTimeUpdate, onEnded, autoPlay = false, onDownload, onPlayStateChange },
   ref,
 ) {
   const [playing, setPlaying] = useState(false);
@@ -43,6 +44,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
   const rafRef = useRef<number | null>(null);
   const bufferRef = useRef<AudioBuffer | null>(null);
   const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onPlayStateChangeRef = useRef(onPlayStateChange);
   const onEndedRef = useRef(onEnded);
   onTimeUpdateRef.current = onTimeUpdate;
   onEndedRef.current = onEnded;
@@ -92,6 +94,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
       src.onended = () => {
         if (playingRef.current) {
           playingRef.current = false;
+          onPlayStateChangeRef.current?.(false);
           setPlaying(false);
           setCurrentTime(0);
           offsetRef.current = 0;
@@ -103,6 +106,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
       startedAtRef.current = ctx.currentTime;
       offsetRef.current = offset;
       playingRef.current = true;
+      onPlayStateChangeRef.current?.(true);
       setPlaying(true);
       stopLoop();
       const tick = () => {
@@ -122,6 +126,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     const ctx = ctxRef.current;
     if (ctx) offsetRef.current = offsetRef.current + (ctx.currentTime - startedAtRef.current) * rateRef.current;
     playingRef.current = false;
+    onPlayStateChangeRef.current?.(false);
     setPlaying(false);
     stopSource();
     stopLoop();
@@ -176,6 +181,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     offsetRef.current = 0;
     setCurrentTime(0);
     playingRef.current = false;
+    onPlayStateChangeRef.current?.(false);
     setPlaying(false);
     stopSource();
     stopLoop();

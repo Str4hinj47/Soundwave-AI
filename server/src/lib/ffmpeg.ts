@@ -118,7 +118,11 @@ export function buildAss(
   // axes keeps 16:9 behavior identical (both equal the old height/720) while
   // preventing oversized subtitles in 9:16 portrait frames (Shorts/TikTok).
   const scale = Math.min(width / 1280, height / 720);
-  const fontSize = Math.round((style.fontSize ?? 48) * scale);
+  // Portrait frames are tall & phone-held: captions get +35% and, unless the
+  // user dragged a custom position, render centered on screen (TikTok look).
+  const portrait = height > width;
+  const boost = portrait ? 1.35 : 1;
+  const fontSize = Math.round((style.fontSize ?? 48) * scale * boost);
   const outline = style.strokeEnabled ? Math.max(0, Math.round((style.strokeWidth ?? 0) * scale)) : 0;
   const shadow = style.shadowEnabled
     ? Math.max(1, Math.round(Math.max(Math.abs(style.shadowX ?? 0), Math.abs(style.shadowY ?? 0), (style.shadowBlur ?? 0) / 2) * scale))
@@ -126,6 +130,8 @@ export function buildAss(
   const spacing = Math.round((style.letterSpacing ?? 0) * scale);
   const borderStyle = (style.bgOpacity ?? 0) > 0 ? 3 : 1;
   const margin = Math.round((style.margin ?? 40) * scale);
+  const noCustomPos = style.customX == null && style.customY == null;
+  const effectiveAlign = portrait && noCustomPos ? 5 : alignmentFor(style.hAlign, style.vAlign);
   const bold = (style.fontWeight ?? 700) >= 600 ? 1 : 0;
   const primary = hexToAss(style.color ?? "#FFFFFF", style.textOpacity ?? 100);
   const outlineColor = hexToAss(style.strokeColor ?? "#000000", 100);
@@ -141,7 +147,7 @@ export function buildAss(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${style.fontFamily ?? "Inter"},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
+    `Style: Default,${style.fontFamily ?? "Inter"},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${effectiveAlign},${margin},${margin},${margin},1`,
     `Style: Watermark,Inter,${Math.max(16, Math.round(28 * scale))},${hexToAss("#FFFFFF", 55)},${hexToAss("#FFFFFF", 55)},${hexToAss("#000000", 0)},${hexToAss("#000000", 0)},0,0,0,0,100,100,0,0,1,1,0,9,20,20,20,1`,
     "",
     "[Events]",

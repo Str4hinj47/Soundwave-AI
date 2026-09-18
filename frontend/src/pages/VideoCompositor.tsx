@@ -19,6 +19,7 @@ import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
 import { STANDALONE } from "../lib/env";
+import { portraitAdjustedStyle } from "../lib/portrait";
 import { exportVideoStandalone, type StandaloneExportInput } from "../lib/standaloneExport";
 import { cn } from "../lib/cn";
 import { formatBytes, formatDuration } from "../lib/format";
@@ -76,7 +77,9 @@ export function VideoCompositor() {
   const [zoom, setZoom] = useState(1);
 
   const [resolution, setResolution] = useState<Resolution>(planDef.maxResolution as Resolution);
-  const [aspect, setAspect] = useState<Aspect>("16:9");
+  // Shared with the Subtitle Editor preview via the studio store.
+  const aspect = studio.aspect as Aspect;
+  const setAspect = studio.setAspect;
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
   const [fps, setFps] = useState(30);
@@ -501,23 +504,29 @@ export function VideoCompositor() {
               {/* Voiceover playback for the preview — the master clock. */}
               {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" preload="auto" />}
               {activeCue && (
-                <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition({ ...style, margin: style.margin * k }) }}>
-                  <div
-                    style={subtitleStyleToCss({
-                      ...style,
-                      fontSize: style.fontSize * k,
-                      letterSpacing: style.letterSpacing * k,
-                      bgPadding: style.bgPadding * k,
-                      bgRadius: style.bgRadius * k,
-                      strokeWidth: style.strokeWidth * k,
-                      shadowX: style.shadowX * k,
-                      shadowY: style.shadowY * k,
-                      shadowBlur: style.shadowBlur * k,
-                    })}
-                  >
-                    {activeCue.text}
-                  </div>
-                </div>
+                (() => {
+                  // Portrait captions: bigger + centered by default (matches export).
+                  const eff = portraitAdjustedStyle(style, aspect === "9:16");
+                  return (
+                    <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition({ ...eff, margin: eff.margin * k }) }}>
+                      <div
+                        style={subtitleStyleToCss({
+                          ...eff,
+                          fontSize: eff.fontSize * k,
+                          letterSpacing: eff.letterSpacing * k,
+                          bgPadding: eff.bgPadding * k,
+                          bgRadius: eff.bgRadius * k,
+                          strokeWidth: eff.strokeWidth * k,
+                          shadowX: eff.shadowX * k,
+                          shadowY: eff.shadowY * k,
+                          shadowBlur: eff.shadowBlur * k,
+                        })}
+                      >
+                        {activeCue.text}
+                      </div>
+                    </div>
+                  );
+                })()
               )}
               {!videoUrl && (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-700">

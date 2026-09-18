@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowDown,
+  Monitor,
+  Smartphone,
   Grid3X3,
   Plus,
   Redo2,
@@ -22,6 +24,7 @@ import { Badge } from "../components/ui/Badge";
 import { cn } from "../lib/cn";
 import { cuesFromTimings, estimateWordTimings, downloadBlob } from "../lib/audio";
 import { subtitleStyleToCss, subtitlePosition } from "../lib/subtitleStyle";
+import { portraitAdjustedStyle, isPortraitAspect } from "../lib/portrait";
 import { DEFAULT_SUBTITLE_STYLE, FONT_OPTIONS, GOOGLE_FONTS_LINK, SUBTITLE_PRESETS } from "../lib/subtitlePresets";
 import { toast } from "../store/toast";
 import type { SubtitleCue, SubtitleStyle } from "../lib/types";
@@ -40,6 +43,8 @@ export function SubtitleEditor() {
   const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
   const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
   const [saving, setSaving] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playerPlaying, setPlayerPlaying] = useState(false);
   const [dragState, setDragState] = useState<{ id: string; startX: number; startY: number; origX: number | null; origY: number | null } | null>(null);
 
   const { cues, subtitleStyle: style } = studio;
@@ -182,8 +187,29 @@ export function SubtitleEditor() {
     };
   }, [dragState, studio]);
 
-  const styleCss = subtitleStyleToCss(style);
-  const pos = subtitlePosition(style);
+  const portrait = isPortraitAspect(studio.aspect);
+
+  // Keep the background video in step with the voice preview: scrub on seek,
+  // play/pause with the player, loop when the clip is shorter than the voice.
+  const syncVideo = (t: number, playing: boolean) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const dur = v.duration || 0;
+    const target = dur > 0 ? t % dur : 0;
+    if (Number.isFinite(target) && Math.abs(v.currentTime - target) > 0.35) {
+      try {
+        v.currentTime = target;
+      } catch {
+        /* not seekable yet */
+      }
+    }
+    if (playing) void v.play().catch(() => undefined);
+    else v.pause();
+  };
+
+  const effStyle = portraitAdjustedStyle(style, portrait);
+  const styleCss = subtitleStyleToCss(effStyle);
+  const pos = subtitlePosition(effStyle);
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -208,20 +234,56 @@ export function SubtitleEditor() {
         <div className="min-w-0 space-y-5">
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300">Preview <span className="text-gray-500">(16:9)</span></p>
-              <button
-                onClick={() => setShowGrid((g) => !g)}
-                aria-pressed={showGrid}
-                className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", showGrid ? "bg-blue-500/20 text-blue-300" : "text-gray-400 hover:text-white")}
-              >
-                <Grid3X3 className="h-4 w-4" /> Grid
-              </button>
+              <p className="text-sm font-medium text-gray-300">
+                Preview <span className="text-gray-500">({studio.aspect === "9:16" ? "9:16 · portrait" : "16:9"})</span>
+              </p>
+              <div className="flex items-center gap-1.5">
+                {/* Shared frame choice — the Compositor exports with the same aspect. */}
+                <button
+                  onClick={() => studio.setAspect("16:9")}
+                  aria-pressed={studio.aspect === "16:9"}
+                  title="Landscape 16:9"
+                  className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", studio.aspect === "16:9" ? "bg-blue-500/20 text-blue-300" : "text-gray-400 hover:text-white")}
+                >
+                  <Monitor className="h-4 w-4" /> 16:9
+                </button>
+                <button
+                  onClick={() => studio.setAspect("9:16")}
+                  aria-pressed={studio.aspect === "9:16"}
+                  title="Portrait 9:16 (Shorts / TikTok)"
+                  className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", studio.aspect === "9:16" ? "bg-blue-500/20 text-blue-300" : "text-gray-400 hover:text-white")}
+                >
+                  <Smartphone className="h-4 w-4" /> 9:16
+                </button>
+                <button
+                  onClick={() => setShowGrid((g) => !g)}
+                  aria-pressed={showGrid}
+                  className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", showGrid ? "bg-blue-500/20 text-blue-300" : "text-gray-400 hover:text-white")}
+                >
+                  <Grid3X3 className="h-4 w-4" /> Grid
+                </button>
+              </div>
             </div>
             <div
               ref={previewRef}
-              className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-lg bg-black"
-              style={{ aspectRatio: "16 / 9" }}
+              className={cn(
+                "relative mx-auto w-full overflow-hidden rounded-lg bg-black",
+                portrait ? "max-w-[280px] sm:max-w-[330px]" : "max-w-3xl",
+              )}
+              style={{ aspectRatio: portrait ? "9 / 16" : "16 / 9" }}
             >
+              {/* The video attached in the Compositor shows here too, synced to the voice. */}
+              {studio.video.url && (
+                <video
+                  ref={videoRef}
+                  src={studio.video.url}
+                  className="absolute inset-0 h-full w-full object-contain"
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                />
+              )}
               {showGrid && (
                 <div className="pointer-events-none absolute inset-0" aria-hidden="true">
                   <div className="absolute left-1/2 top-0 h-full w-px bg-white/10" />
@@ -269,7 +331,21 @@ export function SubtitleEditor() {
             </div>
 
             <div className="mt-4">
-              <AudioPlayer ref={playerRef} audioBuffer={studio.audioBuffer} onTimeUpdate={setCurrentTime} />
+              <AudioPlayer
+                ref={playerRef}
+                audioBuffer={studio.audioBuffer}
+                onTimeUpdate={(t) => {
+                  setCurrentTime(t);
+                  syncVideo(t, playerPlaying);
+                }}
+                onPlayStateChange={(playing) => {
+                  setPlayerPlaying(playing);
+                  const v = videoRef.current;
+                  if (!v) return;
+                  if (playing) void v.play().catch(() => undefined);
+                  else v.pause();
+                }}
+              />
               {!studio.audioBuffer && (
                 <p className="mt-2 text-sm text-gray-500">
                   No audio loaded. <button onClick={() => navigate("/studio")} className="text-blue-400 hover:text-blue-300">Generate audio first</button>.
