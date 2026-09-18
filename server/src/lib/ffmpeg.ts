@@ -275,7 +275,12 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
     const { resolution, format, quality, fps } = settings;
-    const scaleFilter = `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black`;
+    // FIX: Portrait 9:16 should FILL frame, not letterbox with black bars
+    // User screenshot showed landscape video centered with huge black bars top/bottom
+    // For Shorts/TikTok, we want crop-to-fill: scale to cover then crop center
+    // Old: scale=WxH:force_original_aspect_ratio=decrease,pad=WxH:(ow-iw)/2:(oh-ih)/2:color=black (letterbox)
+    // New: scale=WxH:force_original_aspect_ratio=increase,crop=WxH (fill, no black bars)
+    const scaleFilter = `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=increase,crop=${resolution.width}:${resolution.height}`;
 
     // Write the ASS file to a safe temp location.
     const assPath = path.join(path.dirname(outputPath), `${path.basename(outputPath, path.extname(outputPath))}.ass`);
