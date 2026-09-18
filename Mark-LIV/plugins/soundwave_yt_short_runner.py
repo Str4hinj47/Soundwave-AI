@@ -15,21 +15,22 @@ Export default: Portrait 9:16 720p 720x1280 MP4 H.264 Medium 60fps End-with-voic
 
 PLUGIN = {
     "name": "soundwave_yt_short_runner",
-    "description": "BEST v9 ONE-CLICK JARVIS OPTIMIZED — tries POST /api/v1/jarvis/generate-short topic Jenny minecraft_parkour 80s 9:16 720p 60fps TikTok #8B5CF6 in ONE API call so Jarvis barely uses website — fallback full workflow API direct + visible Chrome that actually downloads. Defaults now Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6 Jenny ONLY minecraft_parkour high quality blacklist NJ1VD4eCcD0+dQw4w9WgXcQ cache 80s fast reuse saves 80% time/power. VISIBLE CHROME ONLY window_manager_pro focus + mouse_master_pro easing visible + computer_control. Update: drag Mark LIV into Jarvis 54 Replace files.",
+    "description": "BEST v10 VIRAL BATCH — generate 1 from each niche — psychology facts history finance ai motivation horror — viral hooks Did you know Only 1% 3 mistakes You're doing X wrong — tries POST /api/v1/jarvis/generate-short topic Jenny minecraft_parkour 80s 9:16 720p 60fps TikTok #8B5CF6 in ONE API call so Jarvis barely uses website — fallback full workflow API direct + visible Chrome that actually downloads. Defaults now Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6 Jenny ONLY minecraft_parkour high quality blacklist NJ1VD4eCcD0+dQw4w9WgXcQ cache 80s fast reuse saves 80% time/power. VISIBLE CHROME ONLY window_manager_pro focus + mouse_master_pro easing visible + computer_control. Update: drag Mark LIV into Jarvis 54 Replace files. Batch: say generate 1 from each niche, batch viral, all niches, 7 shorts",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "Action: generate_yt_short (one-click optimized + fallback full workflow that downloads), check_site, start_site, status, resume, clear_state, open_progress, list_cache, use_cached, guide, defaults",
-                "enum": ["generate_yt_short", "check_site", "start_site", "ensure_site", "guide", "status", "resume", "clear_state", "live_updates", "open_progress", "list_cache", "use_cached", "build_cache", "pick_random", "make_short", "full_workflow", "defaults"]
+                "description": "Action: generate_yt_short (one viral short), batch_all / generate_all_niches / batch_viral / generate 1 from each niche (7 shorts one per niche), check_site, start_site, status, clear_state, open_progress, list_cache, guide, defaults, viral",
+                "enum": ["generate_yt_short", "batch_all", "generate_all_niches", "batch_viral", "generate_batch", "all_niches", "check_site", "start_site", "ensure_site", "guide", "status", "resume", "clear_state", "live_updates", "open_progress", "list_cache", "use_cached", "build_cache", "pick_random", "make_short", "full_workflow", "defaults", "viral"]
             },
-            "topic": {"type": "STRING", "description": "Topic e.g. motivational story about never giving up"},
+            "topic": {"type": "STRING", "description": "Topic e.g. psychology facts history finance ai motivational story about never giving up"},
             "voice": {"type": "STRING", "description": "Voice Jenny default en-US-JennyNeural"},
             "background_type": {"type": "STRING", "description": "ONLY minecraft_parkour high quality 1080p 4K", "enum": ["minecraft_parkour"]},
             "youtube_url": {"type": "STRING", "description": "Optional YouTube URL must be minecraft parkour high quality not blacklisted"},
             "use_cache": {"type": "BOOLEAN", "description": "Use cached 80s clips if available fast saves 80% time/power default true"},
-            "text": {"type": "STRING", "description": "Direct text instead of generating script"}
+            "text": {"type": "STRING", "description": "Direct text instead of generating script"},
+            "count": {"type": "INTEGER", "description": "For batch: number per niche, default 1"}
         },
         "required": ["action"]
     }
@@ -1085,6 +1086,175 @@ Website defaults: 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6 Je
             msg += "\nErrors: " + "; ".join(errors)
         msg += f"\n\nPaths Server {s_path} Frontend {f_path}\nWait 15s then check_site DO NOT close — v9 one-click endpoint will be at http://localhost:4000/api/v1/jarvis/generate-short"
         return msg
+
+    if action in ("batch_all", "generate_all_niches", "batch_viral", "generate_batch", "all_niches"):
+        NICHES = ["psychology", "facts", "history", "finance", "ai", "motivation", "horror"]
+        try:
+            cnt = int(parameters.get("count") or 1)
+        except:
+            cnt = 1
+        cnt = max(1, min(cnt, 3))
+        total_shorts = len(NICHES) * cnt
+        state = {
+            "topic": f"batch {total_shorts} shorts " + ",".join(NICHES),
+            "voice": voice,
+            "background_type": "minecraft_parkour",
+            "youtube_url": "",
+            "script": "",
+            "current_step": 0,
+            "current_step_name": "batch_start",
+            "status": f"Starting BATCH {total_shorts} shorts one per niche {NICHES} — VIRAL HOOKS 2026",
+            "progress": f"0/{total_shorts}",
+            "created": _now(),
+            "cache_file": "",
+            "batch": True,
+            "total": total_shorts,
+        }
+        _save_state(state)
+        try:
+            html_path = _create_visible_progress_html(state, extra_log=f"BATCH {total_shorts} — {NICHES} — count {cnt} per niche — VIRAL 2026")
+            if html_path:
+                _open_visible_tab(html_path)
+        except:
+            pass
+        front = _is_port_open("127.0.0.1", 5173, 1.5) or _is_port_open("localhost", 5173, 1.5)
+        back = _is_port_open("127.0.0.1", 4000, 1.5) or _is_port_open("localhost", 4000, 1.5)
+        if not (front and back):
+            s_path, f_path = _find_valid_paths()
+            started, errors = _start_site_powershell(s_path, f_path)
+            _live_update(player, 0, "check_site", f"BATCH Site not running Front {'OK' if front else 'NOT'} Back {'OK' if back else 'NOT'} started {started} waiting 15s", state)
+            time.sleep(15)
+        _live_update(player, 1, "batch_start", f"BATCH {total_shorts} shorts — niches {NICHES} — count per niche {cnt} — ONE-CLICK + cache 80s — VIRAL 2026 hooks Did you know Only 1% 3 mistakes", state)
+
+        results = []
+        failed = []
+        try:
+            from soundwave_viral_engine import generate_viral_script
+            has_viral = True
+        except:
+            has_viral = False
+
+        short_idx = 0
+        for niche in NICHES:
+            for rep in range(cnt):
+                short_idx += 1
+                viral_script = None
+                try:
+                    if has_viral:
+                        style = random.choice(["curiosity_gap", "listicle", "contrarian", "stakes_warning", "direct_callout", "story_cold_open"])
+                        viral_script = generate_viral_script(niche, style, seed=f"{niche}-{rep}-{int(time.time())}-{short_idx}")
+                except Exception as e:
+                    viral_script = None
+                if not viral_script:
+                    viral_script = _generate_script(f"{niche} viral fact 2026")
+                topic_for_api = f"{niche} {viral_script[:120]}" if viral_script else f"{niche} viral short"
+
+                _live_update(player, short_idx, f"batch_{niche}", f"[{short_idx}/{total_shorts}] Generating {niche} — {viral_script[:70]}... — ONE-CLICK trying...", state)
+                log(f"BATCH [{short_idx}/{total_shorts}] {niche} — {viral_script[:120]}")
+
+                job_id_oc, download_url_oc, oc_msg = _api_one_click_generate_short(topic_for_api, voice=voice, youtube_url=None, use_default_bg=True, resolution="720p")
+                downloaded_path = None
+                download_msg = ""
+                if job_id_oc and download_url_oc:
+                    ok_job, job_msg = _api_wait_job(job_id_oc, timeout=300)
+                    _live_update(player, short_idx, f"batch_{niche}_export", f"[{short_idx}/{total_shorts}] {niche} job {job_id_oc} {job_msg} downloading...", state)
+                    downloaded_path, download_msg = _api_download_job(job_id_oc, download_url=download_url_oc)
+                    if downloaded_path and Path(downloaded_path).exists() and Path(downloaded_path).stat().st_size > 500*1024:
+                        try:
+                            new_name = Path(downloaded_path).parent / f"soundwave_{niche}_{Path(downloaded_path).name}"
+                            Path(downloaded_path).rename(new_name)
+                            downloaded_path = str(new_name)
+                        except:
+                            pass
+                        ok_ver, msg_ver = _verify_download()
+                        results.append((niche, downloaded_path, viral_script, download_msg, msg_ver, job_id_oc))
+                        _live_update(player, short_idx, f"batch_{niche}_done", f"[{short_idx}/{total_shorts}] {niche} DONE {downloaded_path} {download_msg} {msg_ver}", state)
+                        continue
+                    else:
+                        log(f"BATCH {niche} one-click download failed {download_msg} — fallback full workflow")
+                else:
+                    log(f"BATCH {niche} one-click failed {oc_msg} — fallback full workflow")
+
+                try:
+                    _live_update(player, short_idx, f"batch_{niche}_tts", f"[{short_idx}/{total_shorts}] {niche} FALLBACK TTS {viral_script[:60]}...", state)
+                    audio_path, duration, cues, tts_msg = _tts_edge_with_cues(viral_script, voice=voice)
+                    if not audio_path or not Path(audio_path).exists():
+                        failed.append((niche, f"TTS failed {tts_msg}"))
+                        continue
+                    audio_file_key, upload_audio_msg = _api_upload_file(audio_path, category="audio")
+                    if not audio_file_key:
+                        failed.append((niche, f"Audio upload failed {upload_audio_msg}"))
+                        continue
+                    cached_file = None
+                    try:
+                        cp, cm, is_c = _check_cache_and_use()
+                        if is_c and cp:
+                            cached_file = cp
+                    except:
+                        pass
+                    video_file_key = None
+                    up_msg = ""
+                    if cached_file and Path(cached_file).exists():
+                        video_file_key, up_msg = _api_upload_file(cached_file, category="video")
+                    else:
+                        real_url, sm = _search_real_youtube_url("minecraft_parkour", use_cache=True)
+                        if real_url and Path(real_url).exists():
+                            video_file_key, up_msg = _api_upload_file(real_url, category="video")
+                        elif real_url:
+                            video_file_key, up_msg = _api_upload_youtube(real_url)
+                        else:
+                            failed.append((niche, "No background"))
+                            continue
+                    if not video_file_key:
+                        failed.append((niche, f"Video upload failed {up_msg}"))
+                        continue
+                    subtitle_style = {"preset":"tiktok","fontFamily":"Montserrat","fontWeight":800,"fontSize":56,"color":"#FFFFFF","backgroundColor":"#8B5CF6","backgroundOpacity":0.9,"padding":14,"borderRadius":10,"position":"center","vertical":"middle"}
+                    export_settings = {"resolution":"720p","aspect":"9:16","format":"mp4","quality":"medium","fps":60,"audioVolume":1.0,"fadeIn":0,"fadeOut":0}
+                    job_id, exp_msg = _api_export_video(video_file_key, audio_file_key, cues, subtitle_style, export_settings)
+                    if not job_id:
+                        failed.append((niche, f"Export failed {exp_msg}"))
+                        continue
+                    ok_job, job_msg = _api_wait_job(job_id, timeout=300)
+                    if not ok_job:
+                        failed.append((niche, f"Job failed {job_msg}"))
+                        continue
+                    downloaded_path, download_msg = _api_download_job(job_id)
+                    if downloaded_path and Path(downloaded_path).exists() and Path(downloaded_path).stat().st_size > 500*1024:
+                        try:
+                            new_name = Path(downloaded_path).parent / f"soundwave_{niche}_{Path(downloaded_path).name}"
+                            Path(downloaded_path).rename(new_name)
+                            downloaded_path = str(new_name)
+                        except:
+                            pass
+                        ok_ver, msg_ver = _verify_download()
+                        results.append((niche, downloaded_path, viral_script, download_msg, msg_ver, job_id))
+                        _live_update(player, short_idx, f"batch_{niche}_done", f"[{short_idx}/{total_shorts}] {niche} FALLBACK DONE {downloaded_path}", state)
+                    else:
+                        failed.append((niche, f"Download failed {download_msg}"))
+                except Exception as e:
+                    failed.append((niche, f"Exception {e}"))
+                    log(f"BATCH {niche} exception {e}")
+
+        state["status"] = f"BATCH DONE {len(results)}/{total_shorts} success"
+        _save_state(state)
+        lines = [f"=== BATCH VIRAL DONE — {len(results)}/{total_shorts} shorts ===", f"Niches: {NICHES} x{cnt} each = {total_shorts} total", f"Voice: {voice} Jenny default 9:16 720p 60fps TikTok #8B5CF6 ONLY minecraft_parkour 80s cache", "", "DOWNLOADED:"]
+        for niche, path, script, dmsg, vmsg, jid in results:
+            lines.append(f"- {niche}: {path} — {dmsg} — job {jid} — script: {script[:100]}...")
+        if failed:
+            lines.append("")
+            lines.append("FAILED:")
+            for niche, reason in failed:
+                lines.append(f"- {niche}: {reason}")
+        lines.append("")
+        lines.append(f"Cache dir: {_get_cache_dirs()[0]} — {len(_list_cached_clips()[0])} clips")
+        lines.append(f"Visible HTML: {_get_visible_html_path()} auto-refresh 2s")
+        lines.append(f"State: {STATE_FILE}")
+        lines.append("")
+        lines.append("Voice command that triggered this: 'generate 1 from each niche' → batch_all — 7 shorts psychology facts history finance ai motivation horror — viral hooks Did you know Only 1% know 3 mistakes You're doing X wrong — research 13.5M clips 2026")
+        lines.append("Other commands: batch viral, all niches, generate all niches, generate_batch")
+        lines.append("Update: drag Mark-LIV into Jarvis 54 Replace files — zip → open → locate Mark LIV folder → drag into Jarvis 54 → Replace files")
+        lines.append("DONE — BATCH VIRAL — you can say 'generate 1 from each niche' or 'batch viral' or 'all niches'")
+        return "\n".join(lines)
 
     if action in ("generate_yt_short", "make_short", "full_workflow"):
         # === BEST v9 ONE-CLICK FIRST, FALLBACK FULL WORKFLOW ===

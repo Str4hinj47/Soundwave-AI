@@ -33,3 +33,4 @@ coverage/
 voiceclone/profiles/
 voiceclone/.venv/
 voiceclone/__pycache__/
+__pycache__/
