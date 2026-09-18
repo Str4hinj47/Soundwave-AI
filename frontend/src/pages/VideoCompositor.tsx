@@ -55,7 +55,8 @@ export function VideoCompositor() {
   const navigate = useNavigate();
   const studio = useStudio();
   const { user } = useAuth();
-  const plan: Plan = (user?.plan as Plan) ?? "FREE";
+  // NO LOGIN MODE — default to ENTERPRISE so no watermark, optimized for Jarvis
+  const plan: Plan = (user?.plan as Plan) ?? "ENTERPRISE";
   const planDef = PLANS[plan];
 
   const [videoUrl, setVideoUrl] = useState<string | null>(studio.video.url);
@@ -73,11 +74,12 @@ export function VideoCompositor() {
   const [fadeOut, setFadeOut] = useState(0);
   const [zoom, setZoom] = useState(1);
 
-  const [resolution, setResolution] = useState<Resolution>(planDef.maxResolution as Resolution);
-  const [aspect, setAspect] = useState<Aspect>("16:9");
+  // OPTIMIZED FOR JARVIS: Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6
+  const [resolution, setResolution] = useState<Resolution>("720p");
+  const [aspect, setAspect] = useState<Aspect>("9:16");
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
-  const [fps, setFps] = useState(30);
+  const [fps, setFps] = useState(60);
 
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);

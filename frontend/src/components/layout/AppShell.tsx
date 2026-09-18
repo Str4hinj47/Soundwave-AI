@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
+  Bot,
   ChevronDown,
   CircleUserRound,
   CreditCard,
@@ -35,6 +36,7 @@ const mainNav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, end: true },
   { to: "/projects", label: "My Projects", icon: <FolderKanban className="h-5 w-5" /> },
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-5 w-5" /> },
+  { to: "/jarvis", label: "JARVIS Expert", icon: <Bot className="h-5 w-5" /> },
   { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-5 w-5" /> },
 ];
 
@@ -50,7 +52,9 @@ const studioNav: { to: string; label: string; icon: ReactNode; sub: { to: string
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, signOut } = useAuth();
+  const auth = useAuth();
+  const user = auth.user;
+  const signOut = auth.signOut;
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -64,8 +68,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const studioActive = location.pathname.startsWith("/studio");
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
+    try {
+      await signOut();
+    } catch {}
+    navigate("/studio/video");
     toast.info("Signed out", "You have been signed out of Soundwave AI.");
   };
 
@@ -158,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : (
           <div className="flex items-center gap-2 rounded-card border border-gray-800 bg-gray-900/60 px-3 py-2.5">
             <span className="h-2 w-2 rounded-full bg-success" />
-            <span className="text-sm text-gray-300">{user?.plan} plan</span>
+            <span className="text-sm text-gray-300">{user?.plan ?? "ENTERPRISE"} plan — no login</span>
           </div>
         )}
       </div>
