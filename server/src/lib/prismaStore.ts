@@ -143,8 +143,8 @@ export class PrismaStore implements DataStore {
         voiceId: p.voiceId,
         voiceSettings: p.voiceSettings as object,
         characterCount: p.characterCount,
-        subtitleData: p.subtitleData == null ? undefined : (p.subtitleData as Prisma.InputJsonValue),
-        subtitleStyle: p.subtitleStyle == null ? undefined : (p.subtitleStyle as Prisma.InputJsonValue),
+        subtitleData: p.subtitleData == null ? undefined : (p.subtitleData as any),
+        subtitleStyle: p.subtitleStyle == null ? undefined : (p.subtitleStyle as any),
         videoBackgroundUrl: p.videoBackgroundUrl,
         audioUrl: p.audioUrl,
         exportedVideoUrl: p.exportedVideoUrl,
@@ -175,10 +175,10 @@ export class PrismaStore implements DataStore {
         ...(patch.voiceId !== undefined ? { voiceId: patch.voiceId } : {}),
         ...(patch.voiceSettings !== undefined ? { voiceSettings: patch.voiceSettings as object } : {}),
         ...(patch.subtitleData !== undefined
-          ? { subtitleData: patch.subtitleData === null ? Prisma.JsonNull : (patch.subtitleData as Prisma.InputJsonValue) }
+          ? { subtitleData: patch.subtitleData === null ? null : (patch.subtitleData as any) }
           : {}),
         ...(patch.subtitleStyle !== undefined
-          ? { subtitleStyle: patch.subtitleStyle === null ? Prisma.JsonNull : (patch.subtitleStyle as Prisma.InputJsonValue) }
+          ? { subtitleStyle: patch.subtitleStyle === null ? null : (patch.subtitleStyle as any) }
           : {}),
         ...(patch.videoBackgroundUrl !== undefined ? { videoBackgroundUrl: patch.videoBackgroundUrl } : {}),
         ...(patch.audioUrl !== undefined ? { audioUrl: patch.audioUrl } : {}),
@@ -225,7 +225,7 @@ export class PrismaStore implements DataStore {
       orderBy: { createdAt: "desc" },
       take: limit,
     });
-    return rows.map((r) => ({
+    return rows.map((r: any) => ({
       id: r.id,
       userId: r.userId,
       characterCount: r.characterCount,
@@ -300,7 +300,7 @@ export class PrismaStore implements DataStore {
   }
   async listApiKeys(userId: string): Promise<StoredApiKey[]> {
     const rows = await this.prisma.apiKey.findMany({ where: { userId, revokedAt: null } });
-    return rows.map((r) => ({ ...mapApiKey(r), prefix: r.keyHash.slice(0, 8) }));
+    return rows.map((r: any) => ({ ...mapApiKey(r), prefix: r.keyHash.slice(0, 8) }));
   }
   async findApiKeyByHash(hash: string): Promise<StoredApiKey | null> {
     const k = await this.prisma.apiKey.findFirst({ where: { keyHash: hash, revokedAt: null } });

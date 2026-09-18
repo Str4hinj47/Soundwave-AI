@@ -20,44 +20,44 @@ export interface PlanDefinition {
 export const PLANS: Record<Plan, PlanDefinition> = {
   FREE: {
     id: "FREE",
-    name: "Enterprise",
+    name: "Free",
     monthlyPrice: 0,
     annualPricePerMonth: 0,
-    characterLimit: 2_000_000,
-    maxVideoMb: 2048,
-    exportsPerHour: 1000,
-    maxResolution: "4K",
-    watermark: false,
-    cloudSave: true,
-    maxProjects: Infinity,
-    subtitleFonts: 20,
-    fullStyling: true,
-    apiAccess: true,
+    characterLimit: 10_000,
+    maxVideoMb: 100,
+    exportsPerHour: 2,
+    maxResolution: "720p",
+    watermark: true,
+    cloudSave: false,
+    maxProjects: 3,
+    subtitleFonts: 3,
+    fullStyling: false,
+    apiAccess: false,
   },
   PRO: {
     id: "PRO",
-    name: "Enterprise",
-    monthlyPrice: 0,
-    annualPricePerMonth: 0,
-    characterLimit: 2_000_000,
-    maxVideoMb: 2048,
-    exportsPerHour: 1000,
-    maxResolution: "4K",
+    name: "Pro",
+    monthlyPrice: 12,
+    annualPricePerMonth: 9.6,
+    characterLimit: 200_000,
+    maxVideoMb: 500,
+    exportsPerHour: 20,
+    maxResolution: "1080p",
     watermark: false,
     cloudSave: true,
-    maxProjects: Infinity,
+    maxProjects: 50,
     subtitleFonts: 20,
     fullStyling: true,
-    apiAccess: true,
+    apiAccess: false,
   },
   ENTERPRISE: {
     id: "ENTERPRISE",
     name: "Enterprise",
-    monthlyPrice: 0,
-    annualPricePerMonth: 0,
+    monthlyPrice: 39,
+    annualPricePerMonth: 31.2,
     characterLimit: 2_000_000,
     maxVideoMb: 2048,
-    exportsPerHour: 1000,
+    exportsPerHour: 100,
     maxResolution: "4K",
     watermark: false,
     cloudSave: true,
@@ -69,8 +69,7 @@ export const PLANS: Record<Plan, PlanDefinition> = {
 };
 
 export function getPlan(plan: Plan): PlanDefinition {
-  // NO LIMITS — always Enterprise, no watermark, unlimited
-  return PLANS.ENTERPRISE;
+  return PLANS[plan] ?? PLANS.FREE;
 }
 
 export const RESOLUTIONS = {
@@ -89,8 +88,12 @@ export function dimensionsFor(res: ResolutionKey, aspect: AspectRatio = "16:9"):
 }
 
 export function resolutionAllowed(plan: Plan, res: ResolutionKey): boolean {
-  // NO LIMITS — all resolutions allowed
-  return true;
+  const allowed = {
+    FREE: ["720p"],
+    PRO: ["720p", "1080p"],
+    ENTERPRISE: ["720p", "1080p", "1440p", "4K"],
+  }[plan] ?? ["720p"];
+  return allowed.includes(res);
 }
 
 export function nextMonthlyReset(): Date {

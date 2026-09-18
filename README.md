@@ -14,21 +14,28 @@ and export finished MP4/WebM with FFmpeg.
 | Layer | Stack |
 | --- | --- |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
+| Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
 | TTS | Server-side **Microsoft Neural voices** via `node-edge-tts` (24 kHz mono MP3 + word timings), offline formant fallback |
 | Backend | Express 5 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
 | Media | FFmpeg (`libx264`/`libvpx-vp9`, `libass` subtitles + ASS watermark, volume/fades, media probing) |
 
 ```
 soundwave-ai/
+├── soundwave-agent/     # Autonomous Desktop Shorts Agent & 2026 Viral Engine
+│   ├── viral_engine.py  # 7 High-performing niches & 6 viral hook frameworks
+│   ├── short_runner.py  # 1-Click & batch vertical video pipeline orchestrator
+│   ├── hud.py           # Futuristic acoustic visualizer HUD (no weird 3D avatar)
+│   ├── cache_manager.py # 80s Minecraft parkour gameplay chunk caching
+│   ├── main.py          # Unified CLI & GUI desktop launcher
+│   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA
-│   ├── src/pages/       # Landing, Pricing, auth, Dashboard, Studio,
-│   │                    #   SubtitleEditor, VideoCompositor, Projects, Settings
+│   ├── src/pages/       # AgentHub, Studio, SubtitleEditor, VideoCompositor, Projects, ...
 │   ├── src/components/  # ui/ primitives, layout/, VoicePicker, Waveform, …
 │   ├── src/hooks/       # useTTS (edge-tts API call + offline fallback)
 │   ├── src/lib/         # audio, ttsEngine, voices, subtitlePresets, idb, api, …
 │   └── src/store/       # Zustand: auth, studio, toast
 ├── server/              # Express API
-│   ├── src/routes/      # auth, voices, tts, projects, upload, export, user, billing, apiKeys
+│   ├── src/routes/      # agent, auth, voices, tts, projects, upload, export, billing, ...
 │   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytdlp, plans, security
 │   ├── prisma/schema.prisma
 │   └── scripts/generate-samples.ts
@@ -123,6 +130,11 @@ cd frontend && npm run build     # production build
 | POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
 | GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |
 | GET | `/api/v1/export/jobs/:id/download` | ✓ | download finished export |
+| POST | `/api/v1/agent/generate-short` | — | 1-click viral short generation (script + Jenny + TikTok + gameplay) |
+| GET | `/api/v1/agent/defaults` | — | default 9:16 vertical short configuration & presets |
+| GET | `/api/v1/agent/status` | — | agent status, binary availability & background cache size |
+| GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
+| POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
 | GET/PATCH | `/api/v1/user/me` | ✓ | profile + password change |
 | GET | `/api/v1/user/usage` | ✓ | quota snapshot |
 | DELETE | `/api/v1/user/account` | ✓ | account deletion (30-day window) |

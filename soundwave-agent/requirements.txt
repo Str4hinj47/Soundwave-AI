@@ -1,0 +1,4 @@
+# Soundwave AI Agent Requirements
+# Standard library is primarily used (urllib, json, subprocess, math, threading).
+# Optional dependencies:
+requests>=2.31.0

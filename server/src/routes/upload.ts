@@ -111,7 +111,7 @@ router.post("/youtube", optionalAuth, uploadLimiter, validate({ body: youtubeSch
     const meta = await fetchMetadata(target).catch((e: Error) => {
       throw new ApiError(502, "YOUTUBE_METADATA_FAILED", e.message);
     });
-    // NO LIMITS — ignore duration limit for Jarvis
+    // NO LIMITS — ignore duration limit for local agent automation
     const maxBytes = 2048 * 1024 * 1024;
     const uuid = crypto.randomUUID();
     const result = await downloadVideo(target, uuid, maxBytes).catch((e: Error & { status?: number; code?: string }) => {

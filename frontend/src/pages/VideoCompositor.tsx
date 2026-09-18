@@ -55,7 +55,7 @@ export function VideoCompositor() {
   const navigate = useNavigate();
   const studio = useStudio();
   const { user } = useAuth();
-  // NO LOGIN MODE — default to ENTERPRISE so no watermark, optimized for Jarvis
+  // NO LOGIN MODE — default to ENTERPRISE so no watermark, optimized for Soundwave Agent
   const plan: Plan = (user?.plan as Plan) ?? "ENTERPRISE";
   const planDef = PLANS[plan];
 
@@ -74,7 +74,7 @@ export function VideoCompositor() {
   const [fadeOut, setFadeOut] = useState(0);
   const [zoom, setZoom] = useState(1);
 
-  // OPTIMIZED FOR JARVIS: Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6
+  // OPTIMIZED DEFAULTS: Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6
   const [resolution, setResolution] = useState<Resolution>("720p");
   const [aspect, setAspect] = useState<Aspect>("9:16");
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");

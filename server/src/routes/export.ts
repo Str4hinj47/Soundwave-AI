@@ -102,7 +102,7 @@ router.post("/video", optionalAuth, validate({ body: exportSchema }), async (req
       const audioProbe = await probeMedia(audioPath).catch(() => null);
       const subtitleEnd = body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0);
       const seconds = Math.min(3600, Math.max(1, Math.ceil((body.exportSettings.videoEnd ?? audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
-      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user?.id ?? "jarvis-local");
+      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user?.id ?? "soundwave-local");
     }
 
     const audioProbe = await probeMedia(audioPath).catch(() => null);
@@ -125,7 +125,7 @@ router.post("/video", optionalAuth, validate({ body: exportSchema }), async (req
 
     const job = await store.createJob({
       projectId: body.projectId,
-      userId: req.user?.id ?? "jarvis-local",
+      userId: req.user?.id ?? "soundwave-local",
       status: "QUEUED",
       progress: 0,
       settings: { ...settings, subtitleCount: body.subtitleData.length },
@@ -224,36 +224,40 @@ function emitJob(jobId: string, payload: Record<string, unknown>): void {
   jobEvents.emit(jobId, payload);
 }
 
+function isLocalAutomationUser(uid?: string | null): boolean {
+  if (!uid) return false;
+  return uid === "agent-local" || uid === "soundwave-local" || uid === "soundwave-agent" || uid === "jarvis-local";
+}
+
 // ── Job status ──────────────────────────────────────────────────────────────
-// Allow jarvis-local jobs (one-click endpoint) without auth — otherwise require auth
+// Allow local automation jobs (one-click endpoint) without auth — otherwise require auth
 router.get("/jobs/:jobId", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
     const jobId = req.params.jobId ?? "";
-    // Try jarvis-local first (one-click), then user-specific
-    let job = await store.getJob(jobId, "jarvis-local");
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
     if (!job && req.user) {
       job = await store.getJob(jobId, req.user.id);
     }
-    // Fallback: try to find job without user check for jarvis-local (some stores ignore userId)
+    // Fallback: try to find job without user check
     if (!job) {
-      // For JSON store, getJob with any user may still return if we try direct
       try {
         const all = await (store as any).getJobById?.(jobId);
         if (all) job = all;
       } catch {}
     }
     if (!job) {
-      // Last attempt: try with provided user or jarvis-local
-      const uid = req.user?.id ?? "jarvis-local";
+      const uid = req.user?.id ?? "agent-local";
       job = await store.getJob(jobId, uid);
     }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
-    // If job belongs to someone else and request is not that user and not jarvis-local, block
-    if (job.userId !== "jarvis-local" && req.user && job.userId !== req.user.id) {
+    // If job belongs to someone else and request is not that user and not a local job, block
+    if (!isLocalAutomationUser(job.userId) && req.user && job.userId !== req.user.id) {
       throw new ApiError(403, "FORBIDDEN", "Not your export job.");
     }
-    // Allow jarvis-local jobs even without auth
     res.json({
       job: {
         id: job.id,
@@ -276,7 +280,10 @@ router.get("/jobs/:jobId/events", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
     const jobId = req.params.jobId ?? "";
-    let job = await store.getJob(jobId, "jarvis-local");
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
     if (!job && req.user) job = await store.getJob(jobId, req.user.id);
     if (!job) {
       try {
@@ -285,7 +292,7 @@ router.get("/jobs/:jobId/events", optionalAuth, async (req, res, next) => {
       } catch {}
     }
     if (!job) {
-      const uid = req.user?.id ?? "jarvis-local";
+      const uid = req.user?.id ?? "agent-local";
       job = await store.getJob(jobId, uid);
     }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
@@ -316,12 +323,15 @@ router.get("/jobs/:jobId/events", optionalAuth, async (req, res, next) => {
 });
 
 // ── Download ────────────────────────────────────────────────────────────────
-// Allow jarvis-local (one-click) downloads without auth cookie — plugin uses direct API without JWT
+// Allow local automation downloads without auth cookie
 router.get("/jobs/:jobId/download", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
     const jobId = req.params.jobId ?? "";
-    let job = await store.getJob(jobId, "jarvis-local");
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
     if (!job && req.user) job = await store.getJob(jobId, req.user.id);
     if (!job) {
       try {
@@ -330,7 +340,7 @@ router.get("/jobs/:jobId/download", optionalAuth, async (req, res, next) => {
       } catch {}
     }
     if (!job) {
-      const uid = req.user?.id ?? "jarvis-local";
+      const uid = req.user?.id ?? "agent-local";
       job = await store.getJob(jobId, uid);
     }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");

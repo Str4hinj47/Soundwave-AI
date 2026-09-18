@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ToastHost } from "./components/ui/ToastHost";
-import { Logo } from "./components/Logo";
 import { AppShell } from "./components/layout/AppShell";
 import { Dashboard } from "./pages/Dashboard";
 import { Studio } from "./pages/Studio";
@@ -11,6 +10,7 @@ import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
+import { AgentHub } from "./pages/AgentHub";
 import { NotFound } from "./pages/NotFound";
 
 function ScrollToTop() {
@@ -21,28 +21,14 @@ function ScrollToTop() {
   return null;
 }
 
-function FullPageLoader() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-navy">
-      <div className="flex flex-col items-center gap-4">
-        <Logo />
-        <div className="h-1 w-40 overflow-hidden rounded-full bg-gray-800">
-          <div className="h-full w-1/3 animate-[shimmer_1.4s_linear_infinite] rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// NO AUTH VERSION — optimized for Jarvis, no login required
-// All routes are public, root redirects to video editor
+// Soundwave AI Suite — Autonomous Shorts Agent + Voice Studio
 export default function App() {
   return (
     <>
       <ScrollToTop />
       <ToastHost />
       <Routes>
-        {/* Root -> direct to video editor (your requested editing part) */}
+        {/* Root -> direct to video compositor */}
         <Route path="/" element={<Navigate to="/studio/video" replace />} />
         <Route path="/signin" element={<Navigate to="/studio/video" replace />} />
         <Route path="/signup" element={<Navigate to="/studio/video" replace />} />
@@ -52,7 +38,19 @@ export default function App() {
         <Route path="/verify-email" element={<Navigate to="/studio/video" replace />} />
         <Route path="/oauth/callback" element={<Navigate to="/studio/video" replace />} />
 
-        {/* All editing routes — NO AUTH, inside AppShell */}
+        {/* Backward-compatible alias for /jarvis -> /agent */}
+        <Route path="/jarvis" element={<Navigate to="/agent" replace />} />
+        <Route path="/automation" element={<Navigate to="/agent" replace />} />
+
+        {/* Studio and Agent routes inside AppShell */}
+        <Route
+          path="/agent"
+          element={
+            <AppShell>
+              <AgentHub />
+            </AppShell>
+          }
+        />
         <Route
           path="/dashboard"
           element={
