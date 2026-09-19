@@ -209,19 +209,73 @@ export function AgentHub() {
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Speech Output Helper
-  const speakText = (text: string) => {
-    if (!voiceFeedback || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  // Speech Output Helper (Neural Edge TTS 24kHz + Natural Speech Fallback)
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const fallbackNaturalBrowser = (cleanText: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
       window.speechSynthesis.cancel();
-      const clean = text.replace(/[*_#`]/g, "").slice(0, 220);
-      const utter = new SpeechSynthesisUtterance(clean);
-      utter.rate = 1.05;
-      utter.pitch = 1.0;
+      const utter = new SpeechSynthesisUtterance(cleanText);
+      const voices = window.speechSynthesis.getVoices();
+      // Prioritize natural neural browser voices over legacy robotic SAPI
+      const naturalVoice = voices.find(
+        (v) =>
+          (v.name.includes("Natural") ||
+            v.name.includes("Neural") ||
+            v.name.includes("Online") ||
+            v.name.includes("Guy") ||
+            v.name.includes("Google") ||
+            v.name.includes("Samantha")) &&
+          v.lang.startsWith("en")
+      );
+      if (naturalVoice) {
+        utter.voice = naturalVoice;
+      }
+      utter.rate = 1.02;
+      utter.pitch = 0.98;
       utter.onstart = () => setAssistantState("SPEAKING");
       utter.onend = () => setAssistantState("STANDBY");
       window.speechSynthesis.speak(utter);
     } catch {}
+  };
+
+  const speakText = (text: string) => {
+    if (!voiceFeedback || typeof window === "undefined") return;
+    const clean = text.replace(/[*_#`\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 320);
+    if (!clean) return;
+
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+
+    setAssistantState("THINKING");
+
+    fetch("/api/v1/agent/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: clean,
+        voice: selectedVoice || "en-US-GuyNeural",
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.audioBase64) {
+          const snd = new Audio(`data:${data.mimeType || "audio/mpeg"};base64,${data.audioBase64}`);
+          activeAudioRef.current = snd;
+          snd.onplay = () => setAssistantState("SPEAKING");
+          snd.onended = () => setAssistantState("STANDBY");
+          snd.onerror = () => fallbackNaturalBrowser(clean);
+          snd.play().catch(() => fallbackNaturalBrowser(clean));
+        } else {
+          fallbackNaturalBrowser(clean);
+        }
+      })
+      .catch(() => {
+        fallbackNaturalBrowser(clean);
+      });
   };
 
   // Scroll to bottom of conversation

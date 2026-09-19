@@ -10,11 +10,44 @@ import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
+import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 
 const router = Router();
 
 // Re-export / mount agentShort routes under /api/v1/agent
 router.use("/", agentShortRouter);
+
+// ── POST /speak — High-Fidelity 24kHz Neural Edge TTS Stream ────────────────
+const speakSchema = z.object({
+  text: z.string().min(1).max(3000),
+  voice: z.string().optional().default("en-US-GuyNeural"),
+});
+
+router.post("/speak", optionalAuth, validate({ body: speakSchema }), async (req, res, next) => {
+  try {
+    const { text, voice } = req.body as z.infer<typeof speakSchema>;
+    try {
+      const result = await synthesizeEdgeTTS({
+        text,
+        voice: voice || "en-US-GuyNeural",
+      });
+      return res.json({
+        success: true,
+        audioBase64: result.audioBase64,
+        mimeType: result.mimeType,
+        duration: result.duration,
+      });
+    } catch (edgeError) {
+      return res.json({
+        success: false,
+        error: (edgeError as Error).message,
+        fallbackToBrowser: true,
+      });
+    }
+  } catch (e) {
+    next(e);
+  }
+});
 
 // ── POST /chat — Intelligent Conversational Agent & Tool Dispatcher ──────────
 const chatSchema = z
