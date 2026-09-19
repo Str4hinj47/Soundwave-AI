@@ -32,8 +32,8 @@ TOOL = {
 }
 
 def handler(parameters: Dict[str, Any], context: Any = None) -> str:
-    op = (parameters.get("operation") or "list").lower()
-    raw_path = parameters.get("path", "")
+    op = (parameters.get("operation") or parameters.get("action") or "list").lower()
+    raw_path = parameters.get("path") or parameters.get("file_path") or "."
     content = parameters.get("content", "")
 
     p = Path(os.path.expanduser(raw_path)).resolve()
@@ -68,5 +68,18 @@ def handler(parameters: Dict[str, Any], context: Any = None) -> str:
             return f"Wrote {len(content)} characters to {p}."
         except Exception as e:
             return f"Failed to write file: {e}"
+
+    if op in ["delete", "remove"]:
+        try:
+            if not p.exists():
+                return f"Path does not exist: {p}"
+            if p.is_file():
+                p.unlink()
+                return f"Deleted file: {p.name}"
+            elif p.is_dir():
+                p.rmdir()
+                return f"Removed directory: {p.name}"
+        except Exception as e:
+            return f"Failed to delete path: {e}"
 
     return f"Unknown operation '{op}'."

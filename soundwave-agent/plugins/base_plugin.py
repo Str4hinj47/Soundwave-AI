@@ -22,3 +22,5 @@ class SoundwavePlugin(ABC):
     def execute(self, parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
         """Run the plugin action with given parameters and return a status string."""
         pass
+
+BasePlugin = SoundwavePlugin

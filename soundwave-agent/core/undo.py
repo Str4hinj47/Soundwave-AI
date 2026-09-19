@@ -3,7 +3,7 @@ Soundwave AI — Undo Stack
 Tracks reversible actions and provides clean rollback mechanisms.
 """
 
-from typing import Callable, Any, List, Optional, Tuple
+from typing import Callable, Any, List, Optional, Tuple, Dict
 
 class UndoManager:
     def __init__(self, max_history: int = 50):
@@ -15,6 +15,18 @@ class UndoManager:
         if len(self.stack) >= self.max_history:
             self.stack.pop(0)
         self.stack.append((description, undo_fn, context))
+
+    def push_action(self, action_name: str, payload: Any = None, undo_fn: Optional[Callable[..., Any]] = None):
+        """Convenience method to push an action into the history."""
+        fn = undo_fn if undo_fn is not None else (lambda ctx: True)
+        self.register(action_name, fn, payload)
+
+    def pop_action(self) -> Optional[Dict[str, Any]]:
+        """Pop the most recent action representation."""
+        if not self.stack:
+            return None
+        desc, fn, ctx = self.stack.pop()
+        return {"action": desc, "context": ctx}
 
     def can_undo(self) -> bool:
         return len(self.stack) > 0

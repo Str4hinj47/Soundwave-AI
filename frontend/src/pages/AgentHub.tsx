@@ -281,6 +281,18 @@ export function AgentHub() {
         }
       } else if (actionName === "reminder") {
         output = `Scheduled timer reminder set for ${params.seconds || 60}s: '${params.message || "Alert"}'`;
+      } else if (actionName === "clipboard") {
+        output = `Clipboard buffer: [142 characters captured] "Soundwave Autonomous Shorts Engine v2.0"`;
+      } else if (actionName === "youtube_video") {
+        output = `Opening YouTube stream player for '${params.query || "minecraft parkour 4k"}'`;
+      } else if (actionName === "proactive") {
+        output = `Proactive Briefing: CPU load normal (18%), 0 alerts, 7 viral niches primed for generation.`;
+      } else if (actionName === "code_helper") {
+        output = `Sandbox Output: Soundwave Sandbox: Python 3.11 execution OK (Exit code 0).`;
+      } else if (actionName === "browser_control") {
+        output = `Navigated default browser to ${params.url || "https://google.com"}.`;
+      } else if (actionName === "file_processor") {
+        output = `Document Inspector: Analyzed 251 lines, 1,420 words across local repository.`;
       } else {
         output = `Action '${actionName}' executed successfully.`;
       }
@@ -321,12 +333,26 @@ export function AgentHub() {
       triggerAction("open_app", { app_name: app });
     } else if (qLower.includes("weather")) {
       triggerAction("weather_report", { city: "Belgrade" });
-    } else if (qLower.includes("stats") || qLower.includes("cpu") || qLower.includes("ram")) {
+    } else if (qLower.includes("stats") || qLower.includes("cpu") || qLower.includes("ram") || qLower.includes("vitals")) {
       triggerAction("system_monitor");
-    } else if (qLower.includes("screen") || qLower.includes("see") || qLower.includes("look")) {
+    } else if (qLower.includes("screen") || qLower.includes("see") || qLower.includes("look") || qLower.includes("snapshot")) {
       triggerAction("screen_processor", { action: "capture" });
-    } else if (qLower.includes("mute")) {
+    } else if (qLower.includes("mute") || qLower.includes("volume")) {
       triggerAction("computer_settings", { setting: "mute" });
+    } else if (qLower.includes("youtube") || qLower.includes("play")) {
+      triggerAction("youtube_video", { query: query.replace(/youtube|play/gi, "").trim() || "minecraft" });
+    } else if (qLower.includes("proactive") || qLower.includes("briefing") || qLower.includes("agenda")) {
+      triggerAction("proactive");
+    } else if (qLower.includes("code") || qLower.includes("python")) {
+      triggerAction("code_helper", { code: query });
+    } else if (qLower.includes("clipboard") || qLower.includes("copy") || qLower.includes("paste")) {
+      triggerAction("clipboard", { operation: "get" });
+    } else if (qLower.includes("remind") || qLower.includes("timer")) {
+      triggerAction("reminder", { message: query, seconds: 60 });
+    } else if (qLower.includes("browse") || qLower.includes("navigate") || qLower.includes("http")) {
+      triggerAction("browser_control", { action: "open", url: "https://google.com" });
+    } else if (qLower.includes("file") || qLower.includes("document")) {
+      triggerAction("file_processor", { path: "." });
     } else {
       triggerAction("web_search", { query });
     }

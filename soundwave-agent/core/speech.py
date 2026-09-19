@@ -53,3 +53,11 @@ def _speak_worker(text: str, voice: str):
 
     # Fallback to printing
     print(f"\n[Soundwave Speaks]: {clean_text}\n")
+
+class SpeechEngine:
+    @staticmethod
+    def speak(text: str, voice: str = "en-US-JennyNeural") -> bool:
+        speak(text, voice)
+        return True
+
+speech_engine = SpeechEngine()

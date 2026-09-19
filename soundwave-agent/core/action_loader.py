@@ -46,6 +46,18 @@ class ActionRegistry:
         """Return all declared tools for LLM function calling schema."""
         return list(self.actions.values())
 
+    def list_actions(self) -> List[str]:
+        """Return list of all registered action names."""
+        return list(self.actions.keys())
+
+    def has_action(self, action_name: str) -> bool:
+        """Check if an action is registered."""
+        return action_name in self.actions
+
+    def get_action(self, action_name: str) -> Optional[Dict[str, Any]]:
+        """Get action declaration details."""
+        return self.actions.get(action_name)
+
     def execute(self, action_name: str, parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Any:
         """Execute an action by name."""
         handler = self.handlers.get(action_name)

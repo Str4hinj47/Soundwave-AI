@@ -37,4 +37,22 @@ class ConfirmationGate:
     def cancel(self, token: str) -> bool:
         return self.pending.pop(token.strip().upper(), None) is not None
 
+    def has_pending(self) -> bool:
+        """Check if any confirmations are awaiting user verification."""
+        # Clean expired
+        now = time.time()
+        expired = [t for t, item in self.pending.items() if now - item["created_at"] > self.timeout]
+        for t in expired:
+            self.pending.pop(t, None)
+        return len(self.pending) > 0
+
+    def request_confirmation(self, action_name: str, details: str, payload: Any = None) -> str:
+        """Convenience alias for request."""
+        return self.request(action_name, details, payload)
+
+    def confirm(self, token: str) -> bool:
+        """Verify and confirm a token."""
+        return self.verify(token) is not None
+
 confirmation_gate = ConfirmationGate()
+confirm_manager = confirmation_gate

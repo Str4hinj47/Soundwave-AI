@@ -68,4 +68,21 @@ class ConfigManager:
         self.config["assistant"]["name"] = name.strip()
         self.save()
 
+    def set(self, key: str, value: Any):
+        """Generic config setter."""
+        if key == "assistant_name":
+            self.set_assistant_name(str(value))
+        elif key in self.config:
+            self.config[key] = value
+            self.save()
+        else:
+            self.config[key] = value
+            self.save()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Generic config getter."""
+        if key == "assistant_name":
+            return self.get_assistant_name()
+        return self.config.get(key, default)
+
 config_manager = ConfigManager()

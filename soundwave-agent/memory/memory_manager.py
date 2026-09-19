@@ -47,6 +47,20 @@ class MemoryManager:
         except Exception as e:
             print(f"[Memory] Failed to save memory: {e}")
 
+    def remember(self, key: str, value: Any):
+        """Store a key-value fact or preference."""
+        self.data["preferences"][key] = value
+        self.add_fact(f"{key}: {value}", category="preference")
+        self.save()
+
+    def recall(self, key: str) -> Optional[Any]:
+        """Recall a stored key-value preference."""
+        return self.data["preferences"].get(key)
+
+    def dump(self) -> str:
+        """Dump memory representation as formatted JSON."""
+        return json.dumps(self.data, indent=2)
+
     def add_fact(self, fact: str, category: str = "general"):
         """Store a new fact or preference about the user."""
         self.data["facts"].append({

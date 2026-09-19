@@ -69,4 +69,15 @@ class WakeWordEngine:
                 if idle >= self.auto_sleep_seconds:
                     self.sleep()
 
+    def check_text(self, text: str) -> bool:
+        """Check if incoming transcription text contains a wake word trigger."""
+        t = text.lower().strip()
+        triggers = ["soundwave", "jarvis", "computer", self.wake_word.lower()]
+        for trig in triggers:
+            if trig in t:
+                self.wake()
+                return True
+        return False
+
 wake_engine = WakeWordEngine()
+wake_detector = wake_engine

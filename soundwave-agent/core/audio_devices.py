@@ -59,3 +59,14 @@ def find_device_by_name(name: str, kind: str = "input") -> Optional[int]:
             return d["id"]
 
     return target_list[0]["id"] if target_list else None
+
+class AudioManager:
+    @staticmethod
+    def list_audio_devices() -> Dict[str, List[Dict[str, Any]]]:
+        return get_audio_devices()
+
+    @staticmethod
+    def resolve_device(name: str, kind: str = "input") -> Optional[int]:
+        return find_device_by_name(name, kind)
+
+audio_manager = AudioManager()

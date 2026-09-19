@@ -23,11 +23,25 @@ TOOL = {
 }
 
 def handler(parameters: Dict[str, Any], context: Any = None) -> str:
-    raw_path = parameters.get("file_path", "")
+    raw_path = parameters.get("file_path") or parameters.get("path") or ""
+    if not raw_path:
+        return "Please specify a file or directory path to inspect."
+
     p = Path(os.path.expanduser(raw_path)).resolve()
 
-    if not p.exists() or not p.is_file():
-        return f"File does not exist: {p}"
+    if not p.exists():
+        return f"Path does not exist: {p}"
+
+    if p.is_dir():
+        items = list(p.iterdir())
+        files = [i for i in items if i.is_file()]
+        dirs = [i for i in items if i.is_dir()]
+        return (
+            f"Directory Inspection for '{p.name}':\n"
+            f"- Subdirectories: {len(dirs)}\n"
+            f"- Files: {len(files)}\n"
+            f"- Sample entries: {', '.join([i.name for i in items[:8]])}"
+        )
 
     try:
         size_kb = p.stat().st_size / 1024

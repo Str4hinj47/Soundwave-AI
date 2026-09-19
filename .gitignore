@@ -16,6 +16,8 @@ server/dist/
 server/data/
 server/uploads/
 server/generated/
+soundwave_live_progress.html
+background_cache/
 
 # logs
 *.log
