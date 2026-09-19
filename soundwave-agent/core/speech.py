@@ -62,14 +62,29 @@ def _try_soundwave_server_tts(text: str, voice: str) -> bool:
     return False
 
 def _try_python_edge_tts(text: str, voice: str) -> bool:
-    """Use the edge-tts command-line tool if available on the user's PATH."""
+    """Use the Python edge-tts package directly (auto-installing if missing)."""
     try:
+        import edge_tts
+    except ImportError:
+        try:
+            # Silently auto-install edge-tts in user's Python environment
+            subprocess.run([sys.executable, "-m", "pip", "install", "edge-tts", "--quiet"], capture_output=True, timeout=25)
+            import edge_tts
+        except Exception:
+            return False
+
+    try:
+        import asyncio
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
             temp_mp3 = tf.name
 
-        cmd = ["edge-tts", "--voice", voice or "en-US-GuyNeural", "--text", text, "--write-media", temp_mp3]
-        res = subprocess.run(cmd, capture_output=True, timeout=12)
-        if res.returncode == 0 and os.path.exists(temp_mp3) and os.path.getsize(temp_mp3) > 500:
+        async def _synth():
+            communicate = edge_tts.Communicate(text, voice or "en-US-GuyNeural")
+            await communicate.save(temp_mp3)
+
+        asyncio.run(_synth())
+
+        if os.path.exists(temp_mp3) and os.path.getsize(temp_mp3) > 500:
             success = _play_audio_file(temp_mp3)
             try:
                 os.remove(temp_mp3)
@@ -140,20 +155,38 @@ def _play_audio_bytes(data: bytes, ext: str = ".mp3") -> bool:
 def _play_audio_file(filepath: str) -> bool:
     """Play audio file across Windows, macOS, and Linux without external GUI popups."""
     norm_path = os.path.abspath(filepath)
+    if not os.path.exists(norm_path) or os.path.getsize(norm_path) == 0:
+        return False
 
     # Windows playback
     if sys.platform == "win32":
+        # 1. Try Windows Media Player COM object (fast and headless)
         try:
-            # Use Windows Media Player COM object for headless background playback
             ps_cmd = f"""
             $w = New-Object -ComObject WMPlayer.OCX
             $w.settings.volume = 100
             $w.URL = "{norm_path}"
             $w.controls.play()
-            while ($w.playState -ne 1 -and $w.playState -ne 8) {{ Start-Sleep -Milliseconds 100 }}
+            while ($w.playState -ne 1 -and $w.playState -ne 8) {{ Start-Sleep -Milliseconds 50 }}
             """
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=18)
-            return True
+            res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], capture_output=True, timeout=18)
+            if res.returncode == 0:
+                return True
+        except Exception:
+            pass
+
+        # 2. Try PresentationCore MediaPlayer
+        try:
+            ps_cmd2 = f"""
+            Add-Type -AssemblyName presentationCore
+            $m = New-Object System.Windows.Media.MediaPlayer
+            $m.Open([System.Uri]"{norm_path}")
+            $m.Play()
+            Start-Sleep -Seconds 4
+            """
+            res2 = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd2], capture_output=True, timeout=10)
+            if res2.returncode == 0:
+                return True
         except Exception:
             pass
 
@@ -165,9 +198,14 @@ def _play_audio_file(filepath: str) -> bool:
         except Exception:
             pass
 
-    # Linux playback (ffplay / mpv / aplay)
+    # Linux playback (ffplay / mpv / aplay / paplay)
     if sys.platform.startswith("linux"):
-        for player in [["ffplay", "-nodisp", "-autoexit", norm_path], ["mpv", "--no-video", norm_path], ["aplay", norm_path]]:
+        for player in [
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", norm_path],
+            ["mpv", "--no-video", norm_path],
+            ["paplay", norm_path],
+            ["aplay", norm_path]
+        ]:
             try:
                 res = subprocess.run(player, capture_output=True, timeout=18)
                 if res.returncode == 0:
@@ -181,16 +219,22 @@ def _fallback_os_tts(clean_text: str):
     """Fallback if neural services are completely disconnected."""
     if sys.platform == "win32":
         try:
+            # Modern Windows: Prefer Microsoft Mark / George / Natural voices over 1995 David
             ps_script = f"""
             Add-Type -AssemblyName System.Speech
             $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-            # Pick installed female or natural voice if available
-            $v = $synth.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Gender -eq 'Female' -or $_.VoiceInfo.Name -match 'Natural' }} | Select-Object -First 1
+            $v = $synth.GetInstalledVoices() | Where-Object {{
+                $_.VoiceInfo.Name -match 'Mark' -or
+                $_.VoiceInfo.Name -match 'George' -or
+                $_.VoiceInfo.Name -match 'Natural' -or
+                $_.VoiceInfo.Name -match 'OneCore' -or
+                $_.VoiceInfo.Name -match 'Zira'
+            }} | Select-Object -First 1
             if ($v) {{ $synth.SelectVoice($v.VoiceInfo.Name) }}
             $synth.Rate = 0
             $synth.Speak("{clean_text}")
             """
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True, timeout=15)
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script], capture_output=True, timeout=15)
             return
         except Exception:
             pass

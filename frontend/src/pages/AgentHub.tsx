@@ -211,33 +211,71 @@ export function AgentHub() {
 
   // Speech Output Helper (Neural Edge TTS 24kHz + Natural Speech Fallback)
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const browserVoicesRef = useRef<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const updateVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v && v.length > 0) {
+        browserVoicesRef.current = v;
+      }
+    };
+    updateVoices();
+    window.speechSynthesis.onvoiceschanged = updateVoices;
+  }, []);
 
   const fallbackNaturalBrowser = (cleanText: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setAssistantState("STANDBY");
+      return;
+    }
     try {
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(cleanText);
-      const voices = window.speechSynthesis.getVoices();
-      // Prioritize natural neural browser voices over legacy robotic SAPI
-      const naturalVoice = voices.find(
-        (v) =>
-          (v.name.includes("Natural") ||
-            v.name.includes("Neural") ||
-            v.name.includes("Online") ||
-            v.name.includes("Guy") ||
-            v.name.includes("Google") ||
-            v.name.includes("Samantha")) &&
-          v.lang.startsWith("en")
-      );
+      const voices =
+        browserVoicesRef.current.length > 0
+          ? browserVoicesRef.current
+          : window.speechSynthesis.getVoices();
+
+      // Prioritize high-definition natural neural voices (Microsoft Online Natural, Google, Apple)
+      const naturalVoice =
+        voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
+        voices.find(
+          (v) =>
+            (v.name.includes("Guy") ||
+              v.name.includes("Christopher") ||
+              v.name.includes("Jenny") ||
+              v.name.includes("Aria")) &&
+            v.lang.startsWith("en")
+        ) ||
+        voices.find(
+          (v) =>
+            (v.name.includes("Natural") || v.name.includes("Neural")) &&
+            v.lang.startsWith("en")
+        ) ||
+        voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en")) ||
+        voices.find(
+          (v) =>
+            (v.name.includes("Samantha") ||
+              v.name.includes("Daniel") ||
+              v.name.includes("Karen")) &&
+            v.lang.startsWith("en")
+        ) ||
+        voices.find((v) => v.lang.startsWith("en"));
+
       if (naturalVoice) {
         utter.voice = naturalVoice;
       }
-      utter.rate = 1.02;
-      utter.pitch = 0.98;
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
       utter.onstart = () => setAssistantState("SPEAKING");
       utter.onend = () => setAssistantState("STANDBY");
+      utter.onerror = () => setAssistantState("STANDBY");
       window.speechSynthesis.speak(utter);
-    } catch {}
+    } catch {
+      setAssistantState("STANDBY");
+    }
   };
 
   const speakText = (text: string) => {

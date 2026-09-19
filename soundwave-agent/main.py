@@ -103,6 +103,7 @@ def run_interactive_cli():
 def main():
     parser = argparse.ArgumentParser(description="Soundwave AI Autonomous Shorts & Voice Agent")
     parser.add_argument("--gui", action="store_true", help="Launch the reactive Soundwave desktop HUD")
+    parser.add_argument("--native", action="store_true", help="Launch the GPU-accelerated Ultra-HD native desktop window")
     parser.add_argument("--niche", type=str, help="Generate a short for a specific niche (psychology, facts, history, finance, ai, motivation, horror)")
     parser.add_argument("--batch", action="store_true", help="Batch generate 1 short for every niche (7 total)")
     parser.add_argument("--voice", type=str, default="en-US-JennyNeural", help="TTS Voice (default: en-US-JennyNeural)")
@@ -112,6 +113,11 @@ def main():
     parser.add_argument("--status", action="store_true", help="Check server health and cache statistics")
 
     args = parser.parse_args()
+
+    if args.native:
+        from ui import launch_native_desktop_window
+        launch_native_desktop_window()
+        return
 
     if args.gui:
         try:
