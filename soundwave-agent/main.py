@@ -61,7 +61,7 @@ def run_interactive_cli():
             except:
                 sel_niche = "psychology"
 
-            voice = input("Voice [default Jenny]: ").strip() or "en-US-JennyNeural"
+            voice = input("Voice [default Guy]: ").strip() or "en-US-GuyNeural"
             hud.set_state(f"PRODUCING {sel_niche.upper()}")
             print(hud.render_frame())
             generate_single_short(topic=sel_niche, voice=voice, open_browser=True)
@@ -106,7 +106,7 @@ def main():
     parser.add_argument("--native", action="store_true", help="Launch the GPU-accelerated Ultra-HD native desktop window")
     parser.add_argument("--niche", type=str, help="Generate a short for a specific niche (psychology, facts, history, finance, ai, motivation, horror)")
     parser.add_argument("--batch", action="store_true", help="Batch generate 1 short for every niche (7 total)")
-    parser.add_argument("--voice", type=str, default="en-US-JennyNeural", help="TTS Voice (default: en-US-JennyNeural)")
+    parser.add_argument("--voice", type=str, default="en-US-GuyNeural", help="TTS Voice (default: en-US-GuyNeural)")
     parser.add_argument("--resolution", type=str, default="720p", choices=["720p", "1080p"], help="Video resolution")
     parser.add_argument("--build-cache", action="store_true", help="Download and slice an 80s background clip")
     parser.add_argument("--open-progress", action="store_true", help="Open the live HTML progress monitor in the browser")

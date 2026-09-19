@@ -109,6 +109,7 @@ class SoundwaveDesktopApp:
         self.session_count = 1
         self.assistant_name = "S.O.U.N.D.W.A.V.E"
         self.voice_feedback = True
+        self.selected_voice = "en-US-GuyNeural"
 
     def launch(self):
         # Enable Per-Monitor High-DPI awareness on Windows before creating Tk
@@ -691,7 +692,7 @@ class SoundwaveDesktopApp:
     def _open_settings_dialog(self, tk, messagebox):
         win = tk.Toplevel(self.root)
         win.title("Soundwave Settings")
-        win.geometry("440x380")
+        win.geometry("480x480")
         win.configure(bg="#030712")
 
         tk.Label(win, text="ASSISTANT CONFIGURATION", font=("Segoe UI", 11, "bold"), fg="#06B6D4", bg="#030712").pack(pady=12)
@@ -701,8 +702,33 @@ class SoundwaveDesktopApp:
 
         tk.Label(f, text="Assistant Name:", font=("Segoe UI", 9), fg="#94A3B8", bg="#0B132B").pack(anchor=tk.W)
         ent_name = tk.Entry(f, bg="#070D18", fg="#FFFFFF", font=("Segoe UI", 9), insertbackground="#06B6D4")
-        ent_name.pack(fill=tk.X, pady=(2, 12))
+        ent_name.pack(fill=tk.X, pady=(2, 10))
         ent_name.insert(0, self.assistant_name)
+
+        tk.Label(f, text="Neural Voice Talent:", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg="#0B132B").pack(anchor=tk.W, pady=(4, 2))
+
+        voices = [
+            ("en-US-GuyNeural", "Guy (en-US Male - Deep & Natural)"),
+            ("en-US-ChristopherNeural", "Christopher (en-US Male - Studio JARVIS)"),
+            ("en-GB-RyanNeural", "Ryan (en-GB Male - British)"),
+            ("en-US-JennyNeural", "Jenny (en-US Female - Smooth)"),
+        ]
+
+        voice_var = tk.StringVar(value=self.selected_voice)
+        for vid, vlabel in voices:
+            rb = tk.Radiobutton(
+                f, text=vlabel, variable=voice_var, value=vid,
+                font=("Segoe UI", 8), fg="#E2E8F0", bg="#0B132B",
+                selectcolor="#070D18", activebackground="#0B132B", activeforeground="#06B6D4"
+            )
+            rb.pack(anchor=tk.W, pady=1)
+
+        btn_test_v = tk.Button(
+            f, text="▶ Test Selected Voice", font=("Segoe UI", 8, "bold"), bg="#0F172A", fg="#06B6D4",
+            relief=tk.FLAT, bd=0, padx=8, pady=3, highlightbackground="#1E293B", highlightthickness=1,
+            cursor="hand2", command=lambda: speak("Neural speech synthesis operational.", voice_var.get())
+        )
+        btn_test_v.pack(anchor=tk.W, pady=(4, 8))
 
         def toggle_voice():
             self.voice_feedback = not self.voice_feedback
@@ -719,10 +745,11 @@ class SoundwaveDesktopApp:
             new_name = ent_name.get().strip()
             if new_name:
                 self.assistant_name = new_name
+            self.selected_voice = voice_var.get()
             win.destroy()
             messagebox.showinfo("Saved", "Settings updated.")
 
-        tk.Button(win, text="Save Settings", bg="#10B981", fg="#FFFFFF", font=("Segoe UI", 9, "bold"), relief=tk.FLAT, bd=0, padx=12, pady=5, cursor="hand2", command=save).pack(pady=12)
+        tk.Button(win, text="Save Settings", bg="#10B981", fg="#FFFFFF", font=("Segoe UI", 9, "bold"), relief=tk.FLAT, bd=0, padx=12, pady=5, cursor="hand2", command=save).pack(pady=10)
 
     def _trigger_short(self, niche: str):
         self.state = "GENERATING"
@@ -759,7 +786,7 @@ class SoundwaveDesktopApp:
                 self.state = "SPEAKING"
                 self._set_status_text("● SYNTHESIZING NEURAL SPEECH...")
                 if self.voice_feedback:
-                    speak(spoken_reply)
+                    speak(spoken_reply, self.selected_voice)
             except Exception as e:
                 self._append_log(f"Error: {e}", "sys")
             finally:

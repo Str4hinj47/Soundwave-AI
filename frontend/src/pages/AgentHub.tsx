@@ -143,7 +143,20 @@ export function AgentHub() {
   // Shorts Generator State
   const [selectedNiche, setSelectedNiche] = useState<string>("psychology");
   const [customTopic, setCustomTopic] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState("en-US-JennyNeural");
+  const [selectedVoice, setSelectedVoice] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("soundwave_voice") || "en-US-GuyNeural";
+    }
+    return "en-US-GuyNeural";
+  });
+
+  const handleVoiceChange = (v: string) => {
+    setSelectedVoice(v);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("soundwave_voice", v);
+    }
+  };
+
   const [resolution, setResolution] = useState<"720p" | "1080p">("720p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -238,31 +251,39 @@ export function AgentHub() {
           ? browserVoicesRef.current
           : window.speechSynthesis.getVoices();
 
-      // Prioritize high-definition natural neural voices (Microsoft Online Natural, Google, Apple)
-      const naturalVoice =
-        voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
-        voices.find(
-          (v) =>
-            (v.name.includes("Guy") ||
-              v.name.includes("Christopher") ||
-              v.name.includes("Jenny") ||
-              v.name.includes("Aria")) &&
-            v.lang.startsWith("en")
-        ) ||
-        voices.find(
-          (v) =>
-            (v.name.includes("Natural") || v.name.includes("Neural")) &&
-            v.lang.startsWith("en")
-        ) ||
-        voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en")) ||
-        voices.find(
-          (v) =>
-            (v.name.includes("Samantha") ||
-              v.name.includes("Daniel") ||
-              v.name.includes("Karen")) &&
-            v.lang.startsWith("en")
-        ) ||
-        voices.find((v) => v.lang.startsWith("en"));
+      const isMale =
+        selectedVoice.includes("Guy") ||
+        selectedVoice.includes("Christopher") ||
+        selectedVoice.includes("Ryan");
+
+      // Prioritize high-definition natural neural voices matching requested gender
+      const naturalVoice = isMale
+        ? voices.find(
+            (v) =>
+              (v.name.includes("Guy") ||
+                v.name.includes("Christopher") ||
+                v.name.includes("Ryan") ||
+                v.name.includes("George") ||
+                v.name.includes("Male") ||
+                v.name.includes("Daniel") ||
+                v.name.includes("David")) &&
+              v.lang.startsWith("en")
+          ) ||
+          voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
+          voices.find((v) => v.lang.startsWith("en"))
+        : voices.find(
+            (v) =>
+              (v.name.includes("Jenny") ||
+                v.name.includes("Aria") ||
+                v.name.includes("Sonia") ||
+                v.name.includes("Female") ||
+                v.name.includes("Samantha") ||
+                v.name.includes("Karen") ||
+                v.name.includes("Zira")) &&
+              v.lang.startsWith("en")
+          ) ||
+          voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
+          voices.find((v) => v.lang.startsWith("en"));
 
       if (naturalVoice) {
         utter.voice = naturalVoice;
@@ -699,8 +720,25 @@ export function AgentHub() {
           <span className="text-gray-300">{currentDateStr || "September 20, 2026"}</span>
         </div>
 
-        {/* Right: Weather Capsule & Settings Gear Button */}
+        {/* Right: Voice Capsule, Weather Capsule & Settings Gear Button */}
         <div className="flex items-center gap-2">
+          {/* Quick Voice Selector Capsule */}
+          <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-2.5 py-1 text-xs text-gray-300 font-mono">
+            <Volume2 className="h-3.5 w-3.5 text-cyan-400" />
+            <select
+              value={selectedVoice}
+              onChange={(e) => handleVoiceChange(e.target.value)}
+              className="bg-transparent text-cyan-400 font-semibold focus:outline-none cursor-pointer text-xs"
+              title="Select Assistant Voice"
+            >
+              <option value="en-US-GuyNeural" className="bg-[#0A1224] text-white">Guy (US Male)</option>
+              <option value="en-US-ChristopherNeural" className="bg-[#0A1224] text-white">Christopher (US Male - Studio)</option>
+              <option value="en-GB-RyanNeural" className="bg-[#0A1224] text-white">Ryan (UK Male)</option>
+              <option value="en-US-JennyNeural" className="bg-[#0A1224] text-white">Jenny (US Female)</option>
+              <option value="en-GB-SoniaNeural" className="bg-[#0A1224] text-white">Sonia (UK Female)</option>
+            </select>
+          </div>
+
           <div className="flex items-center gap-2 rounded-full border border-[#172A4A] bg-[#0C172E] px-3 py-1 text-xs text-gray-300 font-mono">
             <CloudRain className="h-3.5 w-3.5 text-cyan-400" />
             <span className="text-white font-semibold">{weather.temp}°C</span>
@@ -1329,6 +1367,35 @@ export function AgentHub() {
                 onChange={(e) => setAssistantName(e.target.value)}
                 className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
               />
+            </div>
+
+            {/* Voice Talent Selection */}
+            <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-white">Neural Voice Talent</p>
+                  <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => speakText("Voice system operational. Neural synthesis online.")}
+                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Volume2 className="h-3 w-3" /> Test Voice
+                </button>
+              </div>
+
+              <select
+                value={selectedVoice}
+                onChange={(e) => handleVoiceChange(e.target.value)}
+                className="w-full rounded-lg border border-[#172A4A] bg-[#0C172E] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+              >
+                <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
+                <option value="en-US-ChristopherNeural">Christopher (en-US Male - Studio JARVIS)</option>
+                <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
+                <option value="en-US-JennyNeural">Jenny (en-US Female - Smooth)</option>
+                <option value="en-GB-SoniaNeural">Sonia (en-GB Female - British)</option>
+              </select>
             </div>
 
             <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
