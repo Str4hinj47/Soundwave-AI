@@ -114,10 +114,16 @@ def main():
     args = parser.parse_args()
 
     if args.gui:
-        launch_gui_hud(
-            on_generate_click=lambda n: generate_single_short(topic=n, voice=args.voice, resolution=args.resolution),
-            on_batch_click=lambda: generate_all_niches_batch(voice=args.voice, resolution=args.resolution),
-        )
+        try:
+            from ui import SoundwaveDesktopApp
+            desktop_app = SoundwaveDesktopApp()
+            desktop_app.launch()
+        except Exception as e:
+            print(f"[HUD] Launching lightweight HUD fallback ({e})...")
+            launch_gui_hud(
+                on_generate_click=lambda n: generate_single_short(topic=n, voice=args.voice, resolution=args.resolution),
+                on_batch_click=lambda: generate_all_niches_batch(voice=args.voice, resolution=args.resolution),
+            )
         return
 
     if args.status:
