@@ -117,11 +117,29 @@ export function AgentHub() {
     "Adjusted system volume to 85%",
   ]);
 
+  // Voice speech feedback toggle
+  const [voiceFeedback, setVoiceFeedback] = useState(true);
+
   // Screen Vision thumbnail preview
   const [visionPreview, setVisionPreview] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Speech Output Helper (Speaks assistant responses aloud)
+  const speakText = (text: string) => {
+    if (!voiceFeedback || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/[*_#`]/g, "").slice(0, 220);
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.rate = 1.05;
+      utter.pitch = 1.0;
+      utter.onstart = () => setAssistantState("SPEAKING");
+      utter.onend = () => setAssistantState("STANDBY");
+      window.speechSynthesis.speak(utter);
+    } catch {}
+  };
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -277,6 +295,7 @@ export function AgentHub() {
         },
       ]);
       setUndoHistory((prev) => [`Action: ${actionName}`, ...prev.slice(0, 9)]);
+      speakText(output);
       toast.success(`Action: ${actionName} executed`);
     } catch (e: any) {
       toast.error(`Action error: ${e.message}`);
@@ -441,6 +460,19 @@ export function AgentHub() {
             <span>Vol: {systemStats.muted ? "Muted" : `${systemStats.volume}%`}</span>
           </button>
 
+          <button
+            onClick={() => setVoiceFeedback(!voiceFeedback)}
+            title={voiceFeedback ? "Voice speech enabled" : "Voice speech muted"}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+              voiceFeedback
+                ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300"
+                : "border-gray-800 bg-navy/80 text-gray-500"
+            }`}
+          >
+            <Volume2 className={`h-3.5 w-3.5 ${voiceFeedback ? "text-cyan-400" : "text-gray-500"}`} />
+            <span>TTS: {voiceFeedback ? "ON" : "OFF"}</span>
+          </button>
+
           <Button
             size="sm"
             variant="outline"
@@ -510,12 +542,12 @@ export function AgentHub() {
           {/* Computer Control Actions & Skills Grid */}
           <div className="rounded-2xl border border-gray-800 bg-panel p-5 space-y-3">
             <h3 className="text-xs font-bold tracking-wider text-gray-400 uppercase">
-              Computer Control Actions & Skills
+              Computer Control Actions & Skills (16 Loaded)
             </h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <button
                 onClick={() => triggerAction("open_app", { app_name: "chrome" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-cyan-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-cyan-500 hover:text-white transition-all text-left"
               >
                 <Monitor className="h-4 w-4 text-cyan-400" />
                 <span>Open Browser</span>
@@ -523,7 +555,7 @@ export function AgentHub() {
 
               <button
                 onClick={() => triggerAction("screen_processor", { action: "capture" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-violet-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-violet-500 hover:text-white transition-all text-left"
               >
                 <Film className="h-4 w-4 text-violet-400" />
                 <span>Screen Vision</span>
@@ -531,7 +563,7 @@ export function AgentHub() {
 
               <button
                 onClick={() => triggerAction("system_monitor")}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-emerald-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-emerald-500 hover:text-white transition-all text-left"
               >
                 <Cpu className="h-4 w-4 text-emerald-400" />
                 <span>System Stats</span>
@@ -539,7 +571,7 @@ export function AgentHub() {
 
               <button
                 onClick={() => triggerAction("weather_report", { city: "Belgrade" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-amber-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-amber-500 hover:text-white transition-all text-left"
               >
                 <CloudRain className="h-4 w-4 text-amber-400" />
                 <span>Weather</span>
@@ -547,18 +579,42 @@ export function AgentHub() {
 
               <button
                 onClick={() => triggerAction("clipboard", { operation: "get" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-all text-left"
               >
                 <Copy className="h-4 w-4 text-blue-400" />
                 <span>Clipboard</span>
               </button>
 
               <button
-                onClick={() => triggerAction("reminder", { message: "Review generated shorts", seconds: 300 })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-xs text-gray-300 hover:border-pink-500 hover:text-white transition-all text-left"
+                onClick={() => triggerAction("reminder", { message: "Review generated shorts", seconds: 60 })}
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-pink-500 hover:text-white transition-all text-left"
               >
                 <Clock className="h-4 w-4 text-pink-400" />
                 <span>Set Timer</span>
+              </button>
+
+              <button
+                onClick={() => triggerAction("youtube_video", { query: "minecraft parkour 4k" })}
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-red-500 hover:text-white transition-all text-left"
+              >
+                <Film className="h-4 w-4 text-red-400" />
+                <span>YouTube</span>
+              </button>
+
+              <button
+                onClick={() => triggerAction("proactive")}
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-teal-500 hover:text-white transition-all text-left"
+              >
+                <Sparkles className="h-4 w-4 text-teal-400" />
+                <span>Proactive Vitals</span>
+              </button>
+
+              <button
+                onClick={() => triggerAction("code_helper", { code: "print('Soundwave Sandbox: Python 3.11 OK')" })}
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-indigo-500 hover:text-white transition-all text-left"
+              >
+                <Terminal className="h-4 w-4 text-indigo-400" />
+                <span>Code Sandbox</span>
               </button>
             </div>
           </div>
