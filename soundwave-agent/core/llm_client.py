@@ -149,6 +149,26 @@ class LLMClient:
         """Intelligent offline pattern parser for immediate zero-API-key action execution."""
         q = user_prompt.lower().strip()
 
+        # 0. Ghost Operator Macros & Chained Workflows
+        if any(w in q for w in ["focus mode", "deep work", "pomodoro"]):
+            res = action_registry.execute("ghost_macro", {"action": "execute", "macro_id": "deep_focus_pomodoro"})
+            return "Activating Deep Focus Mode: windows minimized, audio muted, 25-minute Pomodoro timer engaged.", res
+
+        if any(w in q for w in ["morning prep", "start my day", "daily routine", "creator setup"]):
+            res = action_registry.execute("ghost_macro", {"action": "execute", "macro_id": "creator_morning_prep"})
+            return "Running Creator Workstation Setup: browser launched, volume adjusted, vitals verified.", res
+
+        if any(w in q for w in ["run macro", "ghost operator", "automation macro"]):
+            m_id = "creator_morning_prep"
+            if "focus" in q or "pomodoro" in q:
+                m_id = "deep_focus_pomodoro"
+            elif "viral" in q or "short" in q:
+                m_id = "viral_production_autopilot"
+            elif "diag" in q or "clean" in q:
+                m_id = "workspace_cleanup_diagnostics"
+            res = action_registry.execute("ghost_macro", {"action": "execute", "macro_id": m_id})
+            return f"Ghost Operator executing macro '{m_id}'.", res
+
         # 1. Shorts & Video Creation
         if any(w in q for w in ["short", "video", "tiktok", "reel", "viral"]):
             if "batch" in q or "all" in q:

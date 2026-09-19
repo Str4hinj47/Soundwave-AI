@@ -17,7 +17,14 @@ import {
   CloudRain, 
   Send, 
   Radio, 
-  Copy 
+  Copy,
+  Zap,
+  Play,
+  Plus,
+  Trash2,
+  Bot,
+  AlertCircle,
+  FastForward,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
@@ -51,6 +58,46 @@ interface ChatMessage {
   time: string;
 }
 
+interface MacroStep {
+  id: string;
+  action: string;
+  params?: Record<string, unknown>;
+  description?: string;
+  delayMs?: number;
+}
+
+interface MacroWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  category: "creator" | "productivity" | "system" | "custom";
+  triggerPhrases?: string[];
+  steps: MacroStep[];
+  isBuiltin?: boolean;
+  icon?: string;
+}
+
+interface StepExecutionResult {
+  stepId: string;
+  action: string;
+  description?: string;
+  status: "SUCCESS" | "FAILED" | "SKIPPED";
+  output?: string;
+  error?: string;
+  durationMs: number;
+}
+
+interface MacroExecutionReport {
+  workflowId: string;
+  workflowName: string;
+  startedAt: string;
+  completedAt: string;
+  totalDurationMs: number;
+  allSuccess: boolean;
+  stepResults: StepExecutionResult[];
+  summary: string;
+}
+
 export function AgentHub() {
   const navigate = useNavigate();
 
@@ -73,8 +120,32 @@ export function AgentHub() {
   const [generatedScript, setGeneratedScript] = useState<string>("");
   const [completedVideoUrl, setCompletedVideoUrl] = useState<string | null>(null);
 
-  // Load user's cloned voices & check URL query params
+  // Ghost Operator Macros state
+  const [macrosList, setMacrosList] = useState<MacroWorkflow[]>([]);
+  const [activeExecutionReport, setActiveExecutionReport] = useState<MacroExecutionReport | null>(null);
+  const [isRunningMacro, setIsRunningMacro] = useState(false);
+  const [runningMacroName, setRunningMacroName] = useState<string>("");
+  const [nlMacroPrompt, setNlMacroPrompt] = useState("");
+  const [isDecomposingNl, setIsDecomposingNl] = useState(false);
+  const [macroModalOpen, setMacroModalOpen] = useState(false);
+  const [newMacroName, setNewMacroName] = useState("");
+  const [newMacroDesc, setNewMacroDesc] = useState("");
+  const [newMacroNlInput, setNewMacroNlInput] = useState("");
+  const [builderSteps, setBuilderSteps] = useState<MacroStep[]>([]);
+
+  // Load user's cloned voices & macros
+  const loadMacros = async () => {
+    try {
+      const res = await fetch("/api/v1/ghost/macros");
+      if (res.ok) {
+        const data = await res.json();
+        setMacrosList(data.macros || []);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
+    loadMacros();
     fetch("/api/v1/tts/clone/profiles")
       .then((r) => (r.ok ? r.json() : { profiles: [] }))
       .then((d) => setClonedVoices(d.profiles || []))
@@ -110,7 +181,7 @@ export function AgentHub() {
 
   // Settings Modal & Tabs
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"assistant" | "api" | "audio" | "wake" | "memory" | "plugins" | "undo">("assistant");
+  const [settingsTab, setSettingsTab] = useState<"assistant" | "api" | "audio" | "wake" | "memory" | "plugins" | "macros" | "undo">("assistant");
   
   // Settings values
   const [assistantName, setAssistantName] = useState("Soundwave");
@@ -264,6 +335,164 @@ export function AgentHub() {
     return () => cancelAnimationFrame(animId);
   }, [isGenerating, assistantState, theme]);
 
+  // ── Ghost Operator Macro Runner ──────────────────────────────────────────
+  const runMacroWorkflow = async (params: {
+    macroId?: string;
+    instruction?: string;
+    workflow?: MacroWorkflow;
+    customName?: string;
+  }) => {
+    if (isRunningMacro) return;
+    setIsRunningMacro(true);
+    const macroTitle =
+      params.customName ||
+      (params.macroId ? macrosList.find((m) => m.id === params.macroId)?.name : null) ||
+      params.instruction ||
+      "Macro Workflow";
+
+    setRunningMacroName(macroTitle);
+    setAssistantState("THINKING");
+    setCurrentStep(`Ghost Operator: Running '${macroTitle}'...`);
+    setActiveExecutionReport(null);
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      sender: "user",
+      text: params.instruction
+        ? `Execute RPA instruction: "${params.instruction}"`
+        : `Run macro workflow: [${macroTitle}]`,
+      time: new Date().toLocaleTimeString(),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const res = await fetch("/api/v1/ghost/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          macroId: params.macroId,
+          instruction: params.instruction,
+          workflow: params.workflow,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Execution error");
+      }
+
+      const data = await res.json();
+      const report: MacroExecutionReport = data.report;
+      setActiveExecutionReport(report);
+
+      const stepLines = (report.stepResults || [])
+        .map(
+          (s, i) =>
+            `${s.status === "SUCCESS" ? "✓" : "⚠"} Step ${i + 1} (${s.action}): ${s.description || s.action} — ${s.output || s.error || "Completed"}`
+        )
+        .join("\n");
+
+      const executionChat = `👻 Ghost Operator completed '${report.workflowName}' in ${report.totalDurationMs}ms:\n${stepLines}\n\nSummary: ${report.summary}`;
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: "ghost-" + Date.now(),
+          sender: "assistant",
+          text: executionChat,
+          actionOutput: stepLines,
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+
+      setUndoHistory((prev) => [`Ghost Macro: ${report.workflowName}`, ...prev.slice(0, 9)]);
+      speakText(report.summary);
+      toast.success(`Executed: ${report.workflowName}`);
+    } catch (e: any) {
+      toast.error(`Ghost Operator failed: ${e.message}`);
+    } finally {
+      setIsRunningMacro(false);
+      setAssistantState("STANDBY");
+      setCurrentStep("Ready · Awaiting Command");
+    }
+  };
+
+  const handleDecomposeForBuilder = async () => {
+    if (!newMacroNlInput.trim()) return;
+    setIsDecomposingNl(true);
+    try {
+      const res = await fetch("/api/v1/ghost/decompose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: newMacroNlInput.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBuilderSteps(data.steps || []);
+        if (!newMacroName) {
+          setNewMacroName("Custom Routine " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        }
+        if (!newMacroDesc) {
+          setNewMacroDesc(newMacroNlInput.trim());
+        }
+        toast.success(`Decomposed into ${data.stepsCount || 0} sequential steps`);
+      } else {
+        toast.error("Could not parse instruction into steps");
+      }
+    } catch (e: any) {
+      toast.error(`Decomposition error: ${e.message}`);
+    } finally {
+      setIsDecomposingNl(false);
+    }
+  };
+
+  const handleSaveMacro = async () => {
+    if (!newMacroName.trim() || builderSteps.length === 0) {
+      toast.error("Please provide a name and at least one step");
+      return;
+    }
+    try {
+      const res = await fetch("/api/v1/ghost/macros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMacroName.trim(),
+          description: newMacroDesc.trim() || "Custom automation workflow",
+          category: "custom",
+          triggerPhrases: [newMacroName.toLowerCase()],
+          steps: builderSteps,
+          icon: "⚡",
+        }),
+      });
+      if (res.ok) {
+        toast.success("Saved macro to Ghost Operator library");
+        setMacroModalOpen(false);
+        setNewMacroName("");
+        setNewMacroDesc("");
+        setNewMacroNlInput("");
+        setBuilderSteps([]);
+        loadMacros();
+      } else {
+        const err = await res.json();
+        toast.error(err.message || "Failed to save macro");
+      }
+    } catch (e: any) {
+      toast.error(`Failed to save: ${e.message}`);
+    }
+  };
+
+  const handleDeleteCustomMacro = async (macroId: string) => {
+    try {
+      const res = await fetch(`/api/v1/ghost/macros/${macroId}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Custom macro deleted");
+        loadMacros();
+      }
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e.message}`);
+    }
+  };
+
   // Execute Computer Control Action
   const triggerAction = async (actionName: string, params: Record<string, any> = {}) => {
     setAssistantState("THINKING");
@@ -343,6 +572,24 @@ export function AgentHub() {
 
     setUserPrompt("");
     const qLower = query.toLowerCase();
+
+    // Check for Ghost Operator macros & chained workflows first
+    if (qLower.includes("focus") && (qLower.includes("mode") || qLower.includes("pomodoro") || qLower.includes("deep"))) {
+      runMacroWorkflow({ macroId: "deep_focus_pomodoro" });
+      return;
+    } else if (qLower.includes("morning") || qLower.includes("start my day") || qLower.includes("creator setup") || qLower.includes("morning prep")) {
+      runMacroWorkflow({ macroId: "creator_morning_prep" });
+      return;
+    } else if (qLower.includes("autopilot") || (qLower.includes("viral") && qLower.includes("macro"))) {
+      runMacroWorkflow({ macroId: "viral_production_autopilot" });
+      return;
+    } else if (qLower.includes("diagnostic") || qLower.includes("health") || (qLower.includes("workspace") && qLower.includes("check"))) {
+      runMacroWorkflow({ macroId: "workspace_cleanup_diagnostics" });
+      return;
+    } else if (qLower.includes(" and ") || (qLower.includes(",") && (qLower.includes("open") || qLower.includes("mute") || qLower.includes("volume") || qLower.includes("stats")))) {
+      runMacroWorkflow({ instruction: query, customName: query.slice(0, 35) });
+      return;
+    }
 
     if (qLower.includes("short") || qLower.includes("video") || qLower.includes("viral")) {
       handleGenerateShort();
@@ -582,6 +829,146 @@ export function AgentHub() {
                   <button onClick={() => setVisionPreview(null)} className="hover:text-white">✕</button>
                 </div>
                 <img src={visionPreview} alt="Screen capture" className="w-full h-32 object-cover" />
+              </div>
+            )}
+          </div>
+
+          {/* Ghost Operator Macro Deck & RPA Automation */}
+          <div className="rounded-2xl border border-gray-800 bg-panel p-5 space-y-3.5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <Bot className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold tracking-wider text-white uppercase flex items-center gap-1.5">
+                    Ghost Operator Macros
+                    <Badge tone="blue" className="text-[9px] px-1.5 py-0 font-mono">
+                      RPA ENGINE
+                    </Badge>
+                  </h3>
+                  <p className="text-[10px] text-gray-400">Sequential task automation & multi-action routines</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMacroModalOpen(true)}
+                className="flex items-center gap-1 rounded-lg border border-gray-700 bg-navy/80 px-2 py-1 text-[11px] font-medium text-cyan-400 hover:border-cyan-500 hover:bg-cyan-950/30 transition-all"
+              >
+                <Plus className="h-3 w-3" /> New Macro
+              </button>
+            </div>
+
+            {/* Quick 1-Click Launch Macro Cards */}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {macrosList.slice(0, 4).map((macro) => (
+                <button
+                  key={macro.id}
+                  disabled={isRunningMacro}
+                  onClick={() => runMacroWorkflow({ macroId: macro.id })}
+                  className="group relative flex flex-col justify-between rounded-xl border border-gray-800 bg-navy/50 p-2.5 text-left transition-all hover:border-cyan-500/50 hover:bg-cyan-950/20 disabled:opacity-50"
+                >
+                  <div className="flex items-start justify-between w-full">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">{macro.icon || "⚡"}</span>
+                      <span className="text-xs font-semibold text-gray-200 group-hover:text-cyan-300 transition-colors">
+                        {macro.name}
+                      </span>
+                    </div>
+                    <Play className="h-3 w-3 text-gray-500 group-hover:text-cyan-400 transition-colors shrink-0 mt-0.5" />
+                  </div>
+                  <p className="mt-1 text-[10px] text-gray-400 line-clamp-1">{macro.description}</p>
+                  <div className="mt-2 flex items-center justify-between text-[9px] text-gray-500 font-mono">
+                    <span>{macro.steps.length} sequential steps</span>
+                    <span className="uppercase text-cyan-400/80">{macro.category}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Natural Language RPA Execution Box */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
+                Natural Language RPA Chainer
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="e.g. open chrome, mute volume, check stats..."
+                  value={nlMacroPrompt}
+                  onChange={(e) => setNlMacroPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && nlMacroPrompt.trim() && !isRunningMacro) {
+                      e.preventDefault();
+                      runMacroWorkflow({ instruction: nlMacroPrompt.trim() });
+                      setNlMacroPrompt("");
+                    }
+                  }}
+                  className="flex-1 rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
+                />
+                <Button
+                  size="sm"
+                  disabled={isRunningMacro || !nlMacroPrompt.trim()}
+                  onClick={() => {
+                    if (nlMacroPrompt.trim()) {
+                      runMacroWorkflow({ instruction: nlMacroPrompt.trim() });
+                      setNlMacroPrompt("");
+                    }
+                  }}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-2.5 py-1"
+                >
+                  <Zap className="h-3 w-3 mr-1" /> Run
+                </Button>
+              </div>
+            </div>
+
+            {/* Live Macro Telemetry & Execution Progress Tracker */}
+            {isRunningMacro && (
+              <div className="rounded-xl border border-cyan-500/40 bg-cyan-950/20 p-2.5 space-y-1.5 animate-pulse">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                    <FastForward className="h-3.5 w-3.5 animate-spin" />
+                    Executing: {runningMacroName}
+                  </span>
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase">In Progress</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-400 to-violet-500"
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Last Execution Report Telemetry */}
+            {activeExecutionReport && !isRunningMacro && (
+              <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between text-xs border-b border-gray-800 pb-1">
+                  <span className="font-semibold text-white flex items-center gap-1.5">
+                    {activeExecutionReport.allSuccess ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                    )}
+                    {activeExecutionReport.workflowName}
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-400">
+                    {activeExecutionReport.totalDurationMs}ms · {activeExecutionReport.stepResults.length} steps
+                  </span>
+                </div>
+                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                  {activeExecutionReport.stepResults.map((step, idx) => (
+                    <div key={idx} className="flex items-start justify-between text-[10px] font-mono text-gray-300">
+                      <span className="truncate pr-2">
+                        {step.status === "SUCCESS" ? "✓" : "⚠"} {step.description || step.action}
+                      </span>
+                      <span className="text-gray-500 shrink-0">{step.durationMs}ms</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 italic pt-1 border-t border-gray-800/60">
+                  {activeExecutionReport.summary}
+                </p>
               </div>
             )}
           </div>
@@ -904,6 +1291,7 @@ export function AgentHub() {
           <div className="flex flex-wrap gap-1 border-b border-gray-800 pb-2">
             {[
               { id: "assistant", label: "⚙️ Assistant" },
+              { id: "macros", label: "👻 Ghost Macros" },
               { id: "api", label: "🔑 API Keys" },
               { id: "audio", label: "🎙️ Audio Hardware" },
               { id: "wake", label: "👂 Wake Word" },
@@ -951,6 +1339,69 @@ export function AgentHub() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Content: Ghost Macros */}
+          {settingsTab === "macros" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-300">
+                  Registered Automation Workflows ({macrosList.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    setMacroModalOpen(true);
+                  }}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> New Macro
+                </button>
+              </div>
+              <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl border border-gray-800 bg-navy/60 p-2.5">
+                {macrosList.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between rounded-lg border border-gray-800 bg-panel/70 p-2 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">{m.icon || "⚡"}</span>
+                        <span className="font-semibold text-white">{m.name}</span>
+                        {m.isBuiltin ? (
+                          <span className="text-[9px] px-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">BUILT-IN</span>
+                        ) : (
+                          <span className="text-[9px] px-1 rounded bg-violet-950 text-violet-400 border border-violet-800">CUSTOM</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-400">{m.steps.length} steps · {m.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          runMacroWorkflow({ macroId: m.id });
+                        }}
+                        className="rounded bg-cyan-600/30 px-2 py-0.5 text-[10px] text-cyan-300 hover:bg-cyan-600/50"
+                      >
+                        Run
+                      </button>
+                      {!m.isBuiltin && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCustomMacro(m.id)}
+                          className="text-gray-500 hover:text-red-400 p-1"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1101,6 +1552,167 @@ export function AgentHub() {
             >
               Done
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── GHOST OPERATOR: CREATE CUSTOM MACRO MODAL ───────────────────────── */}
+      <Modal
+        open={macroModalOpen}
+        onClose={() => setMacroModalOpen(false)}
+        title="Ghost Operator: Create Automation Macro"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400">
+            Define multi-step desktop automation routines using natural language RPA decomposition or custom configuration.
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1">Macro Name</label>
+            <input
+              type="text"
+              placeholder="e.g. YouTube Podcast Kickoff"
+              value={newMacroName}
+              onChange={(e) => setNewMacroName(e.target.value)}
+              className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1">Description</label>
+            <input
+              type="text"
+              placeholder="e.g. Prepares workstation, minimizes windows, and opens production apps"
+              value={newMacroDesc}
+              onChange={(e) => setNewMacroDesc(e.target.value)}
+              className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3 space-y-2">
+            <label className="block text-xs font-semibold text-cyan-300">
+              Natural Language RPA Step Decomposer
+            </label>
+            <p className="text-[11px] text-gray-400">
+              Type actions in natural English and Ghost Operator will resolve them into sequential steps:
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="e.g. launch chrome, set volume to 75%, check system stats, and give morning briefing"
+                value={newMacroNlInput}
+                onChange={(e) => setNewMacroNlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleDecomposeForBuilder();
+                  }
+                }}
+                className="flex-1 rounded-xl border border-gray-800 bg-navy px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
+              />
+              <Button
+                type="button"
+                disabled={isDecomposingNl || !newMacroNlInput.trim()}
+                onClick={handleDecomposeForBuilder}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs whitespace-nowrap"
+              >
+                {isDecomposingNl ? "Decomposing..." : "Decompose Steps"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Decomposed Steps Review */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-300">
+                Workflow Steps ({builderSteps.length})
+              </span>
+              {builderSteps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setBuilderSteps([])}
+                  className="text-[11px] text-red-400 hover:text-red-300"
+                >
+                  Clear Steps
+                </button>
+              )}
+            </div>
+
+            {builderSteps.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-800 p-4 text-center text-xs text-gray-500">
+                No steps yet. Enter an instruction above and click "Decompose Steps".
+              </div>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                {builderSteps.map((step, idx) => (
+                  <div
+                    key={step.id || idx}
+                    className="flex items-center justify-between rounded-xl border border-gray-800 bg-navy/70 p-2.5 text-xs text-gray-300"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-white">{step.description || step.action}</p>
+                        <p className="text-[10px] text-gray-500 font-mono">
+                          Action: {step.action} {step.params ? `· ${JSON.stringify(step.params)}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBuilderSteps((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-gray-500 hover:text-red-400 transition-colors p-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Modal Actions */}
+          <div className="flex items-center justify-between pt-3 border-t border-gray-800">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setMacroModalOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={builderSteps.length === 0 || isRunningMacro}
+                onClick={async () => {
+                  setMacroModalOpen(false);
+                  await runMacroWorkflow({
+                    workflow: {
+                      id: "adhoc_" + Date.now(),
+                      name: newMacroName || "Custom Ad-hoc Macro",
+                      description: newMacroDesc || "Custom executed macro",
+                      category: "custom",
+                      steps: builderSteps,
+                    },
+                    customName: newMacroName || "Custom Ad-hoc Macro",
+                  });
+                }}
+                className="bg-navy border border-cyan-500/50 hover:bg-cyan-950/40 text-cyan-300 text-xs"
+              >
+                <Play className="h-3 w-3 mr-1" /> Test Run
+              </Button>
+              <Button
+                type="button"
+                disabled={!newMacroName.trim() || builderSteps.length === 0}
+                onClick={handleSaveMacro}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs"
+              >
+                Save to Library
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>

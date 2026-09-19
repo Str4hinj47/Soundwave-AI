@@ -19,6 +19,7 @@ import agentRoutes from "./routes/agent.js";
 import jarvisRoutes from "./routes/jarvis.js";
 import jarvisShortRoutes from "./routes/jarvisShort.js";
 import creatorRoutes from "./routes/creator.js";
+import ghostRoutes from "./routes/ghost.js";
 
 export function createApp() {
   const app = express();
@@ -63,6 +64,7 @@ export function createApp() {
   app.use("/api/v1/jarvis", jarvisShortRoutes);
   app.use("/api/v1/jarvis", jarvisRoutes);
   app.use("/api/v1/creator", creatorRoutes);
+  app.use("/api/v1/ghost", ghostRoutes);
 
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");

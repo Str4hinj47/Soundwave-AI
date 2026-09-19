@@ -135,6 +135,13 @@ cd frontend && npm run build     # production build
 | GET | `/api/v1/agent/status` | — | agent status, binary availability & background cache size |
 | GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
 | POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
+| GET | `/api/v1/ghost/macros` | — | list built-in and user custom automation macros |
+| POST | `/api/v1/ghost/macros` | — | create/save custom sequential macro workflow |
+| DELETE | `/api/v1/ghost/macros/:id` | — | remove user custom automation macro |
+| POST | `/api/v1/ghost/decompose` | — | NLP step decomposer for natural language instructions |
+| POST | `/api/v1/ghost/execute` | — | run sequential automation macro with step telemetry |
+| POST | `/api/v1/creator/jump-cut` | — | auto-edit jump cut silence removal with FFmpeg |
+| POST | `/api/v1/creator/screen-frame` | — | screen recording framing with rounded corners & shadow |
 | GET/PATCH | `/api/v1/user/me` | ✓ | profile + password change |
 | GET | `/api/v1/user/usage` | ✓ | quota snapshot |
 | DELETE | `/api/v1/user/account` | ✓ | account deletion (30-day window) |
