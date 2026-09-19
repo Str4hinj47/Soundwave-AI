@@ -25,6 +25,13 @@ import {
   Bot,
   AlertCircle,
   FastForward,
+  Shield,
+  Mic,
+  MicOff,
+  Activity,
+  Layers,
+  Wifi,
+  Sliders
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
@@ -56,6 +63,7 @@ interface ChatMessage {
   text: string;
   actionOutput?: string;
   time: string;
+  tag?: "SYS" | "RPA" | "VOICE" | "USER" | "AUDIO";
 }
 
 interface MacroStep {
@@ -108,6 +116,11 @@ export function AgentHub() {
   const [assistantState, setAssistantState] = useState<"STANDBY" | "LISTENING" | "THINKING" | "SPEAKING" | "GENERATING">("STANDBY");
   const [currentStep, setCurrentStep] = useState<string>("Ready · Awaiting Command");
   const [progressPercent, setProgressPercent] = useState<number>(0);
+  const [visualizerMode, setVisualizerMode] = useState<"core" | "wave" | "matrix">("core");
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [clockTime, setClockTime] = useState("");
+  const [audioDecibels, setAudioDecibels] = useState(-38);
+  const pointerOffset = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
 
   // Short generation controls
   const [selectedNiche, setSelectedNiche] = useState<string>("psychology");
@@ -133,46 +146,22 @@ export function AgentHub() {
   const [newMacroNlInput, setNewMacroNlInput] = useState("");
   const [builderSteps, setBuilderSteps] = useState<MacroStep[]>([]);
 
-  // Load user's cloned voices & macros
-  const loadMacros = async () => {
-    try {
-      const res = await fetch("/api/v1/ghost/macros");
-      if (res.ok) {
-        const data = await res.json();
-        setMacrosList(data.macros || []);
-      }
-    } catch {}
-  };
-
-  useEffect(() => {
-    loadMacros();
-    fetch("/api/v1/tts/clone/profiles")
-      .then((r) => (r.ok ? r.json() : { profiles: [] }))
-      .then((d) => setClonedVoices(d.profiles || []))
-      .catch(() => {});
-
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const v = params.get("voice");
-      if (v) setSelectedVoice(v);
-    } catch {}
-  }, []);
-
   // Computer Actions & Skills
   const [userPrompt, setUserPrompt] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "init",
       sender: "system",
-      text: "🌊 Soundwave Cyber Deck online. All 12 computer control skills, voice studio, and viral engine loaded.",
+      text: "⚡ Soundwave Quantum Cyber Deck online. Neural core active, 16 computer control skills loaded, and Ghost Operator RPA standby.",
       time: new Date().toLocaleTimeString(),
+      tag: "SYS",
     },
   ]);
 
   // Telemetry & Hardware status
   const [systemStats, setSystemStats] = useState({
-    cpu: 14,
-    ramUsed: "4.8 GB",
+    cpu: 18,
+    ramUsed: "5.2 GB",
     ramTotal: "16.0 GB",
     volume: 85,
     muted: false,
@@ -181,7 +170,7 @@ export function AgentHub() {
 
   // Settings Modal & Tabs
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"assistant" | "api" | "audio" | "wake" | "memory" | "plugins" | "macros" | "undo">("assistant");
+  const [settingsTab, setSettingsTab] = useState<"assistant" | "macros" | "api" | "audio" | "wake" | "memory" | "plugins" | "undo">("assistant");
   
   // Settings values
   const [assistantName, setAssistantName] = useState("Soundwave");
@@ -215,6 +204,50 @@ export function AgentHub() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Load user's cloned voices & macros
+  const loadMacros = async () => {
+    try {
+      const res = await fetch("/api/v1/ghost/macros");
+      if (res.ok) {
+        const data = await res.json();
+        setMacrosList(data.macros || []);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadMacros();
+    fetch("/api/v1/tts/clone/profiles")
+      .then((r) => (r.ok ? r.json() : { profiles: [] }))
+      .then((d) => setClonedVoices(d.profiles || []))
+      .catch(() => {});
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get("voice");
+      if (v) setSelectedVoice(v);
+    } catch {}
+  }, []);
+
+  // Live Military Millisecond Clock & Audio Decibels Simulation
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, "0");
+      const m = String(now.getMinutes()).padStart(2, "0");
+      const s = String(now.getSeconds()).padStart(2, "0");
+      const ms = String(Math.floor(now.getMilliseconds() / 10)).padStart(2, "0");
+      setClockTime(`${h}:${m}:${s}.${ms}`);
+
+      if (assistantState === "SPEAKING" || assistantState === "GENERATING" || isMicActive) {
+        setAudioDecibels(Math.floor(-18 + Math.random() * 12));
+      } else {
+        setAudioDecibels(Math.floor(-38 + Math.random() * 6));
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [assistantState, isMicActive]);
+
   // Speech Output Helper (Speaks assistant responses aloud)
   const speakText = (text: string) => {
     if (!voiceFeedback || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -240,13 +273,13 @@ export function AgentHub() {
     const interval = setInterval(() => {
       setSystemStats((prev) => ({
         ...prev,
-        cpu: Math.floor(10 + Math.random() * 15 + (isGenerating ? 35 : 0)),
+        cpu: Math.floor(12 + Math.random() * 14 + (isGenerating ? 38 : 0)),
       }));
     }, 3000);
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Soundwave Reactive Spectrogram Animation (NO 3D FACE!)
+  // ── Advanced Holographic Quantum Orb Engine ──────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -255,6 +288,43 @@ export function AgentHub() {
 
     let animId: number;
     let phase = 0;
+    let rotX = 0;
+    let rotY = 0;
+    let rotZ = 0;
+
+    // Shockwave ripples
+    const shockwaves: Array<{ radius: number; maxRadius: number; opacity: number; speed: number }> = [];
+
+    // Initialize 160 3D particles on a spherical shell
+    const particleCount = 150;
+    const particles: Array<{
+      theta: number;
+      phi: number;
+      radius: number;
+      baseRadius: number;
+      speed: number;
+      size: number;
+      phaseOffset: number;
+      colorOffset: number;
+    }> = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1) - Math.PI / 2;
+      const r = 58 + Math.random() * 16;
+      particles.push({
+        theta,
+        phi,
+        radius: r,
+        baseRadius: r,
+        speed: 0.005 + Math.random() * 0.009,
+        size: 1.2 + Math.random() * 2.2,
+        phaseOffset: Math.random() * Math.PI * 2,
+        colorOffset: Math.random(),
+      });
+    }
+
+    let lastShockwaveTime = Date.now();
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -262,78 +332,310 @@ export function AgentHub() {
       const height = canvas.height;
       const cx = width / 2;
       const cy = height / 2;
-      const baseR = 60;
-      const active = isGenerating || assistantState !== "STANDBY";
+      const active = isGenerating || assistantState !== "STANDBY" || isMicActive;
+
+      // Smooth pointer offset lerp (spring physics)
+      pointerOffset.current.x += (pointerOffset.current.targetX - pointerOffset.current.x) * 0.08;
+      pointerOffset.current.y += (pointerOffset.current.targetY - pointerOffset.current.y) * 0.08;
+
+      const ox = pointerOffset.current.x;
+      const oy = pointerOffset.current.y;
 
       // Color scheme according to active theme
-      const glowColor = 
-        theme === "violet" ? "rgba(139, 92, 246, 0.4)" :
-        theme === "emerald" ? "rgba(16, 185, 129, 0.4)" :
-        theme === "amber" ? "rgba(245, 158, 11, 0.4)" :
-        "rgba(56, 189, 248, 0.4)";
-
-      const strokeColor =
+      const primaryColor =
         theme === "violet" ? "#A78BFA" :
         theme === "emerald" ? "#34D399" :
         theme === "amber" ? "#FBBF24" :
         "#38BDF8";
 
-      // Radial ambient glow
-      const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 115);
-      grad.addColorStop(0, glowColor);
-      grad.addColorStop(1, "rgba(10, 15, 28, 0)");
-      ctx.fillStyle = grad;
+      const secondaryColor =
+        theme === "violet" ? "#C084FC" :
+        theme === "emerald" ? "#6EE7B7" :
+        theme === "amber" ? "#FCD34D" :
+        "#818CF8";
+
+      const coreGlow =
+        theme === "violet" ? "rgba(139, 92, 246, 0.45)" :
+        theme === "emerald" ? "rgba(16, 185, 129, 0.45)" :
+        theme === "amber" ? "rgba(245, 158, 11, 0.45)" :
+        "rgba(6, 182, 212, 0.45)";
+
+      // Dynamic rotation velocity based on assistant state
+      let speedMult = 1.0;
+      if (assistantState === "LISTENING" || isMicActive) speedMult = 1.6;
+      else if (assistantState === "THINKING") speedMult = 2.8;
+      else if (assistantState === "SPEAKING") speedMult = 2.0;
+      else if (assistantState === "GENERATING") speedMult = 3.2;
+
+      rotX += 0.007 * speedMult;
+      rotY += 0.011 * speedMult;
+      rotZ += 0.004 * speedMult;
+      phase += (active ? 0.06 : 0.02) * speedMult;
+
+      // Trigger periodic shockwaves
+      if (active && Date.now() - lastShockwaveTime > (assistantState === "THINKING" ? 600 : 1200)) {
+        shockwaves.push({ radius: 36, maxRadius: 135, opacity: 0.7, speed: 2.2 });
+        lastShockwaveTime = Date.now();
+      }
+
+      // ── 1. AMBIENT NEBULA GLOW ──────────────────────────────────────────
+      const nebulaGrad = ctx.createRadialGradient(cx + ox * 0.3, cy + oy * 0.3, 10, cx, cy, 140);
+      nebulaGrad.addColorStop(0, coreGlow);
+      nebulaGrad.addColorStop(0.4, theme === "violet" ? "rgba(168, 85, 247, 0.15)" : "rgba(14, 165, 233, 0.15)");
+      nebulaGrad.addColorStop(1, "rgba(10, 15, 28, 0)");
+      ctx.fillStyle = nebulaGrad;
       ctx.beginPath();
-      ctx.arc(cx, cy, 115, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 140, 0, Math.PI * 2);
       ctx.fill();
 
-      // Outer targeting orbital ring
+      // ── 2. SHOCKWAVE RIPPLES ────────────────────────────────────────────
+      for (let s = shockwaves.length - 1; s >= 0; s--) {
+        const sw = shockwaves[s];
+        if (!sw) continue;
+        sw.radius += sw.speed;
+        sw.opacity *= 0.96;
+
+        ctx.beginPath();
+        ctx.arc(cx + ox * 0.2, cy + oy * 0.2, sw.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = theme === "violet" ? `rgba(192, 132, 252, ${sw.opacity})` : `rgba(56, 189, 248, ${sw.opacity})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        if (sw.opacity < 0.03 || sw.radius >= sw.maxRadius) {
+          shockwaves.splice(s, 1);
+        }
+      }
+
+      // ── 3. GYROSCOPIC HUD RETICLES & CARDINAL RINGS ───────────────────────
+      // Outer subtle degree ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(phase * 0.1);
       ctx.beginPath();
-      ctx.arc(cx, cy, 85, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.arc(0, 0, 122, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
       ctx.lineWidth = 1;
+      ctx.setLineDash([4, 12]);
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      // Reactive Frequency Spectrum Ring (36 acoustic bars)
-      const bars = 48;
-      const step = (Math.PI * 2) / bars;
+      // Cardinal tick marks at 0, 90, 180, 270 deg
+      for (let i = 0; i < 4; i++) {
+        const tickAngle = (i * Math.PI) / 2;
+        const tx1 = Math.cos(tickAngle) * 116;
+        const ty1 = Math.sin(tickAngle) * 116;
+        const tx2 = Math.cos(tickAngle) * 128;
+        const ty2 = Math.sin(tickAngle) * 128;
+        ctx.beginPath();
+        ctx.moveTo(tx1, ty1);
+        ctx.lineTo(tx2, ty2);
+        ctx.strokeStyle = primaryColor;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Counter-rotating segmented reticle
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-phase * 0.25);
+      const segments = 12;
+      for (let i = 0; i < segments; i++) {
+        const a1 = (i / segments) * Math.PI * 2;
+        const a2 = a1 + (Math.PI * 2) / (segments * 1.8);
+        ctx.beginPath();
+        ctx.arc(0, 0, 102, a1, a2);
+        ctx.strokeStyle = (i % 3 === 0) ? primaryColor : "rgba(255, 255, 255, 0.12)";
+        ctx.lineWidth = (i % 3 === 0) ? 2.0 : 1.0;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // ── 4. EQUALIZER ACOUSTIC RAYS (SONIC BLOOM) ─────────────────────────
+      const rayCount = 56;
+      const rayStep = (Math.PI * 2) / rayCount;
+      for (let i = 0; i < rayCount; i++) {
+        const angle = i * rayStep;
+        let rayHeight = 0;
+        if (assistantState === "SPEAKING") {
+          rayHeight = (Math.sin(angle * 7 + phase * 3) * 0.5 + 0.5) * 22 + Math.cos(angle * 3) * 6;
+        } else if (assistantState === "GENERATING") {
+          rayHeight = (Math.sin(angle * 9 + phase * 5) * 0.5 + 0.5) * 26 + (i % 2 === 0 ? 10 : 0);
+        } else if (assistantState === "THINKING") {
+          rayHeight = (Math.sin(angle * 12 + phase * 4) * 0.5 + 0.5) * 14;
+        } else if (isMicActive || assistantState === "LISTENING") {
+          rayHeight = (Math.sin(angle * 5 + phase * 2.5) * 0.5 + 0.5) * 18;
+        } else {
+          rayHeight = (Math.sin(angle * 4 + phase) * 0.5 + 0.5) * 7;
+        }
+
+        const innerR = 64;
+        const outerR = innerR + Math.max(2, rayHeight);
+        const rx1 = cx + Math.cos(angle) * innerR + ox * 0.2;
+        const ry1 = cy + Math.sin(angle) * innerR + oy * 0.2;
+        const rx2 = cx + Math.cos(angle) * outerR + ox * 0.2;
+        const ry2 = cy + Math.sin(angle) * outerR + oy * 0.2;
+
+        ctx.beginPath();
+        ctx.moveTo(rx1, ry1);
+        ctx.lineTo(rx2, ry2);
+        ctx.strokeStyle = i % 4 === 0 ? primaryColor : (theme === "violet" ? "rgba(168, 85, 247, 0.4)" : "rgba(56, 189, 248, 0.4)");
+        ctx.lineWidth = active ? 1.8 : 1.2;
+        ctx.stroke();
+      }
+
+      // ── 5. MULTI-HARMONIC FLUID PLASMA CORE ──────────────────────────────
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+
+      // Plasma Layer 1: Outer Harmonic Flame
+      const corePoints = 64;
+      const coreStep = (Math.PI * 2) / corePoints;
       ctx.beginPath();
-      for (let i = 0; i < bars; i++) {
-        const angle = i * step;
-        const wave = active 
-          ? Math.sin(angle * 4 + phase) * Math.cos(angle * 2 - phase) * 22
-          : Math.sin(angle * 3 + phase) * 7;
-        const r = baseR + Math.max(-10, wave);
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      for (let i = 0; i <= corePoints; i++) {
+        const angle = i * coreStep;
+        const w1 = Math.sin(angle * 3 + phase * 1.8) * (active ? 9 : 4);
+        const w2 = Math.cos(angle * 5 - phase * 2.2) * (active ? 7 : 3);
+        const w3 = Math.sin(angle * 7 + phase * 3.1) * (active ? 5 : 2);
+        const r = 46 + w1 + w2 + w3;
+        const px = cx + Math.cos(angle) * r + ox * 0.4;
+        const py = cy + Math.sin(angle) * r + oy * 0.4;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = active ? 2.5 : 1.5;
-      ctx.shadowBlur = active ? 18 : 8;
-      ctx.shadowColor = strokeColor;
-      ctx.stroke();
-
-      // Inner Core Ring
-      ctx.beginPath();
-      const coreR = 34 + (active ? Math.sin(phase * 2) * 5 : Math.sin(phase) * 2);
-      ctx.arc(cx, cy, Math.max(10, coreR), 0, Math.PI * 2);
-      ctx.fillStyle = glowColor;
+      const plasmaGrad = ctx.createRadialGradient(cx + ox * 0.4, cy + oy * 0.4, 6, cx, cy, 60);
+      plasmaGrad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+      plasmaGrad.addColorStop(0.3, primaryColor);
+      plasmaGrad.addColorStop(0.7, secondaryColor);
+      plasmaGrad.addColorStop(1, "rgba(15, 23, 42, 0)");
+      ctx.fillStyle = plasmaGrad;
       ctx.fill();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
 
-      phase += active ? 0.08 : 0.025;
+      // Plasma Layer 2: Counter-Rotating Secondary Core
+      ctx.beginPath();
+      for (let i = 0; i <= corePoints; i++) {
+        const angle = i * coreStep;
+        const w1 = Math.sin(angle * 4 - phase * 2.5) * (active ? 7 : 3);
+        const w2 = Math.cos(angle * 2 + phase * 1.4) * (active ? 6 : 2);
+        const r = 32 + w1 + w2;
+        const px = cx + Math.cos(angle) * r + ox * 0.5;
+        const py = cy + Math.sin(angle) * r + oy * 0.5;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.shadowBlur = active ? 22 : 12;
+      ctx.shadowColor = primaryColor;
+      ctx.fill();
+      ctx.restore();
+
+      // ── 6. SWIRLING 3D QUANTUM PARTICLE FIELD ────────────────────────────
+      ctx.save();
+      const fov = 260;
+
+      // Sort particles by Z depth for realistic occlusion
+      const transformedParticles: Array<{
+        px: number;
+        py: number;
+        size: number;
+        alpha: number;
+        color: string;
+        z: number;
+      }> = [];
+
+      for (const p of particles) {
+        p.theta += p.speed * speedMult;
+        p.phi += p.speed * 0.5 * speedMult;
+
+        // If thinking or generating, dynamically pull/spin particles
+        let currentRadius = p.baseRadius;
+        if (assistantState === "THINKING") {
+          currentRadius = p.baseRadius * (0.65 + Math.sin(phase * 2 + p.phaseOffset) * 0.35);
+        } else if (assistantState === "SPEAKING") {
+          currentRadius = p.baseRadius + Math.sin(phase * 4 + p.phaseOffset) * 12;
+        } else if (assistantState === "GENERATING") {
+          currentRadius = p.baseRadius + Math.sin(phase * 6 + p.phaseOffset) * 18;
+        }
+
+        // Spherical to 3D Cartesian
+        const x = currentRadius * Math.cos(p.phi) * Math.cos(p.theta);
+        const y = currentRadius * Math.sin(p.phi);
+        const z = currentRadius * Math.cos(p.phi) * Math.sin(p.theta);
+
+        // 3D Rotations around X, Y, Z
+        const x1 = x * Math.cos(rotY) + z * Math.sin(rotY);
+        const z1 = -x * Math.sin(rotY) + z * Math.cos(rotY);
+        const y2 = y * Math.cos(rotX) - z1 * Math.sin(rotX);
+        const z2 = y * Math.sin(rotX) + z1 * Math.cos(rotX);
+
+        // Perspective Projection
+        const scale = fov / (fov + z2 + 80);
+        const px = cx + x1 * scale + ox * scale * 0.35;
+        const py = cy + y2 * scale + oy * scale * 0.35;
+        const alpha = Math.max(0.12, Math.min(1.0, (z2 + 90) / 180));
+        const pSize = Math.max(0.8, p.size * scale);
+
+        const particleColor =
+          p.colorOffset > 0.6
+            ? primaryColor
+            : p.colorOffset > 0.3
+            ? secondaryColor
+            : "#FFFFFF";
+
+        transformedParticles.push({
+          px,
+          py,
+          size: pSize,
+          alpha,
+          color: particleColor,
+          z: z2,
+        });
+      }
+
+      // Render particles back-to-front
+      transformedParticles.sort((a, b) => a.z - b.z);
+      for (const tp of transformedParticles) {
+        ctx.beginPath();
+        ctx.arc(tp.px, tp.py, tp.size, 0, Math.PI * 2);
+        ctx.fillStyle = tp.color;
+        ctx.globalAlpha = tp.alpha;
+        ctx.shadowBlur = tp.alpha > 0.6 ? 8 : 0;
+        ctx.shadowColor = tp.color;
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // ── 7. CENTRAL SINGULARITY SEED ──────────────────────────────────────
+      ctx.beginPath();
+      const seedR = 12 + (active ? Math.sin(phase * 4) * 3 : Math.sin(phase * 2) * 1.5);
+      ctx.arc(cx + ox * 0.5, cy + oy * 0.5, Math.max(6, seedR), 0, Math.PI * 2);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.shadowBlur = active ? 24 : 14;
+      ctx.shadowColor = "#FFFFFF";
+      ctx.fill();
+
       animId = requestAnimationFrame(render);
     };
 
     render();
     return () => cancelAnimationFrame(animId);
-  }, [isGenerating, assistantState, theme]);
+  }, [isGenerating, assistantState, theme, isMicActive, visualizerMode]);
+
+  // Mouse move handler for interactive elastic orb spring physics
+  const handleOrbMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    pointerOffset.current.targetX = Math.max(-28, Math.min(28, x * 0.25));
+    pointerOffset.current.targetY = Math.max(-28, Math.min(28, y * 0.25));
+  };
+
+  const handleOrbMouseLeave = () => {
+    pointerOffset.current.targetX = 0;
+    pointerOffset.current.targetY = 0;
+  };
 
   // ── Ghost Operator Macro Runner ──────────────────────────────────────────
   const runMacroWorkflow = async (params: {
@@ -362,6 +664,7 @@ export function AgentHub() {
         ? `Execute RPA instruction: "${params.instruction}"`
         : `Run macro workflow: [${macroTitle}]`,
       time: new Date().toLocaleTimeString(),
+      tag: "USER",
     };
     setChatMessages((prev) => [...prev, userMsg]);
 
@@ -402,6 +705,7 @@ export function AgentHub() {
           text: executionChat,
           actionOutput: stepLines,
           time: new Date().toLocaleTimeString(),
+          tag: "RPA",
         },
       ]);
 
@@ -503,13 +807,14 @@ export function AgentHub() {
       sender: "user",
       text: `Command: ${actionName} ${JSON.stringify(params)}`,
       time: new Date().toLocaleTimeString(),
+      tag: "USER",
     };
     setChatMessages((prev) => [...prev, newMsg]);
 
     try {
       let output = "";
       if (actionName === "system_monitor") {
-        output = `System Telemetry: OS: Windows 11 Pro (x64) | CPU: ${systemStats.cpu}% | RAM: ${systemStats.ramUsed} / ${systemStats.ramTotal} | Audio: 48kHz Stereo`;
+        output = `System Telemetry: OS: Linux/Windows Host Healthy | CPU: ${systemStats.cpu}% | RAM: ${systemStats.ramUsed} / ${systemStats.ramTotal} | Audio: 48kHz Stereo`;
       } else if (actionName === "open_app") {
         output = `Application '${params.app_name || "browser"}' triggered via OS launcher.`;
       } else if (actionName === "screen_processor") {
@@ -551,6 +856,7 @@ export function AgentHub() {
           sender: "assistant",
           text: output,
           time: new Date().toLocaleTimeString(),
+          tag: "SYS",
         },
       ]);
       setUndoHistory((prev) => [`Action: ${actionName}`, ...prev.slice(0, 9)]);
@@ -560,7 +866,7 @@ export function AgentHub() {
       toast.error(`Action error: ${e.message}`);
     } finally {
       setAssistantState("STANDBY");
-      setCurrentStep("Ready");
+      setCurrentStep("Ready · Awaiting Command");
     }
   };
 
@@ -649,41 +955,42 @@ export function AgentHub() {
           voice: selectedVoice,
           resolution,
           useDefaultBackground: true,
-          async: false,
         }),
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Generation failed" }));
-        throw new Error(err.error || `Server error ${res.status}`);
+        const err = await res.json();
+        throw new Error(err.message || "Failed to generate video");
       }
 
-      setCurrentStep("Compositing 9:16 vertical video & subtitles...");
-      setProgressPercent(80);
+      setProgressPercent(85);
+      setCurrentStep("Compositing 60fps Minecraft parkour & TikTok captions...");
 
       const data = await res.json();
-      setProgressPercent(100);
-      setCurrentStep("Ready! Video generated successfully.");
       setGeneratedScript(data.script || "");
-      setCompletedVideoUrl(data.downloadUrl || `/api/v1/export/jobs/${data.jobId}/download`);
+      setCompletedVideoUrl(data.videoUrl || null);
+      setProgressPercent(100);
+      setCurrentStep("Short Render Complete!");
 
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          sender: "assistant",
-          text: `🎬 Generated 9:16 Short for niche '${selectedNiche.toUpperCase()}'. Ready for download below.`,
-          time: new Date().toLocaleTimeString(),
-        },
-      ]);
+      const completionMsg: ChatMessage = {
+        id: Date.now().toString(),
+        sender: "assistant",
+        text: `🚀 Rendered 1-click viral short for ${topic.toUpperCase()}! File ready: ${data.videoUrl ? data.videoUrl.split("/").pop() : "soundwave_short.mp4"}`,
+        time: new Date().toLocaleTimeString(),
+        tag: "VOICE",
+      };
+      setChatMessages((p) => [...p, completionMsg]);
+      setUndoHistory((p) => [`Rendered short: ${topic}`, ...p.slice(0, 9)]);
 
-      toast.success("Viral Short created!");
+      speakText(`Your viral short for ${topic} has completed rendering. Ready to publish.`);
+      toast.success("Short rendered successfully!");
     } catch (e: any) {
-      toast.error(e.message || "Generation failed");
-      setCurrentStep("Ready");
+      toast.error(`Generation error: ${e.message}`);
+      setCurrentStep("Generation failed");
     } finally {
       setIsGenerating(false);
       setAssistantState("STANDBY");
+      setTimeout(() => setProgressPercent(0), 4000);
     }
   };
 
@@ -693,9 +1000,9 @@ export function AgentHub() {
       toast.info("Nothing to undo.");
       return;
     }
-    const last = undoHistory[0];
-    setUndoHistory((p) => p.slice(1));
-    toast.success(`Undid: ${last}`);
+    const [last, ...rest] = undoHistory;
+    setUndoHistory(rest);
+    toast.info(`Undid: ${last}`);
     setChatMessages((prev) => [
       ...prev,
       {
@@ -703,6 +1010,7 @@ export function AgentHub() {
         sender: "system",
         text: `↩️ Reverted action: ${last}`,
         time: new Date().toLocaleTimeString(),
+        tag: "SYS",
       },
     ]);
   };
@@ -717,104 +1025,253 @@ export function AgentHub() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
-      {/* ── TOP TELEMETRY RIBBON ────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-800 bg-panel px-5 py-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-500 to-violet-600 text-white shadow-md shadow-violet-500/20">
-            <Radio className="h-4 w-4 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-wide">{assistantName.toUpperCase()} CYBER DECK</span>
-              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                ACTIVE
-              </span>
+      {/* ── TOP FUTURISTIC TELEMETRY & COMMAND HUD ──────────────────────── */}
+      <div className="cyber-panel rounded-2xl p-4 lg:p-5 relative overflow-hidden">
+        {/* Subtle Cyber Grid Watermark */}
+        <div className="absolute inset-0 cyber-grid pointer-events-none opacity-40" />
+
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+          {/* Assistant Identity & Quantum Core Pill */}
+          <div className="flex items-center gap-3.5">
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-500 to-violet-600 text-white shadow-lg shadow-cyan-500/20">
+              <Radio className="h-5 w-5 animate-pulse" />
+              <div className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+              </div>
             </div>
-            <p className="text-[11px] text-gray-400">Autonomous Desktop Assistant · All Skills Online</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold tracking-wider text-white uppercase font-mono">
+                  {assistantName} CYBER DECK // V2.8
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  QUANTUM ACTIVE
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400 mt-0.5">
+                <span>SYS TIME: <strong className="text-cyan-300 font-normal">{clockTime || "SYNCING..."}</strong></span>
+                <span className="hidden sm:inline text-gray-600">|</span>
+                <span className="hidden sm:inline">LATENCY: <strong className="text-emerald-300 font-normal">11ms · EDGE</strong></span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Live Hardware Telemetry Chips */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="flex items-center gap-1.5 rounded-lg border border-gray-800 bg-navy/80 px-2.5 py-1 text-gray-300">
-            <Cpu className="h-3.5 w-3.5 text-cyan-400" />
-            <span>CPU: <strong className="text-white">{systemStats.cpu}%</strong></span>
+          {/* Futuristic Telemetry Gauges & Controls */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            {/* CPU Gauge */}
+            <div className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/90 px-3 py-1.5 text-gray-300 shadow-inner">
+              <Cpu className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[9px] text-gray-500 uppercase leading-none">CPU THREADS</span>
+                <span className="text-[11px] font-bold text-white leading-tight">{systemStats.cpu}%</span>
+              </div>
+              <div className="h-1.5 w-8 rounded-full bg-gray-800 overflow-hidden ml-1">
+                <div 
+                  className="h-full bg-gradient-to-r from-cyan-400 to-violet-500 transition-all duration-300" 
+                  style={{ width: `${Math.min(100, systemStats.cpu * 2)}%` }} 
+                />
+              </div>
+            </div>
+
+            {/* Neural RAM Gauge */}
+            <div className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/90 px-3 py-1.5 text-gray-300 shadow-inner">
+              <Monitor className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[9px] text-gray-500 uppercase leading-none">NEURAL RAM</span>
+                <span className="text-[11px] font-bold text-white leading-tight">{systemStats.ramUsed}</span>
+              </div>
+            </div>
+
+            {/* Audio DSP Telemetry */}
+            <div className="hidden md:flex items-center gap-1.5 rounded-xl border border-gray-800 bg-navy/90 px-3 py-1.5 text-gray-300">
+              <Wifi className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-[11px]">48kHz · 24-BIT</span>
+            </div>
+
+            {/* Security Shield Badge */}
+            <div className="hidden lg:flex items-center gap-1.5 rounded-xl border border-gray-800 bg-navy/90 px-2.5 py-1.5 text-gray-400">
+              <Shield className="h-3.5 w-3.5 text-blue-400" />
+              <span className="text-[10px]">AES-256</span>
+            </div>
+
+            {/* Mute Audio Toggle */}
+            <button
+              onClick={() => triggerAction("computer_settings", { setting: "mute" })}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-800 bg-navy/90 px-2.5 py-1.5 text-gray-300 hover:border-gray-700 hover:text-white transition-colors"
+            >
+              {systemStats.muted ? <VolumeX className="h-3.5 w-3.5 text-rose-400" /> : <Volume2 className="h-3.5 w-3.5 text-emerald-400" />}
+              <span className="text-[11px]">{systemStats.muted ? "MUTED" : `${systemStats.volume}%`}</span>
+            </button>
+
+            {/* TTS Speech Toggle */}
+            <button
+              onClick={() => setVoiceFeedback(!voiceFeedback)}
+              title={voiceFeedback ? "Neural Speech Enabled" : "Neural Speech Muted"}
+              className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs transition-colors ${
+                voiceFeedback
+                  ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300"
+                  : "border-gray-800 bg-navy/90 text-gray-500"
+              }`}
+            >
+              <Activity className={`h-3.5 w-3.5 ${voiceFeedback ? "text-cyan-400" : "text-gray-500"}`} />
+              <span className="text-[11px]">VOICE: {voiceFeedback ? "ON" : "OFF"}</span>
+            </button>
+
+            {/* Theme Jewel Selectors */}
+            <div className="flex items-center gap-1 rounded-xl border border-gray-800 bg-navy/90 p-1">
+              {(["cyan", "violet", "emerald", "amber"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  title={`Switch theme: ${t}`}
+                  className={`h-4 w-4 rounded-full transition-all ${
+                    t === "cyan" ? "bg-cyan-400" :
+                    t === "violet" ? "bg-violet-500" :
+                    t === "emerald" ? "bg-emerald-400" : "bg-amber-400"
+                  } ${theme === t ? "ring-2 ring-white scale-110 shadow-lg" : "opacity-40 hover:opacity-100"}`}
+                />
+              ))}
+            </div>
+
+            {/* Undo Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUndo}
+              className="gap-1 border-gray-700 text-xs py-1 font-mono"
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Undo
+            </Button>
+
+            {/* Settings Drawer Button */}
+            <Button
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              className="gap-1.5 bg-gray-800 hover:bg-gray-700 text-xs py-1 font-mono"
+            >
+              <SettingsIcon className="h-3.5 w-3.5" /> Deck
+            </Button>
           </div>
-
-          <div className="flex items-center gap-1.5 rounded-lg border border-gray-800 bg-navy/80 px-2.5 py-1 text-gray-300">
-            <Monitor className="h-3.5 w-3.5 text-violet-400" />
-            <span>RAM: <strong className="text-white">{systemStats.ramUsed}</strong></span>
-          </div>
-
-          <button
-            onClick={() => triggerAction("computer_settings", { setting: "mute" })}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-800 bg-navy/80 px-2.5 py-1 text-gray-300 hover:border-gray-700 hover:text-white"
-          >
-            {systemStats.muted ? <VolumeX className="h-3.5 w-3.5 text-rose-400" /> : <Volume2 className="h-3.5 w-3.5 text-emerald-400" />}
-            <span>Vol: {systemStats.muted ? "Muted" : `${systemStats.volume}%`}</span>
-          </button>
-
-          <button
-            onClick={() => setVoiceFeedback(!voiceFeedback)}
-            title={voiceFeedback ? "Voice speech enabled" : "Voice speech muted"}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
-              voiceFeedback
-                ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300"
-                : "border-gray-800 bg-navy/80 text-gray-500"
-            }`}
-          >
-            <Volume2 className={`h-3.5 w-3.5 ${voiceFeedback ? "text-cyan-400" : "text-gray-500"}`} />
-            <span>TTS: {voiceFeedback ? "ON" : "OFF"}</span>
-          </button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleUndo}
-            className="gap-1 border-gray-700 text-xs py-1"
-          >
-            <RotateCcw className="h-3.5 w-3.5" /> Undo
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={() => setSettingsOpen(true)}
-            className="gap-1.5 bg-gray-800 hover:bg-gray-700 text-xs py-1"
-          >
-            <SettingsIcon className="h-3.5 w-3.5" /> Settings
-          </Button>
         </div>
       </div>
 
       {/* ── MAIN HUD GRID ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* LEFT COLUMN: Reactive Spectrogram & Quick Skills (5 cols) */}
+        {/* LEFT COLUMN: Holographic Quantum Orb & Control Skills (5 cols) */}
         <div className="space-y-6 lg:col-span-5">
-          {/* Soundwave Spectrogram (NO 3D Face Avatar!) */}
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl">
-            <div className="flex w-full items-center justify-between text-xs text-gray-400 mb-2">
-              <span className="font-semibold tracking-wider uppercase">Acoustic Spectrogram</span>
-              <span className="text-[11px] font-mono text-cyan-400">{assistantState}</span>
+          {/* Holographic Quantum AI Core & Spectrogram Bay */}
+          <div 
+            className="cyber-panel rounded-2xl p-5 shadow-2xl relative overflow-hidden group"
+            onMouseMove={handleOrbMouseMove}
+            onMouseLeave={handleOrbMouseLeave}
+          >
+            {/* Top Frame Tech Markings */}
+            <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 border-b border-gray-800/80 pb-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                <span className="font-semibold uppercase tracking-wider text-cyan-300">
+                  QUANTUM HOLOGRAPHIC CORE
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">MODE:</span>
+                <button 
+                  onClick={() => setVisualizerMode(visualizerMode === "core" ? "wave" : "core")}
+                  className="text-cyan-400 hover:text-white transition-colors"
+                >
+                  {visualizerMode === "core" ? "SINGULARITY" : "HARMONIC"}
+                </button>
+              </div>
             </div>
 
-            <div className="relative flex items-center justify-center my-2">
-              <canvas ref={canvasRef} width={250} height={250} className="rounded-full" />
-              <div className="pointer-events-none absolute text-center">
-                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
+            {/* Interactive Canvas Container with 3D Holographic Rendering */}
+            <div className="relative flex items-center justify-center my-1">
+              <canvas 
+                ref={canvasRef} 
+                width={280} 
+                height={280} 
+                className="rounded-full cursor-crosshair transition-transform duration-200" 
+              />
+
+              {/* Central Holographic State Readout (Non-intrusive HUD overlay) */}
+              <div className="pointer-events-none absolute text-center flex flex-col items-center">
+                <span className={`text-[10px] font-mono font-bold tracking-widest px-2.5 py-0.5 rounded-full border backdrop-blur-md transition-all ${
+                  assistantState === "LISTENING" || isMicActive
+                    ? "bg-emerald-950/70 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-500/20"
+                    : assistantState === "THINKING"
+                    ? "bg-violet-950/70 border-violet-500 text-violet-300 shadow-lg shadow-violet-500/20"
+                    : assistantState === "SPEAKING"
+                    ? "bg-cyan-950/70 border-cyan-500 text-cyan-300 shadow-lg shadow-cyan-500/20"
+                    : assistantState === "GENERATING"
+                    ? "bg-amber-950/70 border-amber-500 text-amber-300 shadow-lg shadow-amber-500/20"
+                    : "bg-navy/80 border-gray-800 text-gray-300"
+                }`}>
                   {assistantState}
                 </span>
-                <p className="text-sm font-bold text-white mt-0.5">
+                <p className="text-xs font-bold font-mono text-white mt-1 drop-shadow-md">
                   {isGenerating ? `${progressPercent}%` : assistantName}
                 </p>
               </div>
             </div>
 
-            <div className="w-full rounded-xl bg-navy/80 p-3 text-center border border-gray-800">
-              <span className="text-xs font-semibold text-cyan-400">{currentStep}</span>
+            {/* Real-time Acoustic Decibel Meter Strip */}
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-navy/90 p-2 border border-gray-800/80 font-mono text-[10px]">
+              <div className="flex items-center gap-1.5 text-gray-400">
+                <Sliders className="h-3 w-3 text-cyan-400" />
+                <span>ENERGY: <strong className="text-white">{audioDecibels} dBFS</strong></span>
+              </div>
+              <div className="flex items-center gap-0.5">
+                {[-42, -36, -30, -24, -18, -12, -6, -3].map((val, idx) => (
+                  <div
+                    key={idx}
+                    className={`h-2.5 w-2 rounded-xs transition-colors duration-150 ${
+                      audioDecibels >= val
+                        ? val >= -6
+                          ? "bg-rose-500 shadow-xs shadow-rose-500/50"
+                          : val >= -18
+                          ? "bg-amber-400 shadow-xs shadow-amber-400/50"
+                          : "bg-cyan-400 shadow-xs shadow-cyan-400/50"
+                        : "bg-gray-800/80"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Interactive Voice Mic Transmit Button */}
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isMicActive;
+                  setIsMicActive(next);
+                  setAssistantState(next ? "LISTENING" : "STANDBY");
+                  if (next) {
+                    toast.info("Microphone active · Transmitting to neural listener...");
+                  } else {
+                    toast.info("Microphone deactivated · Standby mode.");
+                  }
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2 px-3 text-xs font-mono font-semibold transition-all ${
+                  isMicActive
+                    ? "bg-emerald-500/20 border border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-500/25 animate-pulse"
+                    : "bg-navy/80 border border-gray-800 text-gray-300 hover:border-cyan-500/60 hover:text-white"
+                }`}
+              >
+                {isMicActive ? <Mic className="h-3.5 w-3.5 text-emerald-400" /> : <MicOff className="h-3.5 w-3.5 text-gray-400" />}
+                <span>{isMicActive ? "LISTENING // PUSH TO MUTE" : "PUSH-TO-TALK [MIC]"}</span>
+              </button>
+            </div>
+
+            {/* Active Operation Status Progress */}
+            <div className="mt-3 w-full rounded-xl bg-navy/80 p-2.5 text-center border border-gray-800/80">
+              <span className="text-xs font-semibold text-cyan-300 font-mono">{currentStep}</span>
               {isGenerating && (
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
                   <div 
-                    className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-cyan-400 via-violet-500 to-cyan-400 transition-all duration-300 animate-[shimmer_1.5s_infinite]"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -823,8 +1280,8 @@ export function AgentHub() {
 
             {/* Vision capture preview if available */}
             {visionPreview && (
-              <div className="mt-4 w-full rounded-xl border border-gray-800 overflow-hidden bg-black">
-                <div className="flex items-center justify-between px-3 py-1.5 bg-gray-900/80 text-[10px] text-gray-400">
+              <div className="mt-3 w-full rounded-xl border border-gray-800 overflow-hidden bg-black">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-gray-900/80 text-[10px] font-mono text-gray-400">
                   <span>SCREEN CAPTURE FEED</span>
                   <button onClick={() => setVisionPreview(null)} className="hover:text-white">✕</button>
                 </div>
@@ -834,25 +1291,25 @@ export function AgentHub() {
           </div>
 
           {/* Ghost Operator Macro Deck & RPA Automation */}
-          <div className="rounded-2xl border border-gray-800 bg-panel p-5 space-y-3.5 shadow-lg">
+          <div className="cyber-panel rounded-2xl p-5 space-y-3.5 shadow-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                   <Bot className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold tracking-wider text-white uppercase flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold tracking-wider text-white uppercase flex items-center gap-1.5 font-mono">
                     Ghost Operator Macros
                     <Badge tone="blue" className="text-[9px] px-1.5 py-0 font-mono">
                       RPA ENGINE
                     </Badge>
                   </h3>
-                  <p className="text-[10px] text-gray-400">Sequential task automation & multi-action routines</p>
+                  <p className="text-[10px] text-gray-400">Sequential multi-step desktop automation routines</p>
                 </div>
               </div>
               <button
                 onClick={() => setMacroModalOpen(true)}
-                className="flex items-center gap-1 rounded-lg border border-gray-700 bg-navy/80 px-2 py-1 text-[11px] font-medium text-cyan-400 hover:border-cyan-500 hover:bg-cyan-950/30 transition-all"
+                className="flex items-center gap-1 rounded-lg border border-gray-700 bg-navy/80 px-2.5 py-1 text-[11px] font-mono font-medium text-cyan-400 hover:border-cyan-500 hover:bg-cyan-950/30 transition-all"
               >
                 <Plus className="h-3 w-3" /> New Macro
               </button>
@@ -865,11 +1322,11 @@ export function AgentHub() {
                   key={macro.id}
                   disabled={isRunningMacro}
                   onClick={() => runMacroWorkflow({ macroId: macro.id })}
-                  className="group relative flex flex-col justify-between rounded-xl border border-gray-800 bg-navy/50 p-2.5 text-left transition-all hover:border-cyan-500/50 hover:bg-cyan-950/20 disabled:opacity-50"
+                  className="group relative flex flex-col justify-between rounded-xl border border-gray-800 bg-navy/60 p-2.5 text-left transition-all hover:border-cyan-500/50 hover:bg-cyan-950/20 disabled:opacity-50"
                 >
                   <div className="flex items-start justify-between w-full">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm">{macro.icon || "⚡"}</span>
+                      <span className="text-base">{macro.icon || "⚡"}</span>
                       <span className="text-xs font-semibold text-gray-200 group-hover:text-cyan-300 transition-colors">
                         {macro.name}
                       </span>
@@ -887,7 +1344,7 @@ export function AgentHub() {
 
             {/* Natural Language RPA Execution Box */}
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
+              <label className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase font-mono">
                 Natural Language RPA Chainer
               </label>
               <div className="flex gap-1.5">
@@ -903,7 +1360,7 @@ export function AgentHub() {
                       setNlMacroPrompt("");
                     }
                   }}
-                  className="flex-1 rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
+                  className="flex-1 rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none font-mono"
                 />
                 <Button
                   size="sm"
@@ -914,7 +1371,7 @@ export function AgentHub() {
                       setNlMacroPrompt("");
                     }
                   }}
-                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-2.5 py-1"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-2.5 py-1 font-mono"
                 >
                   <Zap className="h-3 w-3 mr-1" /> Run
                 </Button>
@@ -923,13 +1380,13 @@ export function AgentHub() {
 
             {/* Live Macro Telemetry & Execution Progress Tracker */}
             {isRunningMacro && (
-              <div className="rounded-xl border border-cyan-500/40 bg-cyan-950/20 p-2.5 space-y-1.5 animate-pulse">
+              <div className="rounded-xl border border-cyan-500/40 bg-cyan-950/20 p-2.5 space-y-1.5 animate-pulse font-mono">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
                     <FastForward className="h-3.5 w-3.5 animate-spin" />
                     Executing: {runningMacroName}
                   </span>
-                  <span className="text-[10px] font-mono text-cyan-400 uppercase">In Progress</span>
+                  <span className="text-[10px] text-cyan-400 uppercase">In Progress</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
                   <div
@@ -942,7 +1399,7 @@ export function AgentHub() {
 
             {/* Last Execution Report Telemetry */}
             {activeExecutionReport && !isRunningMacro && (
-              <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 space-y-1.5">
+              <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 space-y-1.5 font-mono">
                 <div className="flex items-center justify-between text-xs border-b border-gray-800 pb-1">
                   <span className="font-semibold text-white flex items-center gap-1.5">
                     {activeExecutionReport.allSuccess ? (
@@ -952,13 +1409,13 @@ export function AgentHub() {
                     )}
                     {activeExecutionReport.workflowName}
                   </span>
-                  <span className="text-[10px] font-mono text-gray-400">
+                  <span className="text-[10px] text-gray-400">
                     {activeExecutionReport.totalDurationMs}ms · {activeExecutionReport.stepResults.length} steps
                   </span>
                 </div>
                 <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
                   {activeExecutionReport.stepResults.map((step, idx) => (
-                    <div key={idx} className="flex items-start justify-between text-[10px] font-mono text-gray-300">
+                    <div key={idx} className="flex items-start justify-between text-[10px] text-gray-300">
                       <span className="truncate pr-2">
                         {step.status === "SUCCESS" ? "✓" : "⚠"} {step.description || step.action}
                       </span>
@@ -974,81 +1431,90 @@ export function AgentHub() {
           </div>
 
           {/* Computer Control Actions & Skills Grid */}
-          <div className="rounded-2xl border border-gray-800 bg-panel p-5 space-y-3">
-            <h3 className="text-xs font-bold tracking-wider text-gray-400 uppercase">
-              Computer Control Actions & Skills (16 Loaded)
+          <div className="cyber-panel rounded-2xl p-5 space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold tracking-wider text-gray-400 uppercase font-mono flex items-center justify-between">
+              <span>Computer Actions & Skills (16 Loaded)</span>
+              <span className="text-[10px] text-cyan-400 font-normal">ZERO-LATENCY</span>
             </h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <button
                 onClick={() => triggerAction("open_app", { app_name: "chrome" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-cyan-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-cyan-500 hover:text-white transition-all text-left group"
               >
-                <Monitor className="h-4 w-4 text-cyan-400" />
+                <Monitor className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
                 <span>Open Browser</span>
               </button>
 
               <button
                 onClick={() => triggerAction("screen_processor", { action: "capture" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-violet-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-violet-500 hover:text-white transition-all text-left group"
               >
-                <Film className="h-4 w-4 text-violet-400" />
+                <Film className="h-4 w-4 text-violet-400 group-hover:scale-110 transition-transform" />
                 <span>Screen Vision</span>
               </button>
 
               <button
                 onClick={() => triggerAction("system_monitor")}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-emerald-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-emerald-500 hover:text-white transition-all text-left group"
               >
-                <Cpu className="h-4 w-4 text-emerald-400" />
+                <Cpu className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
                 <span>System Stats</span>
               </button>
 
               <button
                 onClick={() => triggerAction("weather_report", { city: "Belgrade" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-amber-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-amber-500 hover:text-white transition-all text-left group"
               >
-                <CloudRain className="h-4 w-4 text-amber-400" />
+                <CloudRain className="h-4 w-4 text-amber-400 group-hover:scale-110 transition-transform" />
                 <span>Weather</span>
               </button>
 
               <button
                 onClick={() => triggerAction("clipboard", { operation: "get" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-all text-left group"
               >
-                <Copy className="h-4 w-4 text-blue-400" />
+                <Copy className="h-4 w-4 text-blue-400 group-hover:scale-110 transition-transform" />
                 <span>Clipboard</span>
               </button>
 
               <button
                 onClick={() => triggerAction("reminder", { message: "Review generated shorts", seconds: 60 })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-pink-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-pink-500 hover:text-white transition-all text-left group"
               >
-                <Clock className="h-4 w-4 text-pink-400" />
+                <Clock className="h-4 w-4 text-pink-400 group-hover:scale-110 transition-transform" />
                 <span>Set Timer</span>
               </button>
 
               <button
                 onClick={() => triggerAction("youtube_video", { query: "minecraft parkour 4k" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-red-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-red-500 hover:text-white transition-all text-left group"
               >
-                <Film className="h-4 w-4 text-red-400" />
+                <Film className="h-4 w-4 text-red-400 group-hover:scale-110 transition-transform" />
                 <span>YouTube</span>
               </button>
 
               <button
                 onClick={() => triggerAction("proactive")}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-teal-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-teal-500 hover:text-white transition-all text-left group"
               >
-                <Sparkles className="h-4 w-4 text-teal-400" />
+                <Sparkles className="h-4 w-4 text-teal-400 group-hover:scale-110 transition-transform" />
                 <span>Proactive Vitals</span>
               </button>
 
               <button
                 onClick={() => triggerAction("code_helper", { code: "print('Soundwave Sandbox: Python 3.11 OK')" })}
-                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-indigo-500 hover:text-white transition-all text-left"
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-indigo-500 hover:text-white transition-all text-left group"
               >
-                <Terminal className="h-4 w-4 text-indigo-400" />
+                <Terminal className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform" />
                 <span>Code Sandbox</span>
+              </button>
+
+              <button
+                onClick={() => triggerAction("browser_control", { action: "open", url: "https://google.com" })}
+                className="flex items-center gap-2 rounded-xl border border-gray-800 bg-navy/60 p-2 text-xs text-gray-300 hover:border-cyan-500 hover:text-white transition-all text-left group"
+              >
+                <Layers className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                <span>Browser Control</span>
               </button>
             </div>
           </div>
@@ -1056,68 +1522,133 @@ export function AgentHub() {
 
         {/* RIGHT COLUMN: Live Transcript & Short Generator Hub (7 cols) */}
         <div className="space-y-6 lg:col-span-7">
-          {/* Live Assistant Terminal & Chat Feed */}
-          <div className="flex flex-col h-[320px] rounded-2xl border border-gray-800 bg-panel p-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-3">
+          {/* Live Cyber Terminal & Neural Stream */}
+          <div className="cyber-panel rounded-2xl p-4 shadow-2xl relative overflow-hidden flex flex-col h-[340px]">
+            {/* Subtle Scanline Overlay */}
+            <div className="absolute inset-0 cyber-scanlines pointer-events-none opacity-40 z-0" />
+
+            <div className="relative z-10 flex items-center justify-between border-b border-gray-800 pb-2 mb-2 font-mono">
               <div className="flex items-center gap-2 text-xs font-semibold text-gray-300">
                 <Terminal className="h-4 w-4 text-cyan-400" />
-                <span>Live Event Feed & Transcript</span>
+                <span>EVENT STREAM // BUFFER: LIVE</span>
               </div>
-              <span className="text-[10px] text-gray-500 font-mono">Real-time Stream</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setChatMessages([
+                    {
+                      id: Date.now().toString(),
+                      sender: "system",
+                      text: "Buffer cleared. Cyber Deck listening.",
+                      time: new Date().toLocaleTimeString(),
+                      tag: "SYS",
+                    }
+                  ])}
+                  className="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors uppercase"
+                >
+                  Clear Log
+                </button>
+                <span className="text-[10px] text-emerald-400 font-bold uppercase">● STREAMING</span>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
+            {/* Scrollable Event Feed */}
+            <div className="relative z-10 flex-1 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
               {chatMessages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`rounded-xl p-2.5 leading-relaxed ${
+                  className={`rounded-xl p-2.5 leading-relaxed transition-all ${
                     msg.sender === "user"
-                      ? "bg-violet-950/30 border border-violet-800/40 text-violet-200 ml-6"
+                      ? "bg-violet-950/40 border border-violet-800/50 text-violet-200 ml-6"
                       : msg.sender === "assistant"
-                      ? "bg-navy/80 border border-gray-800 text-gray-200 mr-6"
-                      : "bg-gray-900/60 text-gray-400 border border-gray-800/60"
+                      ? "bg-navy/90 border border-cyan-900/40 text-gray-200 mr-6 shadow-sm"
+                      : "bg-gray-900/70 text-gray-400 border border-gray-800/80"
                   }`}
                 >
                   <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
-                    <span className="uppercase font-bold tracking-wider">
-                      {msg.sender === "user" ? "You" : msg.sender === "assistant" ? assistantName : "System"}
+                    <span className="uppercase font-bold tracking-wider flex items-center gap-1.5">
+                      <span className={`px-1 rounded text-[9px] ${
+                        msg.sender === "user" 
+                          ? "bg-violet-900/60 text-violet-300"
+                          : msg.tag === "RPA"
+                          ? "bg-cyan-900/60 text-cyan-300"
+                          : "bg-gray-800 text-gray-300"
+                      }`}>
+                        {msg.tag || (msg.sender === "user" ? "USER" : "SYS")}
+                      </span>
+                      <span>{msg.sender === "user" ? "Command" : assistantName}</span>
                     </span>
                     <span>{msg.time}</span>
                   </div>
-                  <div>{msg.text}</div>
+                  <div className="whitespace-pre-line">{msg.text}</div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
 
+            {/* Quick Trigger Suggestion Chips */}
+            <div className="relative z-10 flex items-center gap-1.5 pt-2 overflow-x-auto text-[11px] font-mono text-gray-400">
+              <span className="text-[10px] text-gray-500 uppercase shrink-0">QUICK:</span>
+              <button
+                type="button"
+                onClick={() => runMacroWorkflow({ macroId: "creator_morning_prep" })}
+                className="shrink-0 rounded-md border border-gray-800 bg-navy/80 px-2 py-0.5 hover:border-cyan-500/60 hover:text-white transition-colors"
+              >
+                🌅 Morning Setup
+              </button>
+              <button
+                type="button"
+                onClick={() => runMacroWorkflow({ macroId: "deep_focus_pomodoro" })}
+                className="shrink-0 rounded-md border border-gray-800 bg-navy/80 px-2 py-0.5 hover:border-violet-500/60 hover:text-white transition-colors"
+              >
+                🎯 Deep Focus
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerAction("system_monitor")}
+                className="shrink-0 rounded-md border border-gray-800 bg-navy/80 px-2 py-0.5 hover:border-emerald-500/60 hover:text-white transition-colors"
+              >
+                📊 Vitals
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerAction("screen_processor", { action: "capture" })}
+                className="shrink-0 rounded-md border border-gray-800 bg-navy/80 px-2 py-0.5 hover:border-amber-500/60 hover:text-white transition-colors"
+              >
+                📸 Vision
+              </button>
+            </div>
+
             {/* Input Bar */}
-            <form onSubmit={handleUserSubmit} className="mt-3 flex gap-2">
-              <input
-                type="text"
-                placeholder="Type a command (e.g. 'open chrome', 'weather', 'make a short')..."
-                value={userPrompt}
-                onChange={(e) => setUserPrompt(e.target.value)}
-                className="flex-1 rounded-xl border border-gray-800 bg-navy px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
-              />
-              <Button type="submit" size="sm" className="gap-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs">
+            <form onSubmit={handleUserSubmit} className="relative z-10 mt-2 flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-2.5 text-cyan-400 font-mono text-xs">❯</span>
+                <input
+                  type="text"
+                  placeholder="Type command (e.g. 'open chrome', 'focus mode', 'weather', 'make short')..."
+                  value={userPrompt}
+                  onChange={(e) => setUserPrompt(e.target.value)}
+                  className="w-full rounded-xl border border-gray-800 bg-navy pl-7 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none font-mono"
+                />
+              </div>
+              <Button type="submit" size="sm" className="gap-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono">
                 <Send className="h-3 w-3" /> Execute
               </Button>
             </form>
           </div>
 
           {/* 1-Click Viral Short Engine */}
-          <div className="rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl space-y-4">
+          <div className="cyber-panel rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <h2 className="text-base font-bold text-white flex items-center gap-2 font-mono">
                   <Flame className="h-4 w-4 text-violet-400" />
-                  1-Click Viral Short Generator
+                  Autonomous Viral Short Engine
                 </h2>
                 <p className="text-xs text-gray-400">
-                  Research-backed hooks, neural voice, TikTok captions, Minecraft 60fps parkour.
+                  Research-backed hooks, neural voiceover, dynamic TikTok captions, and 60fps Minecraft parkour.
                 </p>
               </div>
-              <Badge tone="violet" className="py-0.5">2026 Engine</Badge>
+              <Badge tone="violet" className="py-0.5 font-mono">2026 ENGINE</Badge>
             </div>
 
             {/* Niche selector */}
@@ -1126,67 +1657,69 @@ export function AgentHub() {
                 <button
                   key={n.id}
                   onClick={() => setSelectedNiche(n.id)}
-                  className={`flex flex-col items-start rounded-xl border p-2 text-left transition-all ${
+                  className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition-all ${
                     selectedNiche === n.id
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/20"
-                      : "border-gray-800 bg-navy/40 text-gray-400 hover:border-gray-700"
+                      ? "border-cyan-500 bg-cyan-950/30 text-white shadow-md shadow-cyan-500/10"
+                      : "border-gray-800 bg-navy/60 text-gray-400 hover:border-gray-700 hover:text-gray-200"
                   }`}
                 >
-                  <div className="flex w-full items-center justify-between text-sm">
+                  <div className="flex items-center gap-1.5 text-sm">
                     <span>{n.icon}</span>
-                    {selectedNiche === n.id && <CheckCircle2 className="h-3.5 w-3.5 text-violet-400" />}
+                    <span className="font-semibold text-xs text-white">{n.name}</span>
                   </div>
-                  <span className="mt-1 text-xs font-semibold text-white">{n.name}</span>
+                  <p className="mt-1 text-[10px] text-gray-400 line-clamp-1">{n.desc}</p>
                 </button>
               ))}
             </div>
 
-            {/* Custom Prompt */}
+            {/* Custom Topic Input */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-300 mb-1">Custom Prompt or Topic (Optional)</label>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 font-mono">
+                Custom Topic / Hook Prompt (Optional)
+              </label>
               <input
                 type="text"
-                placeholder="Leave blank to use top niche hooks, or enter custom prompt..."
+                placeholder="Leave blank for researched algorithm hook, or type e.g. 'The Paradox of Choice'..."
                 value={customTopic}
                 onChange={(e) => setCustomTopic(e.target.value)}
-                className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white placeholder-gray-500"
+                className="w-full rounded-xl border border-gray-800 bg-navy px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
-            {/* Options Row */}
+            {/* Voice & Video Options */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-[11px] font-semibold text-gray-300 mb-1">Voice</label>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 font-mono">Voiceover Engine</label>
                 <select
                   value={selectedVoice}
                   onChange={(e) => setSelectedVoice(e.target.value)}
-                  className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                  className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-2 text-xs text-white"
                 >
                   {clonedVoices.length > 0 && (
                     <optgroup label="My Cloned Voices">
                       {clonedVoices.map((cv) => (
-                        <option key={cv.id} value={`clone:${cv.id}`}>
-                          🎙️ {cv.name} (My Voice)
+                        <option key={cv.id} value={cv.id}>
+                          ⭐ {cv.name} (Cloned Voice)
                         </option>
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Neural Voices">
-                    <option value="en-US-JennyNeural">Jenny (Shorts Viral Default)</option>
-                    <option value="en-US-GuyNeural">Guy (Documentary Authority)</option>
-                    <option value="en-GB-RyanNeural">Ryan (British Male Hook)</option>
-                    <option value="en-GB-SoniaNeural">Sonia (British Storyteller)</option>
+                  <optgroup label="Neural Microsoft Voices">
+                    <option value="en-US-JennyNeural">Jenny (Energetic & Viral)</option>
+                    <option value="en-US-GuyNeural">Guy (Documentary & History)</option>
+                    <option value="en-US-AriaNeural">Aria (Tech & Futuristic)</option>
+                    <option value="en-US-ChristopherNeural">Christopher (Deep Mindset)</option>
                   </optgroup>
                 </select>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-gray-300 mb-1">Quality</label>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 font-mono">Export Quality</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setResolution("720p")}
-                    className={`flex-1 rounded-xl border py-1.5 text-xs font-semibold ${
+                    className={`flex-1 rounded-xl border py-1.5 text-xs font-semibold font-mono ${
                       resolution === "720p" ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-gray-800 bg-navy text-gray-400"
                     }`}
                   >
@@ -1195,7 +1728,7 @@ export function AgentHub() {
                   <button
                     type="button"
                     onClick={() => setResolution("1080p")}
-                    className={`flex-1 rounded-xl border py-1.5 text-xs font-semibold ${
+                    className={`flex-1 rounded-xl border py-1.5 text-xs font-semibold font-mono ${
                       resolution === "1080p" ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-gray-800 bg-navy text-gray-400"
                     }`}
                   >
@@ -1210,10 +1743,10 @@ export function AgentHub() {
               <Button
                 onClick={handleGenerateShort}
                 disabled={isGenerating || batchRunning}
-                className="flex-1 gap-2 bg-gradient-to-r from-cyan-500 to-violet-600 text-white font-semibold hover:from-cyan-400 hover:to-violet-500"
+                className="flex-1 gap-2 bg-gradient-to-r from-cyan-500 via-violet-600 to-cyan-500 text-white font-semibold hover:from-cyan-400 hover:to-violet-500 font-mono shadow-lg shadow-cyan-500/20"
               >
                 {isGenerating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Generate 1-Click Short
+                Generate 1-Click Viral Short
               </Button>
               <Button
                 variant="subtle"
@@ -1233,7 +1766,7 @@ export function AgentHub() {
                   }
                 }}
                 disabled={isGenerating || batchRunning}
-                className="gap-1.5 text-xs border border-gray-700"
+                className="gap-1.5 text-xs border border-gray-700 font-mono"
               >
                 {batchRunning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : "Batch All 7"}
               </Button>
@@ -1244,17 +1777,17 @@ export function AgentHub() {
 
       {/* ── GENERATED VIDEO PREVIEW CARD ───────────────────────────────── */}
       {(completedVideoUrl || generatedScript) && (
-        <div className="rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl space-y-4">
+        <div className="cyber-panel rounded-2xl p-6 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-              <h3 className="text-base font-bold text-white">Generated Video Ready</h3>
+              <h3 className="text-base font-bold text-white font-mono">Generated Video Ready</h3>
             </div>
             {completedVideoUrl && (
               <a
                 href={completedVideoUrl}
                 download="soundwave_short.mp4"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-500"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 font-mono shadow-md"
               >
                 <Download className="h-3.5 w-3.5" /> Download MP4
               </a>
@@ -1263,16 +1796,15 @@ export function AgentHub() {
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
             <div className="space-y-2 md:col-span-8">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Voiceover Script</span>
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">Voiceover Script</span>
               <div className="rounded-xl border border-gray-800 bg-navy/80 p-4 text-xs leading-relaxed text-gray-200 font-mono">
                 {generatedScript}
               </div>
             </div>
-
             {completedVideoUrl && (
-              <div className="flex flex-col items-center justify-center md:col-span-4">
-                <div className="w-full max-w-[220px] overflow-hidden rounded-xl border border-gray-800 bg-black shadow-lg">
-                  <video src={completedVideoUrl} controls playsInline className="aspect-[9/16] w-full object-cover" />
+              <div className="md:col-span-4 flex justify-center">
+                <div className="aspect-[9/16] w-48 overflow-hidden rounded-xl border border-gray-800 bg-black shadow-xl">
+                  <video src={completedVideoUrl} controls autoPlay loop className="h-full w-full object-cover" />
                 </div>
               </div>
             )}
@@ -1280,13 +1812,13 @@ export function AgentHub() {
         </div>
       )}
 
-      {/* ── COMPLETE SETTINGS DRAWER / MODAL (FATIH RECREATION) ────────── */}
+      {/* ── COMPLETE SETTINGS DRAWER / MODAL ────────────────────────────── */}
       <Modal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         title="Soundwave Cyber Deck Settings"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 font-mono">
           {/* Settings Tabs */}
           <div className="flex flex-wrap gap-1 border-b border-gray-800 pb-2">
             {[
@@ -1562,7 +2094,7 @@ export function AgentHub() {
         onClose={() => setMacroModalOpen(false)}
         title="Ghost Operator: Create Automation Macro"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 font-mono">
           <p className="text-xs text-gray-400">
             Define multi-step desktop automation routines using natural language RPA decomposition or custom configuration.
           </p>

@@ -100,35 +100,64 @@ class SoundwaveDesktopApp:
         def render_canvas():
             canvas.delete("all")
             cx, cy = 180, 115
-            r_base = 54
-            bars = 44
+            r_base = 48
+            bars = 48
             is_active = self.state != "STANDBY"
 
-            # Outer ring
-            canvas.create_oval(cx - 80, cy - 80, cx + 80, cy + 80, outline="#1E293B", width=1)
+            # 1. Outer Gyroscopic Dash Ring
+            canvas.create_oval(cx - 96, cy - 96, cx + 96, cy + 96, outline="#1E293B", width=1, dash=(4, 8))
 
-            # Frequency wave points
+            # 2. Cardinal Reticle Ticks (0, 90, 180, 270)
+            for tick_i in range(4):
+                ta = (tick_i * math.pi) / 2 + (self.anim_phase * 0.1)
+                tx1 = cx + math.cos(ta) * 90
+                ty1 = cy + math.sin(ta) * 90
+                tx2 = cx + math.cos(ta) * 102
+                ty2 = cy + math.sin(ta) * 102
+                canvas.create_line(tx1, ty1, tx2, ty2, fill="#38BDF8" if is_active else "#334155", width=2)
+
+            # 3. Orbiting Quantum Particles
+            for p_i in range(18):
+                pa = (p_i / 18) * 2 * math.pi + self.anim_phase * (1.2 if is_active else 0.5)
+                pr = 74 + math.sin(pa * 3 + self.anim_phase) * 8
+                px = cx + math.cos(pa) * pr
+                py = cy + math.sin(pa) * pr
+                p_sz = 2 if p_i % 2 == 0 else 3
+                canvas.create_oval(px - p_sz, py - p_sz, px + p_sz, py + p_sz, fill="#38BDF8" if p_i % 3 == 0 else "#818CF8", outline="")
+
+            # 4. Sonic Equalizer Rays
+            rays = 36
+            for r_i in range(rays):
+                ra = (r_i / rays) * 2 * math.pi
+                rh = (math.sin(ra * 6 + self.anim_phase * 3) * 0.5 + 0.5) * (18 if is_active else 5)
+                rx1 = cx + math.cos(ra) * 50
+                ry1 = cy + math.sin(ra) * 50
+                rx2 = cx + math.cos(ra) * (50 + rh)
+                ry2 = cy + math.sin(ra) * (50 + rh)
+                canvas.create_line(rx1, ry1, rx2, ry2, fill="#06B6D4" if is_active else "#1E293B", width=1)
+
+            # 5. Harmonic Waveform Loop
             pts = []
             for i in range(bars):
                 angle = (i / bars) * 2 * math.pi
                 if is_active:
-                    w = math.sin(angle * 4 + self.anim_phase) * 18 + math.cos(angle * 2 - self.anim_phase) * 9
+                    w = math.sin(angle * 4 + self.anim_phase) * 16 + math.cos(angle * 2 - self.anim_phase) * 8
                 else:
-                    w = math.sin(angle * 3 + self.anim_phase) * 5
+                    w = math.sin(angle * 3 + self.anim_phase) * 4
                 r = r_base + w
                 px = cx + math.cos(angle) * r
                 py = cy + math.sin(angle) * r
                 pts.extend([px, py])
 
             if len(pts) >= 4:
-                stroke = "#8B5CF6" if is_active else "#38BDF8"
+                stroke = "#A78BFA" if is_active else "#38BDF8"
                 canvas.create_polygon(pts, outline=stroke, fill="", width=2, smooth=True)
 
-            # Glowing core
-            core_r = 30 + (math.sin(self.anim_phase * 2) * 4 if is_active else 0)
+            # 6. Glowing Quantum Singularity Core
+            core_r = 24 + (math.sin(self.anim_phase * 2) * 4 if is_active else math.sin(self.anim_phase) * 1.5)
             core_col = "#6D28D9" if is_active else "#0284C7"
-            canvas.create_oval(cx - core_r, cy - core_r, cx + core_r, cy + core_r, fill=core_col, outline="")
-            canvas.create_text(cx, cy, text="SWA", fill="#FFFFFF", font=("Segoe UI", 10, "bold"))
+            canvas.create_oval(cx - core_r, cy - core_r, cx + core_r, cy + core_r, fill=core_col, outline="#FFFFFF", width=1)
+            canvas.create_text(cx, cy, text="SWA", fill="#FFFFFF", font=("Segoe UI", 9, "bold"))
 
             self.anim_phase += 0.08 if is_active else 0.03
             root.after(30, render_canvas)
@@ -136,11 +165,11 @@ class SoundwaveDesktopApp:
         render_canvas()
 
         # State text
-        self.lbl_cur_state = tk.Label(left_col, text="READY · LISTENING", font=("Segoe UI", 10, "bold"), fg="#38BDF8", bg="#111827")
+        self.lbl_cur_state = tk.Label(left_col, text="READY · QUANTUM CORE STANDBY", font=("Segoe UI", 10, "bold"), fg="#38BDF8", bg="#111827")
         self.lbl_cur_state.pack(pady=4)
 
         # Quick Actions Grid
-        lbl_quick = tk.Label(left_col, text="COMPUTER ACTIONS (16 SKILLS)", font=("Segoe UI", 9, "bold"), fg="#94A3B8", bg="#111827")
+        lbl_quick = tk.Label(left_col, text="COMPUTER ACTIONS & GHOST MACROS", font=("Segoe UI", 9, "bold"), fg="#94A3B8", bg="#111827")
         lbl_quick.pack(anchor=tk.W, pady=(10, 4))
 
         quick_grid = tk.Frame(left_col, bg="#111827")
@@ -148,6 +177,8 @@ class SoundwaveDesktopApp:
 
         actions_list = [
             ("🎬 1-Click Short", lambda: self._trigger_short("psychology")),
+            ("👻 Creator Setup", lambda: self._execute_action("ghost_macro", {"action": "execute", "macro_id": "creator_morning_prep"})),
+            ("🎯 Deep Focus", lambda: self._execute_action("ghost_macro", {"action": "execute", "macro_id": "deep_focus_pomodoro"})),
             ("📦 Batch 7 Niches", self._trigger_batch),
             ("🌐 Web Search", lambda: self._execute_action("web_search", {"query": "Latest AI news"})),
             ("📸 Screen Vision", lambda: self._execute_action("screen_processor", {"action": "capture"})),
