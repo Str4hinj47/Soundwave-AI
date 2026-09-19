@@ -37,7 +37,6 @@ import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { toast } from "../store/toast";
-import { useNavigate } from "react-router-dom";
 
 interface NicheInfo {
   id: string;
@@ -107,8 +106,6 @@ interface MacroExecutionReport {
 }
 
 export function AgentHub() {
-  const navigate = useNavigate();
-
   // Theme state
   const [theme, setTheme] = useState<"cyan" | "violet" | "emerald" | "amber">("cyan");
 
@@ -148,15 +145,31 @@ export function AgentHub() {
 
   // Computer Actions & Skills
   const [userPrompt, setUserPrompt] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "init",
-      sender: "system",
-      text: "⚡ Soundwave Quantum Cyber Deck online. Neural core active, 16 computer control skills loaded, and Ghost Operator RPA standby.",
-      time: new Date().toLocaleTimeString(),
-      tag: "SYS",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem("soundwave_agent_chat_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        id: "init",
+        sender: "system",
+        text: "⚡ Soundwave Quantum Cyber Deck online. Neural core active, 16 computer control skills loaded, and Ghost Operator RPA standby.",
+        time: new Date().toLocaleTimeString(),
+        tag: "SYS",
+      },
+    ];
+  });
+
+  // Save chat to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem("soundwave_agent_chat_history", JSON.stringify(chatMessages.slice(-60)));
+    } catch {}
+  }, [chatMessages]);
 
   // Telemetry & Hardware status
   const [systemStats, setSystemStats] = useState({
@@ -870,8 +883,8 @@ export function AgentHub() {
     }
   };
 
-  // Handle Freeform User Prompt / Command
-  const handleUserSubmit = (e: React.FormEvent) => {
+  // Handle Freeform User Prompt / Command (Real Conversational AI & RPA Dispatcher)
+  const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = userPrompt.trim();
     if (!query) return;
@@ -879,56 +892,80 @@ export function AgentHub() {
     setUserPrompt("");
     const qLower = query.toLowerCase();
 
-    // Check for Ghost Operator macros & chained workflows first
-    if (qLower.includes("focus") && (qLower.includes("mode") || qLower.includes("pomodoro") || qLower.includes("deep"))) {
-      runMacroWorkflow({ macroId: "deep_focus_pomodoro" });
-      return;
-    } else if (qLower.includes("morning") || qLower.includes("start my day") || qLower.includes("creator setup") || qLower.includes("morning prep")) {
-      runMacroWorkflow({ macroId: "creator_morning_prep" });
-      return;
-    } else if (qLower.includes("autopilot") || (qLower.includes("viral") && qLower.includes("macro"))) {
-      runMacroWorkflow({ macroId: "viral_production_autopilot" });
-      return;
-    } else if (qLower.includes("diagnostic") || qLower.includes("health") || (qLower.includes("workspace") && qLower.includes("check"))) {
-      runMacroWorkflow({ macroId: "workspace_cleanup_diagnostics" });
-      return;
-    } else if (qLower.includes(" and ") || (qLower.includes(",") && (qLower.includes("open") || qLower.includes("mute") || qLower.includes("volume") || qLower.includes("stats")))) {
-      runMacroWorkflow({ instruction: query, customName: query.slice(0, 35) });
-      return;
+    // 1. Instantly append user's message to chat & persistent storage
+    const userMsg: ChatMessage = {
+      id: "usr-" + Date.now(),
+      sender: "user",
+      text: query,
+      time: new Date().toLocaleTimeString(),
+      tag: "USER",
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    // Check for short generation commands
+    if (qLower.includes("short") || qLower.includes("video") || qLower.includes("tiktok") || qLower.includes("reel")) {
+      if (qLower.includes("make") || qLower.includes("generate") || qLower.includes("create")) {
+        handleGenerateShort();
+        return;
+      }
     }
 
-    if (qLower.includes("short") || qLower.includes("video") || qLower.includes("viral")) {
-      handleGenerateShort();
-    } else if (qLower.startsWith("open ")) {
-      const app = qLower.replace("open ", "").trim();
-      triggerAction("open_app", { app_name: app });
-    } else if (qLower.includes("weather")) {
-      triggerAction("weather_report", { city: "Belgrade" });
-    } else if (qLower.includes("stats") || qLower.includes("cpu") || qLower.includes("ram") || qLower.includes("vitals")) {
-      triggerAction("system_monitor");
-    } else if (qLower.includes("screen") || qLower.includes("see") || qLower.includes("look") || qLower.includes("snapshot")) {
-      triggerAction("screen_processor", { action: "capture" });
-    } else if (qLower.includes("mute") || qLower.includes("volume")) {
-      triggerAction("computer_settings", { setting: "mute" });
-    } else if (qLower.includes("youtube") || qLower.includes("play")) {
-      triggerAction("youtube_video", { query: query.replace(/youtube|play/gi, "").trim() || "minecraft" });
-    } else if (qLower.includes("proactive") || qLower.includes("briefing") || qLower.includes("agenda")) {
-      triggerAction("proactive");
-    } else if (qLower.includes("code") || qLower.includes("python")) {
-      triggerAction("code_helper", { code: query });
-    } else if (qLower.includes("clipboard") || qLower.includes("copy") || qLower.includes("paste")) {
-      triggerAction("clipboard", { operation: "get" });
-    } else if (qLower.includes("remind") || qLower.includes("timer")) {
-      triggerAction("reminder", { message: query, seconds: 60 });
-    } else if (qLower.includes("browse") || qLower.includes("navigate") || qLower.includes("http")) {
-      triggerAction("browser_control", { action: "open", url: "https://google.com" });
-    } else if (qLower.includes("file") || qLower.includes("document")) {
-      triggerAction("file_processor", { path: "." });
-    } else if (qLower.includes("record") || qLower.includes("creator")) {
-      toast.info("Navigating to Creator Studio...");
-      navigate("/creator");
-    } else {
-      triggerAction("web_search", { query });
+    setAssistantState("THINKING");
+    setCurrentStep(`Thinking: "${query.slice(0, 32)}..."`);
+
+    try {
+      const res = await fetch("/api/v1/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: query,
+          history: chatMessages.slice(-10).map((m) => ({ sender: m.sender, text: m.text })),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+
+      const data = await res.json();
+      const aiMsg: ChatMessage = {
+        id: "ai-" + (Date.now() + 1),
+        sender: "assistant",
+        text: data.reply || "Done.",
+        actionOutput: data.actionOutput,
+        time: new Date().toLocaleTimeString(),
+        tag: data.tag || "VOICE",
+      };
+
+      setChatMessages((prev) => [...prev, aiMsg]);
+      speakText(data.reply);
+
+      if (data.action === "ghost_macro") {
+        setUndoHistory((prev) => [`Ghost Macro: ${query.slice(0, 30)}`, ...prev.slice(0, 9)]);
+      } else if (data.action) {
+        setUndoHistory((prev) => [`Action: ${data.action}`, ...prev.slice(0, 9)]);
+      }
+    } catch (err: any) {
+      // Local fallback in case network fails
+      let fallbackText = `I have received: "${query}". All 16 computer control skills and Ghost Operator macros are ready. Try asking me for "focus mode", "morning prep", "system stats", or asking me to draft viral hooks.`;
+      if (qLower.includes("hello") || qLower.includes("hi") || qLower.includes("hey")) {
+        fallbackText = `Hello! I am Soundwave, your real-time autonomous voice AI and desktop cyber deck. How can I assist you with content production or system control today?`;
+      } else if (qLower.includes("who are you")) {
+        fallbackText = `I am Soundwave AI, an autonomous real-time voice and automation cyber deck. I can control desktop apps, monitor hardware vitals, execute multi-step macros, and generate viral 60fps shorts.`;
+      }
+
+      const aiMsg: ChatMessage = {
+        id: "ai-" + (Date.now() + 1),
+        sender: "assistant",
+        text: fallbackText,
+        time: new Date().toLocaleTimeString(),
+        tag: "VOICE",
+      };
+      setChatMessages((prev) => [...prev, aiMsg]);
+      speakText(fallbackText);
+    } finally {
+      setAssistantState("STANDBY");
+      setCurrentStep("Ready · Awaiting Command");
     }
   };
 
@@ -1240,6 +1277,29 @@ export function AgentHub() {
               </div>
             </div>
 
+            {/* Dynamic 24-Bar Acoustic Frequency Spectrum */}
+            <div className="mt-2 flex items-end justify-between h-7 px-2 py-1 rounded-xl bg-navy/90 border border-gray-800/80 overflow-hidden">
+              {Array.from({ length: 24 }).map((_, i) => {
+                const isActive = assistantState === "SPEAKING" || assistantState === "GENERATING" || isMicActive;
+                const baseH = isActive 
+                  ? Math.sin(i * 0.4 + (Date.now() / 200)) * 40 + 50 + (i % 3 === 0 ? 15 : 0)
+                  : Math.sin(i * 0.3) * 15 + 20;
+                return (
+                  <div
+                    key={i}
+                    className="w-1.5 rounded-t-xs transition-all duration-75"
+                    style={{
+                      height: `${Math.max(12, Math.min(100, baseH))}%`,
+                      background: i % 2 === 0 
+                        ? 'linear-gradient(to top, #0284C7, #38BDF8)'
+                        : 'linear-gradient(to top, #7C3AED, #C084FC)',
+                      opacity: isActive ? 0.9 : 0.35,
+                    }}
+                  />
+                );
+              })}
+            </div>
+
             {/* Interactive Voice Mic Transmit Button */}
             <div className="mt-3 flex gap-2">
               <button
@@ -1264,6 +1324,12 @@ export function AgentHub() {
                 <span>{isMicActive ? "LISTENING // PUSH TO MUTE" : "PUSH-TO-TALK [MIC]"}</span>
               </button>
             </div>
+
+            {/* Tech Corner Framing Accents */}
+            <div className="pointer-events-none absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-400/80" />
+            <div className="pointer-events-none absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-400/80" />
+            <div className="pointer-events-none absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-cyan-400/80" />
+            <div className="pointer-events-none absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-400/80" />
 
             {/* Active Operation Status Progress */}
             <div className="mt-3 w-full rounded-xl bg-navy/80 p-2.5 text-center border border-gray-800/80">
@@ -1534,15 +1600,20 @@ export function AgentHub() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setChatMessages([
-                    {
+                  onClick={() => {
+                    const initMsg: ChatMessage = {
                       id: Date.now().toString(),
                       sender: "system",
                       text: "Buffer cleared. Cyber Deck listening.",
                       time: new Date().toLocaleTimeString(),
                       tag: "SYS",
-                    }
-                  ])}
+                    };
+                    setChatMessages([initMsg]);
+                    try {
+                      localStorage.setItem("soundwave_agent_chat_history", JSON.stringify([initMsg]));
+                    } catch {}
+                    toast.info("Event log cleared.");
+                  }}
                   className="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors uppercase"
                 >
                   Clear Log
@@ -1577,7 +1648,30 @@ export function AgentHub() {
                       </span>
                       <span>{msg.sender === "user" ? "Command" : assistantName}</span>
                     </span>
-                    <span>{msg.time}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span>{msg.time}</span>
+                      {msg.sender === "assistant" && (
+                        <button
+                          type="button"
+                          onClick={() => speakText(msg.text)}
+                          title="Replay Voice Audio"
+                          className="p-0.5 hover:text-cyan-400 text-gray-500 transition-colors"
+                        >
+                          <Volume2 className="h-3 w-3" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(msg.text);
+                          toast.success("Copied to clipboard");
+                        }}
+                        title="Copy message"
+                        className="p-0.5 hover:text-cyan-400 text-gray-500 transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                   <div className="whitespace-pre-line">{msg.text}</div>
                 </div>
