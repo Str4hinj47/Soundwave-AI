@@ -348,11 +348,24 @@ router.get("/jobs/:jobId/download", optionalAuth, async (req, res, next) => {
       throw new ApiError(400, "NOT_READY", "This export is not ready for download yet.");
     }
     const ext = (job.settings as { format?: string })?.format === "webm" ? ".webm" : ".mp4";
-    const p = path.join(config.uploadsDir, "jobs", `${job.id}${ext}`);
-    if (!fs.existsSync(p)) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+    const candidates = [
+      path.join(config.uploadsDir, "jobs", `${job.id}${ext}`),
+      path.join(config.uploadsDir, `soundwave_short_${job.id}${ext}`),
+      path.join(config.uploadsDir, `${job.id}${ext}`),
+      path.join(config.uploadsDir, "jobs", `${job.id}.mp4`),
+      path.join(config.uploadsDir, `soundwave_short_${job.id}.mp4`),
+    ];
+    const p = candidates.find((f) => fs.existsSync(f));
+    if (!p) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+
+    const isDownload = req.query.download === "1" || req.query.dl === "1";
+    if (isDownload) {
+      res.setHeader("Content-Disposition", `attachment; filename="soundwave-export-${job.id}${ext}"`);
+    } else {
+      res.setHeader("Content-Disposition", `inline; filename="soundwave-export-${job.id}${ext}"`);
+    }
     res.setHeader("Content-Type", ext === ".webm" ? "video/webm" : "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="soundwave-export-${job.id}${ext}"`);
-    fs.createReadStream(p).pipe(res);
+    res.sendFile(path.resolve(p));
   } catch (e) {
     next(e);
   }

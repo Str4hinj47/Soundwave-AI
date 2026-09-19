@@ -44,17 +44,36 @@ def get_cache_dir() -> Path:
     return candidates[0]
 
 def list_cached_clips() -> List[Path]:
-    """Return all valid cached .mp4 clips (> 1MB)."""
-    cache_dir = get_cache_dir()
-    if not cache_dir.exists():
-        return []
+    """Return all valid cached .mp4 clips across all known locations (including Mark 54 / Mark-LIV)."""
+    candidates = [
+        Path.cwd() / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
+        Path.cwd() / "background_cache" / "minecraft_parkour",
+        Path.cwd() / "background_cache",
+        Path.cwd() / "clips",
+        Path.cwd() / "backgrounds",
+        Path.cwd() / "Mark-LIV" / "clips",
+        Path.cwd() / "Mark-LIV" / "backgrounds",
+        Path.cwd() / "Mark-54" / "clips",
+        Path.cwd() / "Mark 54" / "clips",
+        Path.cwd().parent / "Mark-LIV" / "clips",
+        Path.cwd().parent / "Mark-54" / "clips",
+        Path.cwd().parent / "Mark 54" / "clips",
+        Path(__file__).parent.parent / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
+        Path.home() / ".soundwave" / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
+        Path.home() / "Downloads",
+        Path.home() / "Videos",
+    ]
     clips = []
-    for f in cache_dir.glob("*.mp4"):
-        try:
-            if f.stat().st_size > 1024 * 1024:
-                clips.append(f)
-        except:
-            continue
+    seen = set()
+    for d in candidates:
+        if d.exists() and d.is_dir():
+            for f in d.glob("*.mp4"):
+                try:
+                    if f.stat().st_size > 500 * 1024 and not f.name.startswith("solid-bg-") and f.name not in seen:
+                        clips.append(f)
+                        seen.add(f.name)
+                except Exception:
+                    continue
     return sorted(clips, key=lambda x: x.name)
 
 def get_random_cached_clip() -> Optional[Path]:

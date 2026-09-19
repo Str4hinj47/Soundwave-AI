@@ -126,22 +126,70 @@ export function cuesFromTimings(
 
 const CACHE_CHUNK_SECS = 80;
 function findCachedChunk(): string | null {
-  const dirs = [
-    path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s"),
-    path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s"),
-    path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s"),
-    path.join(path.dirname(config.uploadsDir), "background_cache", "minecraft_parkour", "80s"),
+  const roots = [
+    process.cwd(),
+    path.join(process.cwd(), ".."),
+    path.join(process.cwd(), "..", ".."),
+    config.dataDir,
+    path.dirname(config.uploadsDir),
+    os.homedir(),
+    path.join(os.homedir(), ".soundwave"),
+    path.join(os.homedir(), "Downloads"),
+    path.join(os.homedir(), "Videos"),
   ];
-  for (const d of dirs) {
-    try {
-      if (fs.existsSync(d)) {
-        const files = fs.readdirSync(d).filter((f) => f.endsWith(".mp4"));
-        if (files.length > 0) {
-          const pick = files[Math.floor(Math.random() * files.length)]!;
-          return path.join(d, pick);
+
+  const subdirs = [
+    path.join("background_cache", "minecraft_parkour", "80s"),
+    path.join("background_cache", "minecraft_parkour"),
+    "background_cache",
+    "clips",
+    "backgrounds",
+    "videos",
+    "assets",
+    path.join("Mark-LIV", "clips"),
+    path.join("Mark-LIV", "backgrounds"),
+    path.join("Mark-LIV", "background_cache"),
+    path.join("Mark-LIV", "background_cache", "minecraft_parkour", "80s"),
+    "Mark-LIV",
+    path.join("Mark-54", "clips"),
+    path.join("Mark-54", "backgrounds"),
+    path.join("Mark-54", "background_cache"),
+    "Mark-54",
+    path.join("Mark 54", "clips"),
+    path.join("Mark 54", "backgrounds"),
+    path.join("Mark 54", "background_cache"),
+    "Mark 54",
+    path.join("soundwave-agent", "clips"),
+    path.join("soundwave-agent", "backgrounds"),
+    path.join("server", "uploads"),
+    "uploads",
+  ];
+
+  for (const root of roots) {
+    for (const sub of subdirs) {
+      const d = path.resolve(root, sub);
+      try {
+        if (fs.existsSync(d) && fs.statSync(d).isDirectory()) {
+          const files = fs.readdirSync(d).filter((f) => {
+            const lower = f.toLowerCase();
+            return (
+              (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv") || lower.endsWith(".webm")) &&
+              !lower.startsWith("solid-bg-")
+            );
+          });
+          if (files.length > 0) {
+            for (const f of files) {
+              const fullPath = path.join(d, f);
+              try {
+                if (fs.statSync(fullPath).size > 500_000) {
+                  return fullPath;
+                }
+              } catch {}
+            }
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }
   return null;
 }
@@ -200,12 +248,25 @@ async function ensureMinecraftBackground(customUrl?: string | null): Promise<str
 async function generateSolidVideo(width: number, height: number, seconds: number): Promise<string> {
   const dir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(dir, { recursive: true });
-  const out = path.join(dir, `solid-bg-${Date.now()}.mp4`);
+  const out = path.join(dir, `motion-bg-${Date.now()}.mp4`);
   const dur = Math.min(3600, Math.max(1, Math.round(seconds)));
   await new Promise<void>((resolve, reject) => {
+    // Generates a cyber dynamic motion background
     const child = spawn(resolveFfmpegPath(), [
-      "-y", "-f", "lavfi", "-i", `color=c=0x0A0F1C:s=${width}x${height}:d=${dur}:r=30`,
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-t", String(dur), out,
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=#070d18:s=${width}x${height}:d=${dur}:r=30`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-pix_fmt",
+      "yuv420p",
+      "-t",
+      String(dur),
+      out,
     ]);
     child.on("error", reject);
     child.on("close", (code: number) => (code === 0 ? resolve() : reject(new Error("Background generation failed"))));
@@ -345,8 +406,11 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       completedAt: null,
     });
 
+    const jobsDir = path.join(config.uploadsDir, "jobs");
+    fs.mkdirSync(jobsDir, { recursive: true });
     const outFilename = `soundwave_short_${job.id}.mp4`;
     const outPath = path.join(config.uploadsDir, outFilename);
+    const jobFilePath = path.join(jobsDir, `${job.id}.mp4`);
 
     const finalCues = cues.map((c) => ({
       ...c,
@@ -367,6 +431,9 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
             await store.updateJob(job.id, { progress: Math.min(99, Math.round(p * 100)) });
           },
         });
+        try {
+          fs.copyFileSync(outPath, jobFilePath);
+        } catch {}
         await store.updateJob(job.id, {
           status: "COMPLETED",
           progress: 100,

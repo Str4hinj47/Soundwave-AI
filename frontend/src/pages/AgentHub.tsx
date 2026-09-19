@@ -1328,6 +1328,17 @@ export function AgentHub() {
               </div>
             </div>
 
+            {/* Background Footage Source Info */}
+            <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-gray-300">Background Footage Source</span>
+                <span className="text-cyan-400 font-bold">Auto-Scans Mark 54 & Cache</span>
+              </div>
+              <p className="text-[10px] text-gray-500 leading-normal">
+                Soundwave auto-detects your local clips in <span className="text-cyan-400">Mark-LIV/clips</span>, <span className="text-cyan-400">background_cache</span>, or your <span className="text-cyan-400">Videos</span> folder. Any .mp4 clip placed in those folders will be sliced and used automatically.
+              </p>
+            </div>
+
             {/* Progress Bar */}
             {isGenerating && (
               <div className="space-y-1 rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5">
@@ -1367,12 +1378,12 @@ export function AgentHub() {
                 {completedVideoUrl && (
                   <div className="text-center pt-1">
                     <a
-                      href={completedVideoUrl}
-                      download
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 text-[#070B14] px-4 py-1.5 text-xs font-bold hover:bg-cyan-400 transition-colors"
+                      href={completedVideoUrl.includes("?") ? `${completedVideoUrl}&download=1` : `${completedVideoUrl}?download=1`}
+                      download="soundwave_viral_short.mp4"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 text-[#070B14] px-4 py-1.5 text-xs font-bold hover:bg-cyan-400 transition-colors cursor-pointer shadow-md shadow-cyan-500/20"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Download 9:16 Short
+                      Download 9:16 Short (MP4)
                     </a>
                   </div>
                 )}
