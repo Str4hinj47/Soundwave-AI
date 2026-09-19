@@ -54,9 +54,9 @@ def launch_gui_hud(
         return
 
     root = tk.Tk()
-    root.title("Soundwave AI — Autonomous Agent HUD")
-    root.geometry("480x560")
-    root.configure(bg="#0A0F1C")
+    root.title("Soundwave AI — Command Deck HUD")
+    root.geometry("520x640")
+    root.configure(bg="#070B14")
     root.resizable(False, False)
 
     state_var = tk.StringVar(value="SYSTEM READY")
@@ -64,71 +64,76 @@ def launch_gui_hud(
     anim_phase = [0.0]
     is_busy = [False]
 
-    # Title Banner
-    header = tk.Frame(root, bg="#0A0F1C", pady=12)
-    header.pack(fill=tk.X)
+    # Title Banner matching Command Deck HUD
+    header = tk.Frame(root, bg="#0A1224", pady=10, highlightbackground="#14233D", highlightthickness=1)
+    header.pack(fill=tk.X, padx=12, pady=10)
 
     title_lbl = tk.Label(
-        header, text="🌊 SOUNDWAVE AGENT", font=("Inter", 16, "bold"), fg="#38BDF8", bg="#0A0F1C"
+        header, text="S . O . U . N . D . W . A . V . E", font=("Consolas", 14, "bold"), fg="#00F0FF", bg="#0A1224"
     )
     title_lbl.pack()
 
     subtitle_lbl = tk.Label(
-        header, text="Autonomous Shorts & Voice Studio", font=("Inter", 9), fg="#94A3B8", bg="#0A0F1C"
+        header, text="● Online · Autonomous Shorts & Voice Studio", font=("Segoe UI", 9), fg="#10B981", bg="#0A1224"
     )
-    subtitle_lbl.pack()
+    subtitle_lbl.pack(pady=(2, 0))
 
-    # Canvas Visualizer (Circular Pulsing Soundwave)
-    canvas = tk.Canvas(root, width=280, height=220, bg="#0A0F1C", highlightthickness=0)
-    canvas.pack(pady=6)
+    # Canvas Visualizer (Concentric Glowing Arc Reactor)
+    canvas = tk.Canvas(root, width=320, height=240, bg="#070B14", highlightthickness=0)
+    canvas.pack(pady=4)
 
     def draw_hud():
         canvas.delete("all")
-        cx, cy = 140, 110
-        base_r = 55
+        cx, cy = 160, 120
         active = is_busy[0]
 
-        # Draw outer ring
-        canvas.create_oval(cx - 75, cy - 75, cx + 75, cy + 75, outline="#1E293B", width=1)
+        # 1. Outer Concentric Ring (R ~100)
+        canvas.create_oval(cx - 100, cy - 100, cx + 100, cy + 100, outline="#0E223D", width=1)
 
-        # Draw dynamic soundwave bars around circle
-        points = []
-        num_points = 36
-        for i in range(num_points):
-            angle = (i / num_points) * 2 * math.pi
+        # 2. Concentric Ring 2 (R ~80) with dashed lines
+        canvas.create_oval(cx - 80, cy - 80, cx + 80, cy + 80, outline="#14345C", width=1.2, dash=(4, 10))
+
+        # 3. Concentric Ring 3 (R ~62) with cyan ticks
+        canvas.create_oval(cx - 62, cy - 62, cx + 62, cy + 62, outline="#00F0FF" if active else "#1A497F", width=1.4)
+        for tick_i in range(4):
+            ta = (tick_i * math.pi) / 2 + (anim_phase[0] * 0.15)
+            tx1 = cx + math.cos(ta) * 56
+            ty1 = cy + math.sin(ta) * 56
+            tx2 = cx + math.cos(ta) * 64
+            ty2 = cy + math.sin(ta) * 64
+            canvas.create_line(tx1, ty1, tx2, ty2, fill="#00F0FF", width=1.5)
+
+        # 4. Glowing Cyan Circle (R ~48)
+        canvas.create_oval(cx - 48, cy - 48, cx + 48, cy + 48, outline="#00F0FF", width=2)
+
+        # 5. Inner Dark Core
+        core_fill = "#081E36" if active else "#051120"
+        canvas.create_oval(cx - 36, cy - 36, cx + 36, cy + 36, fill=core_fill, outline="#00F0FF", width=1)
+
+        # 6. Active Equalizer Bars (5 vertical rounded bars)
+        bar_w = 4
+        bar_gap = 4
+        total_w = 5 * bar_w + 4 * bar_gap
+        start_x = cx - total_w / 2
+        for bi in range(5):
+            bx = start_x + bi * (bar_w + bar_gap)
             if active:
-                wave = math.sin(angle * 4 + anim_phase[0]) * 15 + math.cos(angle * 2 - anim_phase[0]) * 8
+                bh = math.sin(anim_phase[0] * 2.5 + bi * 1.2) * 12 + 16
             else:
-                wave = math.sin(angle * 2 + anim_phase[0]) * 5
-            r = base_r + max(-10, wave)
-            px = cx + math.cos(angle) * r
-            py = cy + math.sin(angle) * r
-            points.extend([px, py])
-
-        # Connect polygon
-        if len(points) >= 4:
-            color = "#8B5CF6" if active else "#0EA5E9"
-            canvas.create_polygon(points, outline=color, fill="", width=2, smooth=True)
-
-        # Center glowing core
-        core_r = 30 + (math.sin(anim_phase[0] * 2) * 4 if active else 0)
-        core_fill = "#7C3AED" if active else "#0369A1"
-        canvas.create_oval(cx - core_r, cy - core_r, cx + core_r, cy + core_r, fill=core_fill, outline="")
-
-        # State text inside core
-        canvas.create_text(
-            cx, cy, text="SWA", fill="#FFFFFF", font=("Inter", 11, "bold")
-        )
+                bh = math.sin(anim_phase[0] + bi * 0.8) * 3 + 7
+            by1 = cy - bh / 2
+            by2 = cy + bh / 2
+            canvas.create_rectangle(bx, by1, bx + bar_w, by2, fill="#00F0FF", outline="")
 
         anim_phase[0] += 0.08 if active else 0.03
         root.after(30, draw_hud)
 
-    # Status Label
-    status_frame = tk.Frame(root, bg="#111827", padx=16, pady=8)
-    status_frame.pack(fill=tk.X, padx=24, pady=8)
+    # Status Label Capsule
+    status_frame = tk.Frame(root, bg="#0C172E", padx=16, pady=6, highlightbackground="#172A4A", highlightthickness=1)
+    status_frame.pack(padx=24, pady=4)
 
     status_lbl = tk.Label(
-        status_frame, textvariable=state_var, font=("Inter", 10, "bold"), fg="#A78BFA", bg="#111827"
+        status_frame, textvariable=state_var, font=("Consolas", 10, "bold"), fg="#00F0FF", bg="#0C172E"
     )
     status_lbl.pack()
 
