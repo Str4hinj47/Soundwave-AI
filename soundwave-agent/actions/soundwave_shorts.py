@@ -36,7 +36,7 @@ TOOL = {
 
 def handler(parameters: Dict[str, Any], context: Any = None) -> str:
     action = (parameters.get("action") or "single").lower()
-    voice = parameters.get("voice") or "en-US-JennyNeural"
+    voice = parameters.get("voice") or "en-US-GuyNeural"
 
     if action == "batch":
         res = generate_all_niches_batch(voice=voice)

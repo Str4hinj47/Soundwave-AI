@@ -206,7 +206,48 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       });
     }
 
-    // 4. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
+    // 4. Video Inquiries & Retrieval ("where is my video", "download video", "what video did you make", etc.)
+    const isVideoInquiry =
+      qLower.includes("where is") ||
+      qLower.includes("where's") ||
+      qLower.includes("where can i") ||
+      qLower.includes("find the video") ||
+      qLower.includes("download") ||
+      qLower.includes("my video") ||
+      qLower.includes("the video") ||
+      qLower.includes("show me") ||
+      qLower.includes("what video");
+
+    if (isVideoInquiry && (qLower.includes("video") || qLower.includes("short") || qLower.includes("download") || qLower.includes("it"))) {
+      const store = await getStore();
+      const userJobs = await store.listJobs(userId);
+      const localJobs = userId !== "agent-local" ? await store.listJobs("agent-local") : [];
+      const allJobs = [...userJobs, ...localJobs];
+      const completed = allJobs.filter((j) => j.status === "COMPLETED");
+
+      if (completed.length > 0) {
+        const latest = completed[0]!;
+        const dlUrl = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
+        const topic = (latest.settings as any)?.topic || "Viral Short";
+        return res.json({
+          success: true,
+          reply: `Here is your generated video! I found your finished 60fps 9:16 viral short for "${topic}". You can preview and download it directly using the player and button below.`,
+          action: "soundwave_shorts",
+          videoUrl: dlUrl,
+          downloadUrl: dlUrl,
+          tag: "AUDIO",
+        });
+      } else {
+        return res.json({
+          success: true,
+          reply: `I don't see any rendered videos in your local export buffer yet. You can click "🎬 Make Short" or tell me "make a short about psychology", and I will generate and render one for you immediately!`,
+          action: "soundwave_shorts",
+          tag: "AUDIO",
+        });
+      }
+    }
+
+    // 5. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
     let aiReply = "";
 
     if (qLower.includes("hello") || qLower.includes("hi") || qLower.includes("hey") || qLower.includes("who are you")) {

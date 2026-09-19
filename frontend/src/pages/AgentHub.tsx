@@ -65,6 +65,8 @@ interface ChatMessage {
   actionOutput?: string;
   time: string;
   tag?: "SYS" | "RPA" | "VOICE" | "USER" | "AUDIO";
+  videoUrl?: string;
+  downloadUrl?: string;
 }
 
 interface MacroWorkflow {
@@ -189,11 +191,24 @@ export function AgentHub() {
     } catch {}
   }, [chatMessages]);
 
-  // Load macros
+  // Load macros & restore recent generated video
   useEffect(() => {
     fetch("/api/v1/ghost/macros")
       .then((r) => (r.ok ? r.json() : { macros: [] }))
       .then((d) => setMacrosList(d.macros || []))
+      .catch(() => {});
+
+    fetch("/api/v1/export/jobs")
+      .then((r) => (r.ok ? r.json() : { jobs: [] }))
+      .then((d) => {
+        const jobs = d.jobs || [];
+        const completed = jobs.filter((j: any) => j.status === "COMPLETED");
+        if (completed.length > 0) {
+          const latest = completed[0];
+          const dlUrl = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
+          setCompletedVideoUrl(dlUrl);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -533,14 +548,20 @@ export function AgentHub() {
 
       if (res.ok) {
         const data = await res.json();
+        const videoLink = data.videoUrl || data.downloadUrl;
         const aiMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           sender: "assistant",
           text: data.reply || "Command executed.",
           actionOutput: data.actionOutput,
+          videoUrl: videoLink,
+          downloadUrl: videoLink,
           time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
           tag: data.tag || (data.action === "ghost_macro" ? "RPA" : "VOICE"),
         };
+        if (videoLink) {
+          setCompletedVideoUrl(videoLink);
+        }
         setChatMessages((prev) => [...prev, aiMsg]);
         speakText(aiMsg.text);
       } else {
@@ -662,15 +683,22 @@ export function AgentHub() {
       setCurrentStep("Completed");
       setAssistantState("STANDBY");
 
+      const finalVideoUrl =
+        data.videoUrl ||
+        data.downloadUrl ||
+        (data.jobId ? `/api/v1/export/jobs/${data.jobId}/download` : null);
+
       if (data.script) setGeneratedScript(data.script);
-      if (data.videoUrl) setCompletedVideoUrl(data.videoUrl);
+      if (finalVideoUrl) setCompletedVideoUrl(finalVideoUrl);
 
       const successNotice: ChatMessage = {
         id: Date.now().toString(),
         sender: "assistant",
-        text: `Rendered viral short for "${payload.topic}" in ${data.durationSeconds || 4}s (${resolution} 60fps). Video ready in preview.`,
+        text: `Rendered viral short for "${payload.topic}" in ${data.durationSeconds || 4}s (${resolution} 60fps). Your video is ready to preview and download!`,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
         tag: "AUDIO",
+        videoUrl: finalVideoUrl || undefined,
+        downloadUrl: finalVideoUrl || undefined,
       };
       setChatMessages((prev) => [...prev, successNotice]);
       speakText("Your video has finished rendering and is ready to download!");
@@ -903,6 +931,37 @@ export function AgentHub() {
             </div>
           </div>
 
+          {/* Persistent Latest Rendered Video Card */}
+          {completedVideoUrl && (
+            <div className="rounded-xl border border-cyan-500/40 bg-[#0A1224] p-3.5 space-y-2.5 font-mono shadow-lg shadow-cyan-950/30">
+              <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
+                <span className="flex items-center gap-1.5 font-semibold text-cyan-300">
+                  <Film className="h-3.5 w-3.5 text-cyan-400" />
+                  Latest Rendered Video
+                </span>
+                <span className="rounded bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">
+                  READY
+                </span>
+              </div>
+              <div className="relative aspect-[9/16] max-h-44 w-full rounded-lg border border-[#14233D] bg-black overflow-hidden flex items-center justify-center mx-auto">
+                <video
+                  src={completedVideoUrl}
+                  controls
+                  playsInline
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <a
+                href={completedVideoUrl}
+                download="soundwave_viral_short.mp4"
+                className="flex items-center justify-center gap-1.5 w-full rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#070B14] font-bold py-1.5 text-xs transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Short (MP4)
+              </a>
+            </div>
+          )}
+
           {/* Card 4: System Uptime & Automation */}
           <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-2.5 font-mono">
             <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
@@ -1086,6 +1145,42 @@ export function AgentHub() {
                 }`}
               >
                 <div className="whitespace-pre-line text-xs">{msg.text}</div>
+
+                {/* Inline Video Player & Download Button */}
+                {Boolean(msg.videoUrl || msg.downloadUrl) && (
+                  <div className="mt-2.5 rounded-lg border border-cyan-500/30 bg-[#040814] p-2.5 space-y-2 font-mono">
+                    <div className="flex items-center justify-between text-[11px] text-cyan-300 font-bold border-b border-[#14233D] pb-1">
+                      <span className="flex items-center gap-1.5">
+                        <Film className="h-3.5 w-3.5 text-cyan-400" />
+                        9:16 Viral Short Video
+                      </span>
+                      <span className="rounded bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">
+                        READY
+                      </span>
+                    </div>
+
+                    <div className="relative rounded-lg overflow-hidden border border-[#172A4A] bg-black max-h-52 flex justify-center items-center">
+                      <video
+                        src={msg.videoUrl || msg.downloadUrl}
+                        controls
+                        playsInline
+                        className="max-h-52 rounded-md aspect-[9/16] object-contain shadow-lg"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <a
+                        href={msg.downloadUrl || msg.videoUrl}
+                        download="soundwave_viral_short.mp4"
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#070B14] font-bold py-1.5 px-3 text-xs transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download Video (MP4)
+                      </a>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between text-[10px] text-gray-500 mt-2 pt-1 border-t border-white/[0.04]">
                   <span className="uppercase text-[9px] font-bold tracking-wider text-cyan-400">
                     {msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}

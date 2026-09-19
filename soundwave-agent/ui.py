@@ -755,10 +755,14 @@ class SoundwaveDesktopApp:
         self.state = "GENERATING"
         self._set_status_text(f"● RENDERING SHORT FOR {niche.upper()}...")
         def task():
-            generate_single_short(topic=niche, open_browser=True)
+            saved_file = generate_single_short(topic=niche, voice=self.selected_voice, open_browser=True)
             self.state = "STANDBY"
             self._set_status_text("● STANDBY · LISTENING FOR WAKE WORD")
-            self._append_log(f"Rendered viral short for {niche}. Video ready in browser.", "sys")
+            if saved_file:
+                self._append_log(f"Rendered viral short for {niche}!\nVideo saved to:\n{saved_file}", "sys")
+                speak("Your video has finished rendering and is ready to watch!", self.selected_voice)
+            else:
+                self._append_log(f"Rendered viral short for {niche}. Video ready in browser.", "sys")
         threading.Thread(target=task, daemon=True).start()
 
     def _execute_action(self, name: str, params: Dict[str, Any]):
