@@ -134,6 +134,7 @@ const VIDEO_MIME: Record<string, string> = {
   mkv: "video/x-matroska",
   mov: "video/quicktime",
   avi: "video/x-msvideo",
+  video: "video/mp4",
 };
 
 router.get("/file/:key", optionalAuth, async (req, res, next) => {

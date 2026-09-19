@@ -23,6 +23,7 @@ import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { toast } from "../store/toast";
+import { useNavigate } from "react-router-dom";
 
 interface NicheInfo {
   id: string;
@@ -51,6 +52,8 @@ interface ChatMessage {
 }
 
 export function AgentHub() {
+  const navigate = useNavigate();
+
   // Theme state
   const [theme, setTheme] = useState<"cyan" | "violet" | "emerald" | "amber">("cyan");
 
@@ -353,6 +356,9 @@ export function AgentHub() {
       triggerAction("browser_control", { action: "open", url: "https://google.com" });
     } else if (qLower.includes("file") || qLower.includes("document")) {
       triggerAction("file_processor", { path: "." });
+    } else if (qLower.includes("record") || qLower.includes("creator")) {
+      toast.info("Navigating to Creator Studio...");
+      navigate("/creator");
     } else {
       triggerAction("web_search", { query });
     }

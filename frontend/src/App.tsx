@@ -11,6 +11,7 @@ import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
 import { AgentHub } from "./pages/AgentHub";
+import { CreatorStudio } from "./pages/CreatorStudio";
 import { NotFound } from "./pages/NotFound";
 
 function ScrollToTop() {
@@ -48,6 +49,14 @@ export default function App() {
           element={
             <AppShell>
               <AgentHub />
+            </AppShell>
+          }
+        />
+        <Route
+          path="/creator"
+          element={
+            <AppShell>
+              <CreatorStudio />
             </AppShell>
           }
         />

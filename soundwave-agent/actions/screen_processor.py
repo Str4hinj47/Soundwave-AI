@@ -10,14 +10,14 @@ from typing import Dict, Any
 
 TOOL = {
     "name": "screen_processor",
-    "description": "Takes a screenshot of the computer screen for vision analysis.",
+    "description": "Takes a screenshot of the computer screen for vision analysis or launches the Smart Screen Recorder.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "Action: capture, analyze",
-                "enum": ["capture", "analyze"]
+                "description": "Action: capture, analyze, record",
+                "enum": ["capture", "analyze", "record"]
             }
         },
         "required": ["action"]
@@ -25,6 +25,15 @@ TOOL = {
 }
 
 def handler(parameters: Dict[str, Any], context: Any = None) -> str:
+    action = (parameters.get("action") or "capture").lower()
+    if action in ["record", "creator_record"]:
+        import webbrowser
+        try:
+            webbrowser.open("http://localhost:5173/creator")
+        except Exception:
+            pass
+        return "Opened Creator Studio Screen Recorder & Auto-Editor in your browser."
+
     out_dir = Path.home() / ".soundwave" / "captures"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"screenshot_{int(time.time())}.png"

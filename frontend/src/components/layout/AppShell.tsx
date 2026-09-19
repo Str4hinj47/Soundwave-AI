@@ -16,6 +16,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sparkles,
+  Video,
   X,
 } from "lucide-react";
 import { cn } from "../../lib/cn";
@@ -34,6 +35,7 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { to: "/agent", label: "Soundwave Agent", icon: <Bot className="h-5 w-5" /> },
+  { to: "/creator", label: "Creator Studio", icon: <Video className="h-5 w-5" /> },
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, end: true },
   { to: "/projects", label: "My Projects", icon: <FolderKanban className="h-5 w-5" /> },
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-5 w-5" /> },
@@ -48,6 +50,7 @@ const studioNav: { to: string; label: string; icon: ReactNode; sub: { to: string
     { to: "/studio", label: "Text-to-Speech" },
     { to: "/studio/subtitles", label: "Subtitles" },
     { to: "/studio/video", label: "Video" },
+    { to: "/creator", label: "Screen Recorder & Auto-Cut" },
   ],
 };
 
