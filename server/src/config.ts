@@ -42,6 +42,7 @@ export const config = {
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
   // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
   voiceCloneUrl: str("VOICECLONE_URL", ""),
+  elevenLabsApiKey: str("ELEVENLABS_API_KEY", ""),
   // Shared secret for the sidecar — REQUIRED when VOICECLONE_URL is a public
   // URL (Hugging Face Space, tunnel, remote GPU host). Must match the
   // sidecar's own VOICECLONE_TOKEN.

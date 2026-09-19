@@ -66,11 +66,26 @@ export function AgentHub() {
   const [selectedNiche, setSelectedNiche] = useState<string>("psychology");
   const [customTopic, setCustomTopic] = useState("");
   const [selectedVoice, setSelectedVoice] = useState("en-US-JennyNeural");
+  const [clonedVoices, setClonedVoices] = useState<Array<{ id: string; name: string }>>([]);
   const [resolution, setResolution] = useState<"720p" | "1080p">("720p");
   const [isGenerating, setIsGenerating] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [generatedScript, setGeneratedScript] = useState<string>("");
   const [completedVideoUrl, setCompletedVideoUrl] = useState<string | null>(null);
+
+  // Load user's cloned voices & check URL query params
+  useEffect(() => {
+    fetch("/api/v1/tts/clone/profiles")
+      .then((r) => (r.ok ? r.json() : { profiles: [] }))
+      .then((d) => setClonedVoices(d.profiles || []))
+      .catch(() => {});
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get("voice");
+      if (v) setSelectedVoice(v);
+    } catch {}
+  }, []);
 
   // Computer Actions & Skills
   const [userPrompt, setUserPrompt] = useState("");
@@ -760,10 +775,21 @@ export function AgentHub() {
                   onChange={(e) => setSelectedVoice(e.target.value)}
                   className="w-full rounded-xl border border-gray-800 bg-navy px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 >
-                  <option value="en-US-JennyNeural">Jenny (Shorts Viral Default)</option>
-                  <option value="en-US-GuyNeural">Guy (Documentary Authority)</option>
-                  <option value="en-GB-RyanNeural">Ryan (British Male Hook)</option>
-                  <option value="en-GB-SoniaNeural">Sonia (British Storyteller)</option>
+                  {clonedVoices.length > 0 && (
+                    <optgroup label="My Cloned Voices">
+                      {clonedVoices.map((cv) => (
+                        <option key={cv.id} value={`clone:${cv.id}`}>
+                          🎙️ {cv.name} (My Voice)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Neural Voices">
+                    <option value="en-US-JennyNeural">Jenny (Shorts Viral Default)</option>
+                    <option value="en-US-GuyNeural">Guy (Documentary Authority)</option>
+                    <option value="en-GB-RyanNeural">Ryan (British Male Hook)</option>
+                    <option value="en-GB-SoniaNeural">Sonia (British Storyteller)</option>
+                  </optgroup>
                 </select>
               </div>
 

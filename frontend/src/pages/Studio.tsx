@@ -395,33 +395,32 @@ export function Studio() {
           {/* Voice */}
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <p className="mb-2 text-sm font-medium text-gray-300">Voice</p>
-            {cloneConfigured && (
-              <div className="mb-3 grid grid-cols-2 gap-1 rounded-input border border-gray-700 bg-gray-900 p-1 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVoiceTab("neural");
-                    if (isCloneVoiceId(studio.voiceId)) studio.setVoiceId(DEFAULT_VOICES[0]?.id ?? studio.voiceId);
-                  }}
-                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "neural" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
-                >
-                  Microsoft Neural
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVoiceTab("clone");
-                    if (!isCloneVoiceId(studio.voiceId) && cloneProfiles[0]) studio.setVoiceId(`clone:${cloneProfiles[0].id}`);
-                  }}
-                  className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "clone" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
-                >
-                  Cloned voices
-                </button>
-              </div>
-            )}
+            {/* Voice Engine Tabs: Neural vs Cloned */}
+            <div className="mb-3 grid grid-cols-2 gap-1 rounded-input border border-gray-700 bg-gray-900 p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setVoiceTab("neural");
+                  if (isCloneVoiceId(studio.voiceId)) studio.setVoiceId(DEFAULT_VOICES[0]?.id ?? studio.voiceId);
+                }}
+                className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "neural" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+              >
+                Microsoft Neural
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVoiceTab("clone");
+                  if (!isCloneVoiceId(studio.voiceId) && cloneProfiles[0]) studio.setVoiceId(`clone:${cloneProfiles[0].id}`);
+                }}
+                className={cn("rounded px-2 py-1.5 font-medium transition-colors", voiceTab === "clone" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white")}
+              >
+                Cloned voices
+              </button>
+            </div>
 
-            {voiceTab === "clone" && cloneConfigured ? (
-              !cloneAvailable ? (
+            {voiceTab === "clone" ? (
+              !cloneAvailable && !cloneConfigured ? (
                 <div className="rounded-input border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm leading-relaxed text-amber-200">
                   The voice-clone service isn't running. In a separate terminal, start it from the <code>voiceclone/</code> folder
                   (<code className="text-amber-100">uvicorn server:app --port 8100</code> — first start downloads the model), then refresh this page.

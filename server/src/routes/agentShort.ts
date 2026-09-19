@@ -9,6 +9,7 @@ import { optionalAuth } from "../middleware/auth.js";
 import { getStore } from "../lib/store.js";
 import { dimensionsFor } from "../lib/plans.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
+import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
@@ -235,8 +236,15 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
     // 1. Generate script
     const script = generateScript(body.topic);
 
-    // 2. TTS via Edge TTS
-    const ttsResult = await synthesizeEdgeTTS({ text: script, voice: body.voice || "en-US-JennyNeural" });
+    // 2. TTS via Cloned Voice or Edge TTS
+    let ttsResult;
+    if (body.voice && body.voice.startsWith("clone:")) {
+      const profileId = body.voice.replace("clone:", "");
+      ttsResult = await synthesizeClone(userId, { text: script, profileId });
+    } else {
+      ttsResult = await synthesizeEdgeTTS({ text: script, voice: body.voice || "en-US-JennyNeural" });
+    }
+
     const audioBuf = Buffer.from(ttsResult.audioBase64, "base64");
     const audioFileKey = `${crypto.randomUUID()}.audio`;
     const audioPath = path.join(config.uploadsDir, audioFileKey);
