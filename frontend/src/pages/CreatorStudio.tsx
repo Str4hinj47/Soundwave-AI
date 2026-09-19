@@ -372,48 +372,48 @@ export function CreatorStudio() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       {/* ── TOP BANNER ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-800 bg-panel px-6 py-4 shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-[#13141C] px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-500 to-violet-600 text-white shadow-lg shadow-violet-500/25">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-blue-400">
             <Video className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-white tracking-wide">
-                CREATOR STUDIO & SMART SCREEN RECORDER
+              <h1 className="text-base font-semibold text-white tracking-tight">
+                Creator Studio & Smart Screen Recorder
               </h1>
-              <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300">
-                AUTO-CUT 60 FPS
+              <span className="rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] font-medium text-blue-400">
+                Auto-Cut 60fps
               </span>
             </div>
             <p className="text-xs text-gray-400">
-              Auto-silence removal, jump cuts & Screen Studio auto-zoom for YouTube, Shorts & Tutorials.
+              Auto-silence removal, jump cuts, and Screen Studio camera auto-zoom for YouTube tutorials and vertical clips.
             </p>
           </div>
         </div>
 
         {/* Mode Switcher */}
-        <div className="flex rounded-xl border border-gray-800 bg-navy p-1">
+        <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.02] p-1">
           <button
             onClick={() => setActiveTab("record")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               activeTab === "record"
-                ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/20"
+                ? "bg-white/[0.08] text-white"
                 : "text-gray-400 hover:text-white"
             }`}
           >
-            <Monitor className="h-3.5 w-3.5" />
+            <Monitor className="h-3.5 w-3.5 text-blue-400" />
             <span>Screen Recorder</span>
           </button>
           <button
             onClick={() => setActiveTab("upload")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               activeTab === "upload"
-                ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/20"
+                ? "bg-white/[0.08] text-white"
                 : "text-gray-400 hover:text-white"
             }`}
           >
-            <UploadCloud className="h-3.5 w-3.5" />
+            <UploadCloud className="h-3.5 w-3.5 text-purple-400" />
             <span>Upload Existing</span>
           </button>
         </div>
@@ -424,11 +424,11 @@ export function CreatorStudio() {
         {/* LEFT COLUMN: RECORDER & PREVIEW (7 COLS) */}
         <div className="space-y-6 lg:col-span-7">
           {activeTab === "record" ? (
-            <div className="rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl space-y-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#13141C] p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Monitor className="h-4 w-4 text-cyan-400" />
+                  <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Monitor className="h-4 w-4 text-blue-400" />
                     Interactive Screen + Mic Capture
                   </h2>
                   <p className="text-xs text-gray-400">
@@ -436,7 +436,7 @@ export function CreatorStudio() {
                   </p>
                 </div>
                 {isRecording && (
-                  <div className="flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-bold text-rose-400 animate-pulse">
+                  <div className="flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-400 animate-pulse">
                     <span className="h-2 w-2 rounded-full bg-rose-500"></span>
                     REC {formatTime(recordingSeconds)}
                   </div>
@@ -549,10 +549,10 @@ export function CreatorStudio() {
 
           {/* ── SILENCE DETECTION & TIMELINE VISUALIZER ────────────────────── */}
           {analysis && (
-            <div className="rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl space-y-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#13141C] p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <Scissors className="h-4 w-4 text-emerald-400" />
                     Auto-Cut Analysis & Pacing Preview
                   </h3>
@@ -567,21 +567,21 @@ export function CreatorStudio() {
 
               {/* Stats Chips */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 text-center">
-                  <span className="block text-[10px] uppercase font-bold text-gray-400">Original Length</span>
-                  <span className="text-sm font-bold text-gray-200">{formatTime(analysis.originalDuration)}</span>
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-center">
+                  <span className="block text-[10px] uppercase font-semibold text-gray-400">Original Length</span>
+                  <span className="text-sm font-semibold text-gray-200">{formatTime(analysis.originalDuration)}</span>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 text-center">
-                  <span className="block text-[10px] uppercase font-bold text-cyan-400">Clean Length</span>
-                  <span className="text-sm font-bold text-white">{formatTime(analysis.estimatedDuration)}</span>
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-center">
+                  <span className="block text-[10px] uppercase font-semibold text-blue-400">Clean Length</span>
+                  <span className="text-sm font-semibold text-white">{formatTime(analysis.estimatedDuration)}</span>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 text-center">
-                  <span className="block text-[10px] uppercase font-bold text-emerald-400">Dead Air Cut</span>
-                  <span className="text-sm font-bold text-emerald-300">-{formatTime(analysis.savedDuration)}</span>
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-center">
+                  <span className="block text-[10px] uppercase font-semibold text-emerald-400">Dead Air Cut</span>
+                  <span className="text-sm font-semibold text-emerald-300">-{formatTime(analysis.savedDuration)}</span>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-navy/80 p-2.5 text-center">
-                  <span className="block text-[10px] uppercase font-bold text-violet-400">Jump Cuts</span>
-                  <span className="text-sm font-bold text-violet-300">{analysis.cutsCount} cuts</span>
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-center">
+                  <span className="block text-[10px] uppercase font-semibold text-purple-400">Jump Cuts</span>
+                  <span className="text-sm font-semibold text-purple-300">{analysis.cutsCount} cuts</span>
                 </div>
               </div>
 
@@ -691,10 +691,10 @@ export function CreatorStudio() {
 
         {/* RIGHT COLUMN: SCREEN STUDIO AUTO-ZOOM & FRAMING (5 COLS) */}
         <div className="space-y-6 lg:col-span-5">
-          <div className="rounded-2xl border border-gray-800 bg-panel p-6 shadow-xl space-y-4">
+          <div className="rounded-xl border border-white/[0.08] bg-[#13141C] p-6 space-y-4">
             <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <ZoomIn className="h-4 w-4 text-violet-400" />
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <ZoomIn className="h-4 w-4 text-purple-400" />
                 "Screen Studio" Auto-Zoom & Framing
               </h2>
               <p className="text-xs text-gray-400">
@@ -837,7 +837,7 @@ export function CreatorStudio() {
               <Button
                 onClick={handleAutoEdit}
                 disabled={!fileKey || !analysis || isProcessing || isAnalyzing}
-                className="w-full gap-2 bg-gradient-to-r from-emerald-500 via-cyan-500 to-violet-600 font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-emerald-400 hover:to-violet-500 py-3"
+                className="w-full gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 shadow-sm"
               >
                 {isProcessing ? (
                   <>
@@ -855,15 +855,15 @@ export function CreatorStudio() {
 
             {/* Progress Step Indicator */}
             {isProcessing && (
-              <div className="space-y-1.5 rounded-xl border border-gray-800 bg-navy/70 p-3">
-                <div className="flex justify-between text-[11px] text-gray-300">
+              <div className="space-y-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                <div className="flex justify-between text-xs text-gray-300">
                   <span>{processingStep}</span>
-                  <span className="font-bold text-cyan-400">{processingProgress}%</span>
+                  <span className="font-semibold text-blue-400">{processingProgress}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
                   <div
                     style={{ width: `${processingProgress}%` }}
-                    className="h-full bg-gradient-to-r from-cyan-400 to-violet-500 transition-all duration-300"
+                    className="h-full bg-blue-500 transition-all duration-300"
                   />
                 </div>
               </div>
@@ -872,11 +872,11 @@ export function CreatorStudio() {
 
           {/* ── COMPLETED POLISHED VIDEO PREVIEW ────────────────────────── */}
           {completedVideoUrl && (
-            <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/20 to-panel p-6 shadow-2xl space-y-4">
+            <div className="rounded-xl border border-emerald-500/30 bg-[#13141C] p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                  <h3 className="text-sm font-bold text-white">Polished Video Ready!</h3>
+                  <h3 className="text-sm font-semibold text-white">Polished Video Ready</h3>
                 </div>
                 <a
                   href={completedVideoUrl}

@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Bell,
   Bot,
   ChevronDown,
   CircleUserRound,
@@ -18,9 +17,13 @@ import {
   Sparkles,
   Video,
   X,
+  Plus,
+  Activity,
+  Film,
+  Volume2,
 } from "lucide-react";
 import { cn } from "../../lib/cn";
-import { Logo } from "../Logo";
+import { LogoMark } from "../Logo";
 import { useAuth } from "../../store/auth";
 import { initials } from "../../lib/format";
 import { Dropdown } from "../ui/Dropdown";
@@ -30,29 +33,29 @@ interface NavItem {
   to: string;
   label: string;
   icon: ReactNode;
+  badge?: string | ReactNode;
   end?: boolean;
 }
 
-const mainNav: NavItem[] = [
-  { to: "/agent", label: "Soundwave Agent", icon: <Bot className="h-5 w-5" /> },
-  { to: "/creator", label: "Creator Studio", icon: <Video className="h-5 w-5" /> },
-  { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, end: true },
-  { to: "/projects", label: "My Projects", icon: <FolderKanban className="h-5 w-5" /> },
-  { to: "/voices", label: "Voice Library", icon: <Mic className="h-5 w-5" /> },
-  { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-5 w-5" /> },
+const workspaceNav: NavItem[] = [
+  { to: "/dashboard", label: "Overview", icon: <LayoutDashboard className="h-4 w-4" />, end: true },
+  { to: "/agent", label: "AI Agents", icon: <Bot className="h-4 w-4" />, badge: "Live" },
+  { to: "/creator", label: "Creator Studio", icon: <Video className="h-4 w-4" /> },
+  { to: "/projects", label: "Projects", icon: <FolderKanban className="h-4 w-4" /> },
+  { to: "/voices", label: "Voice Library", icon: <Mic className="h-4 w-4" /> },
 ];
 
-const studioNav: { to: string; label: string; icon: ReactNode; sub: { to: string; label: string }[] } = {
-  to: "/studio",
-  label: "Studio",
-  icon: <Sparkles className="h-5 w-5" />,
-  sub: [
-    { to: "/studio", label: "Text-to-Speech" },
-    { to: "/studio/subtitles", label: "Subtitles" },
-    { to: "/studio/video", label: "Video" },
-    { to: "/creator", label: "Screen Recorder & Auto-Cut" },
-  ],
-};
+const createNav: NavItem[] = [
+  { to: "/agent?tab=generator", label: "Generate Short", icon: <Sparkles className="h-4 w-4" /> },
+  { to: "/studio/video", label: "Compose Video", icon: <Film className="h-4 w-4" /> },
+  { to: "/studio", label: "Generate Voiceover", icon: <Volume2 className="h-4 w-4" /> },
+];
+
+const manageNav: NavItem[] = [
+  { to: "/agent?tab=activity", label: "Activity", icon: <Activity className="h-4 w-4" /> },
+  { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" /> },
+  { to: "/help", label: "Help & Docs", icon: <HelpCircle className="h-4 w-4" /> },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const auth = useAuth();
@@ -62,13 +65,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
-
-  const studioActive = location.pathname.startsWith("/studio");
 
   const handleSignOut = async () => {
     try {
@@ -80,122 +80,168 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!search.trim()) return;
     navigate(`/projects?q=${encodeURIComponent(search.trim())}`);
   };
 
+  // Compute clean breadcrumbs
+  const getBreadcrumb = () => {
+    const path = location.pathname;
+    if (path.startsWith("/agent")) return { section: "Workspace", current: "AI Agents" };
+    if (path.startsWith("/creator")) return { section: "Workspace", current: "Creator Studio" };
+    if (path.startsWith("/dashboard")) return { section: "Workspace", current: "Overview" };
+    if (path.startsWith("/projects")) return { section: "Workspace", current: "Projects" };
+    if (path.startsWith("/voices")) return { section: "Workspace", current: "Voice Library" };
+    if (path.startsWith("/studio/video")) return { section: "Create", current: "Compose Video" };
+    if (path.startsWith("/studio/subtitles")) return { section: "Create", current: "Subtitles" };
+    if (path.startsWith("/studio")) return { section: "Create", current: "Generate Voiceover" };
+    if (path.startsWith("/settings")) return { section: "Manage", current: "Settings" };
+    if (path.startsWith("/help")) return { section: "Manage", current: "Help & Support" };
+    return { section: "Workspace", current: "Studio" };
+  };
+
+  const breadcrumb = getBreadcrumb();
+
   const sidebar = (
-    <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center justify-between border-b border-gray-800 px-4">
-        <NavLink to="/dashboard" className="flex items-center">
-          <Logo />
+    <div className="flex h-full flex-col bg-[#0F1017] text-gray-300 select-none">
+      {/* Workspace Brand Switcher */}
+      <div className="flex h-14 items-center justify-between border-b border-white/[0.06] px-3.5">
+        <NavLink to="/agent" className="flex items-center gap-2.5 group">
+          <LogoMark className="h-7 w-7" />
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-semibold text-white tracking-tight group-hover:text-blue-400 transition-colors">
+              Soundwave <span className="text-blue-400">AI</span>
+            </span>
+            <span className="text-[11px] text-gray-400 flex items-center gap-1">
+              Creator Studio
+              <ChevronDown className="h-3 w-3 text-gray-400" />
+            </span>
+          </div>
         </NavLink>
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/[0.06] hover:text-white lg:hidden transition-colors"
           onClick={() => setMobileOpen(false)}
           aria-label="Close menu"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
-        <div className="space-y-1">
-          {mainNav.map((item) => (
-            <SidebarLink key={item.to} item={item} />
-          ))}
+      {/* Global Quick Search Input in Sidebar */}
+      <div className="px-3 pt-3">
+        <form onSubmit={onSearch} className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects..."
+            className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] py-1.5 pl-8 pr-2.5 text-xs text-white placeholder-gray-400 transition-colors hover:border-white/[0.12] focus:border-blue-500 focus:outline-none"
+          />
+        </form>
+      </div>
 
-          {/* Studio section with sub-items */}
-          <div className="pt-2">
-            <NavLink
-              to={studioNav.to}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                studioActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-              )}
-            >
-              {studioNav.icon}
-              {studioNav.label}
-            </NavLink>
-            {studioActive && (
-              <div className="ml-6 mt-1 space-y-1 border-l border-gray-800 pl-3">
-                {studioNav.sub.map((s) => (
-                  <NavLink
-                    key={s.to}
-                    to={s.to}
-                    end
-                    className={({ isActive }) =>
-                      cn(
-                        "block rounded-md px-3 py-2 text-sm transition-colors",
-                        isActive ? "text-blue-300" : "text-gray-500 hover:text-gray-200",
-                      )
-                    }
-                  >
-                    {s.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
+      {/* Grouped Navigation */}
+      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4" aria-label="Main navigation">
+        {/* Group: Workspace */}
+        <div>
+          <div className="px-2.5 pb-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+            Workspace
           </div>
+          <div className="space-y-0.5">
+            {workspaceNav.map((item) => (
+              <SidebarNavLink key={item.to} item={item} />
+            ))}
+          </div>
+        </div>
 
-          <NavLink
-            to="/help"
-            className={({ isActive }) =>
-              cn(
-                "mt-2 flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                isActive ? "bg-blue-500/10 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-              )
-            }
-          >
-            <HelpCircle className="h-5 w-5" />
-            Help & Support
-          </NavLink>
+        {/* Group: Create */}
+        <div>
+          <div className="px-2.5 pb-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+            Create
+          </div>
+          <div className="space-y-0.5">
+            {createNav.map((item) => (
+              <SidebarNavLink key={item.to} item={item} />
+            ))}
+          </div>
+        </div>
+
+        {/* Group: Manage */}
+        <div>
+          <div className="px-2.5 pb-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+            Manage
+          </div>
+          <div className="space-y-0.5">
+            {manageNav.map((item) => (
+              <SidebarNavLink key={item.to} item={item} />
+            ))}
+          </div>
         </div>
       </nav>
 
-      <div className="border-t border-gray-800 p-3">
-        {user?.plan === "FREE" ? (
-          <div className="rounded-card border border-violet-500/30 bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-3">
-            <p className="text-sm font-semibold text-white">Upgrade to Pro</p>
-            <p className="mt-0.5 text-xs text-gray-400">200K chars, 1080p, no watermark.</p>
-            <button
-              onClick={() => navigate("/pricing")}
-              className="mt-2 w-full rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
-            >
-              Upgrade
+      {/* Workspace System Status Pill */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-xs text-gray-400">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+          <span className="truncate">Fleet Online · 4 Agents</span>
+        </div>
+      </div>
+
+      {/* Bottom User Area */}
+      <div className="border-t border-white/[0.06] p-2.5">
+        <Dropdown
+          align="right"
+          label="Account options"
+          trigger={
+            <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-white/[0.05]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-600/80 text-xs font-semibold text-white">
+                {initials(user?.name ?? "Creator")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-white">{user?.name ?? "Creator Workspace"}</p>
+                <p className="truncate text-[11px] text-gray-400">{user?.plan ?? "PRO"} Plan</p>
+              </div>
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400 shrink-0" />
             </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 rounded-card border border-gray-800 bg-gray-900/60 px-3 py-2.5">
-            <span className="h-2 w-2 rounded-full bg-success" />
-            <span className="text-sm text-gray-300">{user?.plan ?? "ENTERPRISE"} plan — no login</span>
-          </div>
-        )}
+          }
+          items={[
+            { key: "profile", label: "Profile", icon: <CircleUserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
+            { key: "billing", label: "Plan & Billing", icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate("/settings/billing") },
+            { key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") },
+            { key: "logout", label: "Sign out", icon: <LogOut className="h-4 w-4" />, danger: true, onClick: handleSignOut },
+          ]}
+        />
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-navy">
+    <div className="min-h-screen bg-[#0C0D12] text-gray-100 flex flex-col">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-gray-800 bg-panel lg:block">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 border-r border-white/[0.06] bg-[#0F1017] lg:block">
+        {sidebar}
+      </aside>
 
       {/* Mobile drawer */}
       <AnimatePresence>
         {mobileOpen && (
           <>
             <motion.div
-              className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+              className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
-              className="fixed inset-y-0 left-0 z-30 w-72 bg-panel lg:hidden"
-              initial={{ x: -300 }}
+              className="fixed inset-y-0 left-0 z-30 w-64 bg-[#0F1017] border-r border-white/[0.08] lg:hidden"
+              initial={{ x: -260 }}
               animate={{ x: 0 }}
-              exit={{ x: -300 }}
-              transition={{ type: "tween", duration: 0.25 }}
+              exit={{ x: -260 }}
+              transition={{ type: "tween", duration: 0.2 }}
             >
               {sidebar}
             </motion.aside>
@@ -204,79 +250,94 @@ export function AppShell({ children }: { children: ReactNode }) {
       </AnimatePresence>
 
       {/* Main column */}
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 border-b border-gray-800 bg-navy/85 backdrop-blur-xl">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
-            <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 lg:hidden"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-
-            <form onSubmit={onSearch} className="relative hidden max-w-md flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search projects…"
-                className="w-full rounded-input border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600"
-                aria-label="Search projects"
-              />
-            </form>
-
-            <div className="ml-auto flex items-center gap-1.5">
+      <div className="lg:pl-60 flex-1 flex flex-col">
+        {/* Header Bar */}
+        <header className="sticky top-0 z-10 h-14 border-b border-white/[0.06] bg-[#0C0D12]/90 backdrop-blur-md">
+          <div className="flex h-full items-center justify-between px-4 sm:px-6">
+            {/* Left: Mobile trigger & Breadcrumbs */}
+            <div className="flex items-center gap-3">
               <button
-                aria-label="Notifications"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white/[0.06] hover:text-white lg:hidden transition-colors"
+                onClick={() => setMobileOpen(true)}
+                aria-label="Open navigation menu"
               >
-                <Bell className="h-5 w-5" />
+                <Menu className="h-4 w-4" />
               </button>
 
-              <Dropdown
-                align="right"
-                label="Account menu"
-                trigger={
-                  <button className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-gray-800">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-sm font-bold text-white">
-                      {initials(user?.name ?? "U")}
-                    </span>
-                    <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
-                  </button>
-                }
-                items={[
-                  { key: "profile", label: "Profile", icon: <CircleUserRound className="h-4 w-4" />, onClick: () => navigate("/settings") },
-                  { key: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" />, onClick: () => navigate("/settings/billing") },
-                  { key: "settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" />, onClick: () => navigate("/settings") },
-                  { key: "logout", label: "Sign out", icon: <LogOut className="h-4 w-4" />, danger: true, onClick: handleSignOut },
-                ]}
-              />
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-gray-400">{breadcrumb.section}</span>
+                <span className="text-gray-400">/</span>
+                <span className="font-medium text-white">{breadcrumb.current}</span>
+              </div>
+            </div>
+
+            {/* Right: Quick actions */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate("/agent?tab=generator")}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 active:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create with Agent</span>
+              </button>
+
+              <button
+                onClick={() => navigate("/help")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+                aria-label="Help"
+                title="Help & Documentation"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={() => navigate("/settings")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+                aria-label="Settings"
+                title="Workspace Settings"
+              >
+                <SettingsIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        {/* Content Area */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl w-full mx-auto">
+          {children}
+        </main>
       </div>
     </div>
   );
 }
 
-function SidebarLink({ item }: { item: NavItem }) {
+function SidebarNavLink({ item }: { item: NavItem }) {
+  const location = useLocation();
+  const currentPathWithSearch = location.pathname + location.search;
+  const isMatch = item.to.includes("?")
+    ? currentPathWithSearch === item.to
+    : location.pathname === item.to;
+
   return (
     <NavLink
       to={item.to}
       end={item.end}
-      className={({ isActive }) =>
-        cn(
-          "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-          isActive ? "bg-blue-500/15 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white",
-        )
-      }
+      className={cn(
+        "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+        isMatch
+          ? "bg-white/[0.08] text-white"
+          : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-200",
+      )}
     >
-      {item.icon}
-      {item.label}
+      <div className="flex items-center gap-2.5 truncate">
+        <span className={cn(isMatch ? "text-blue-400" : "text-gray-400")}>{item.icon}</span>
+        <span className="truncate">{item.label}</span>
+      </div>
+      {item.badge && (
+        <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+          {item.badge}
+        </span>
+      )}
     </NavLink>
   );
 }
