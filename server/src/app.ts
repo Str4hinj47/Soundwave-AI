@@ -6,6 +6,30 @@ import fs from "node:fs";
 import { config } from "./config.js";
 import { generalLimiter, securityHeaders } from "./lib/security.js";
 import { errorHandler, notFoundHandler, requestIdMiddleware } from "./middleware/error.js";
+
+/** Locate the built frontend for SPA hosting (desktop app / simple deploys). */
+function resolveWebDistDir(): string | null {
+  const explicit = config.webDistDir;
+  if (explicit === "") return null; // explicitly disabled via WEB_DIST_DIR=
+  const candidates = [
+    ...(explicit !== "auto" ? [explicit] : []),
+    path.join(process.cwd(), "..", "frontend", "dist"),
+    path.join(process.cwd(), "frontend", "dist"),
+    path.join(process.cwd(), "web", "dist"),
+    // Packaged desktop app (electron-builder extraResources).
+    process.env.SOUNDWAVE_RESOURCES_DIR
+      ? path.join(process.env.SOUNDWAVE_RESOURCES_DIR, "web", "dist")
+      : undefined,
+  ].filter((p): p is string => Boolean(p));
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c, "index.html"))) return c;
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null;
+}
 import authRoutes from "./routes/auth.js";
 import voiceRoutes from "./routes/voices.js";
 import ttsRoutes from "./routes/tts.js";
@@ -71,6 +95,31 @@ export function createApp() {
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");
   if (fs.existsSync(samplesDir)) {
     app.use("/voice-samples", express.static(samplesDir, { maxAge: "7d", immutable: true }));
+  }
+
+  // ── Optional SPA hosting (desktop app / single-process deploys) ──────────
+  // When a built frontend exists, serve it from this origin so the Soundwave
+  // Assistant desktop shell only has to boot this one server. API and
+  // voice-sample routes above always take precedence.
+  const webDistDir = resolveWebDistDir();
+  if (webDistDir) {
+    app.use(
+      express.static(webDistDir, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }),
+    );
+    // SPA fallback — the client-side router owns every non-API route.
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/") || req.path === "/api" || req.path.startsWith("/voice-samples")) return next();
+      res.sendFile(path.join(webDistDir, "index.html"), (err) => {
+        if (err) next(err);
+      });
+    });
   }
 
   app.use(notFoundHandler);

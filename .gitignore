@@ -23,6 +23,9 @@ background_cache/
 *.log
 npm-debug.log*
 
+# desktop app build artifacts
+desktop/release/
+
 # tooling
 .DS_Store
 .idea/

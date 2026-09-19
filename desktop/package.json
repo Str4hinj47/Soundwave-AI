@@ -1,0 +1,66 @@
+{
+  "name": "soundwave-assistant-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Soundwave AI Assistant — desktop shell that shows only the assistant while the full Soundwave website runs in the background.",
+  "main": "main.js",
+  "scripts": {
+    "smoke": "node serverSupervisor.js --smoke",
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ai.soundwave.assistant",
+    "productName": "Soundwave Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "serverSupervisor.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "web/dist"
+      },
+      {
+        "from": "../server/dist",
+        "to": "server/dist"
+      },
+      {
+        "from": "../server/package.json",
+        "to": "server/package.json"
+      },
+      {
+        "from": "../server/node_modules",
+        "to": "server/node_modules"
+      },
+      {
+        "from": "../server/prisma",
+        "to": "server/prisma"
+      },
+      {
+        "from": "../vendor",
+        "to": "bin"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "AudioVideo"
+    }
+  }
+}

@@ -52,6 +52,9 @@ export default function App() {
             </AppShell>
           }
         />
+        {/* Chromeless assistant — the desktop app shows ONLY this view while
+            the website (API + built SPA) keeps running in the background. */}
+        <Route path="/agent-desktop" element={<AgentHub />} />
         <Route
           path="/creator"
           element={

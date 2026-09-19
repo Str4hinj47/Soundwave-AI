@@ -13,7 +13,9 @@ export const securityHeaders = helmet({
       "style-src": ["'self'", "https://fonts.googleapis.com"],
       "font-src": ["'self'", "https://fonts.gstatic.com"],
       "img-src": ["'self'", "data:", "blob:"],
-      "media-src": ["'self'", "blob:"],
+      // data: is required by the assistant's neural TTS playback (base64 MP3
+      // from /agent/speak) and blob: by the compositor preview player.
+      "media-src": ["'self'", "data:", "blob:"],
       "connect-src": ["'self'"],
       "frame-ancestors": ["'none'"],
       "base-uri": ["'self'"],

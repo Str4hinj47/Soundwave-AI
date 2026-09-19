@@ -41,6 +41,7 @@ soundwave-ai/
 │   └── scripts/generate-samples.ts
 ├── deploy/              # Dockerfile.api, nginx.conf
 ├── voiceclone/          # optional OmniVoice voice-cloning sidecar (see its README)
+├── desktop/             # Electron "Soundwave Assistant" shell — assistant-only desktop app
 ├── docker-compose.yml
 └── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import)
 ```
@@ -100,6 +101,20 @@ cd server && npm test            # vitest: 48 unit + API tests
 cd frontend && npm run typecheck # tsc --noEmit
 cd frontend && npm run build     # production build
 ```
+
+---
+
+## Soundwave Assistant desktop app
+
+Prefer a native app? `desktop/` contains an Electron shell that shows **only
+the assistant** (the command-deck HUD) while the website runs in the
+background — including full video generation via the bundled FFmpeg.
+
+```bash
+cd desktop && npm install && npm start
+```
+
+See [desktop/README.md](desktop/README.md).
 
 ---
 

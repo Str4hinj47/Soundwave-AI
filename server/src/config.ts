@@ -58,6 +58,11 @@ export const config = {
   })(),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
+  // Built frontend (frontend/dist). "auto" (default) serves ../frontend/dist
+  // when it exists — used by the Soundwave Assistant desktop app and handy
+  // for single-process deployments. WEB_DIST_DIR="" disables SPA hosting;
+  // any other value is used as an explicit directory.
+  webDistDir: str("WEB_DIST_DIR", "auto"),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)
