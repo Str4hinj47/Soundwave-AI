@@ -303,7 +303,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl w-full mx-auto">
+        <main
+          className={cn(
+            "flex-1 w-full mx-auto",
+            location.pathname.startsWith("/agent")
+              ? "max-w-none px-2 sm:px-4 py-3"
+              : "max-w-7xl px-4 py-6 sm:px-6 lg:px-8"
+          )}
+        >
           {children}
         </main>
       </div>
