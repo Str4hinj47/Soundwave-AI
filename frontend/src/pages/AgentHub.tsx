@@ -663,18 +663,22 @@ export function AgentHub() {
       setAssistantState("STANDBY");
 
       if (data.script) setGeneratedScript(data.script);
-      if (data.videoUrl) setCompletedVideoUrl(data.videoUrl);
+      // The API responds with `downloadUrl` (served by /api/v1/export/jobs/:id/download)
+      // — `videoUrl` never existed, which left the preview & download hidden.
+      const videoUrl: string | null = data.downloadUrl ?? data.videoUrl ?? null;
+      if (videoUrl) setCompletedVideoUrl(videoUrl);
 
+      const renderSeconds = typeof data.duration === "number" ? Math.round(data.duration) : null;
       const successNotice: ChatMessage = {
         id: Date.now().toString(),
         sender: "assistant",
-        text: `Rendered viral short for "${payload.topic}" in ${data.durationSeconds || 4}s (${resolution} 60fps). Video ready in preview.`,
+        text: `Rendered viral short for "${payload.topic}" in ${renderSeconds ?? 4}s (${resolution} 60fps). Video ready in preview.`,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
         tag: "AUDIO",
       };
       setChatMessages((prev) => [...prev, successNotice]);
       speakText("Your video has finished rendering and is ready to download!");
-      toast.success("Video Ready", `Generated in ${data.durationSeconds || "4"}s`);
+      toast.success("Video Ready", `Generated in ${renderSeconds ?? "4"}s`);
     } catch (err: any) {
       toast.error("Generation Error", err.message);
       setAssistantState("STANDBY");

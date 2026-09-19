@@ -142,7 +142,9 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
           name: message.slice(0, 35),
           description: message,
           category: "custom",
+          triggerPhrases: [message.toLowerCase()],
           steps,
+          createdAt: new Date().toISOString(),
         });
         return res.json({
           success: true,

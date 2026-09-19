@@ -5,8 +5,8 @@ Maintains a local pool of high-quality, copyright-free Minecraft parkour clips s
 Saves 80%+ processing time and bandwidth by avoiding repetitive 1-hour full video downloads.
 """
 
-import os
 import sys
+import time
 import random
 import shutil
 import subprocess
@@ -24,9 +24,9 @@ CURATED_HIGH_QUALITY_MINECRAFT_PARKOUR = [
 BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll", "rick roll"]
 CHUNK_DURATION = 80  # seconds
 
-def is_blacklisted(url: str) -> boolean if False else bool:
+def is_blacklisted(url: str) -> bool:
     url_lower = url.lower()
-    return any(b in url_lower for b in BLACKLIST_URLS)
+    return any(b.lower() in url_lower for b in BLACKLIST_URLS)
 
 def get_cache_dir() -> Path:
     """Return the primary background cache directory."""
@@ -88,7 +88,7 @@ def build_cache_clip(youtube_url: Optional[str] = None, timeout: int = 180) -> O
 
     cache_dir = get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    out_file = cache_dir / f"parkour_{int(os.times().system * 1000)}_{random.randint(1000, 9999)}_{CHUNK_DURATION}s.mp4"
+    out_file = cache_dir / f"parkour_{int(time.time() * 1000)}_{random.randint(1000, 9999)}_{CHUNK_DURATION}s.mp4"
 
     cmd = [
         ytdlp_bin,

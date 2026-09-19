@@ -27,7 +27,8 @@ export const CURATED_MINECRAFT_PARKOUR = [
 export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];
 
 export function isBlacklisted(url: string): boolean {
-  return BLACKLIST.some((id) => url.includes(id));
+  const lower = url.toLowerCase();
+  return BLACKLIST.some((id) => lower.includes(id.toLowerCase()));
 }
 
 // ── Script templates for Soundwave Agent — VIRAL 2026 RESEARCH-BASED
@@ -413,6 +414,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
     try {
       await process();
       const completed = await store.getJob(job.id, userId);
+      const usedSolidFallback = videoPath.includes("solid-bg-");
       res.json({
         jobId: job.id,
         status: "COMPLETED",
@@ -429,7 +431,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
           fitToVoice: true,
           voice: body.voice,
           subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle scale",
-          background: videoPath ? "minecraft_parkour 80s cached" : "solid #0A0F1C",
+          background: usedSolidFallback ? "solid #0A0F1C" : "minecraft_parkour 80s cached",
         },
       });
     } catch (e) {

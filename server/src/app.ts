@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { config } from "./config.js";
 import { generalLimiter, securityHeaders } from "./lib/security.js";
-import { errorHandler, notFoundHandler } from "./middleware/error.js";
+import { errorHandler, notFoundHandler, requestIdMiddleware } from "./middleware/error.js";
 import authRoutes from "./routes/auth.js";
 import voiceRoutes from "./routes/voices.js";
 import ttsRoutes from "./routes/tts.js";
@@ -40,6 +40,7 @@ export function createApp() {
   );
 
   app.use(securityHeaders);
+  app.use(requestIdMiddleware);
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use("/api/v1", generalLimiter);

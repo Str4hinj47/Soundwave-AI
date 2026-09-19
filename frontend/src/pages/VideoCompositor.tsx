@@ -661,7 +661,7 @@ export function VideoCompositor() {
                 </div>
                 {aspect === "9:16" && (
                   <p className="mt-1.5 text-xs text-gray-500">
-                    Vertical video for YouTube Shorts, TikTok & Reels. Landscape footage is fitted with black bars.
+                    Vertical video for YouTube Shorts, TikTok & Reels. Landscape footage is cropped to fill the frame — no black bars.
                   </p>
                 )}
               </div>

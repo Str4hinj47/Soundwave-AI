@@ -16,7 +16,7 @@ and export finished MP4/WebM with FFmpeg.
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
 | Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
 | TTS | Server-side **Microsoft Neural voices** via `node-edge-tts` (24 kHz mono MP3 + word timings), offline formant fallback |
-| Backend | Express 5 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
+| Backend | Express 4 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
 | Media | FFmpeg (`libx264`/`libvpx-vp9`, `libass` subtitles + ASS watermark, volume/fades, media probing) |
 
 ```
@@ -96,7 +96,7 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 ### Tests
 
 ```bash
-cd server && npm test            # vitest: 18 unit + API tests
+cd server && npm test            # vitest: 48 unit + API tests
 cd frontend && npm run typecheck # tsc --noEmit
 cd frontend && npm run build     # production build
 ```

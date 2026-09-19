@@ -86,7 +86,9 @@ function assTime(seconds: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  const cs = Math.round((sec - Math.floor(sec)) * 100);
+  // Centiseconds must stay below 100 — Math.round alone can emit "100"
+  // (e.g. for x.995+), producing an invalid "H:MM:SS.100" ASS timestamp.
+  const cs = Math.min(99, Math.round((sec - Math.floor(sec)) * 100));
   return `${h}:${String(m).padStart(2, "0")}:${String(Math.floor(sec)).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
 }
 

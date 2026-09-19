@@ -105,7 +105,10 @@ function synthesizeOffline(req: SynthRequest): SynthResult {
 
   // Base pitch per voice — male lower, female higher; slight per-voice variation.
   const seed = hashStr(voiceId);
-  const isMale = /^[ab]m/.test(voiceId);
+  // Match the actual neural voice ids (en-US-GuyNeural, en-US-ChristopherNeural,
+  // en-GB-RyanNeural, …) — the old /^[ab]m/ pattern never matched, so every
+  // male voice silently used the female pitch.
+  const isMale = /guy|christopher|ryan|male/i.test(voiceId);
   const baseF0 = (isMale ? 95 : 175) + (seed % 60);
   const pitchFactor = Math.pow(2, (settings.pitch ?? 0) / 100);
   const f0 = baseF0 * pitchFactor;
