@@ -630,28 +630,47 @@ class SoundwaveDesktopApp:
             core_fill = "#082F49" if is_active else "#030E1E"
             self.cv_arc.create_oval(cx - 50, cy - 50, cx + 50, cy + 50, fill=core_fill, outline="#38BDF8", width=1.5)
 
-            # 7. Active Dynamic Equalizer Bars (5 vertical rounded bars with gradient feel)
-            bar_w = 5
-            bar_gap = 5
+            # 7. 3D Dotted Thinking Orb Particles (Jakubantalik Dotted Orb)
+            num_lat = 7
+            dots_per_ring = 16
+            for l_idx in range(num_lat):
+                lat = -math.pi / 2 + (l_idx + 1) / (num_lat + 1) * math.pi
+                r_lat = 58 * math.cos(lat)
+                y_lat = 44 * math.sin(lat)
+                wave_offset = math.sin(self.anim_phase * 2.5 + l_idx * 0.8) * 6 if is_active else 0
+                for d_idx in range(dots_per_ring):
+                    lon = d_idx / dots_per_ring * 2 * math.pi + self.anim_phase * (0.7 if is_active else 0.25)
+                    px = cx + math.cos(lon) * (r_lat + wave_offset)
+                    py = cy + y_lat + math.sin(lon) * (r_lat * 0.3)
+                    depth = (math.sin(lon) + 1) / 2
+                    dot_r = 1.0 + depth * (2.6 if is_active else 1.6)
+                    dot_c = "#06B6D4" if depth > 0.5 else "#0E3A5F"
+                    if depth > 0.8:
+                        dot_c = "#FFFFFF" if is_active else "#38BDF8"
+                    self.cv_arc.create_oval(px - dot_r, py - dot_r, px + dot_r, py + dot_r, fill=dot_c, outline="")
+
+            # 8. Active Dynamic Equalizer Bars (5 vertical rounded bars with gradient feel)
+            bar_w = 4
+            bar_gap = 4
             total_w = 5 * bar_w + 4 * bar_gap
             start_x = cx - total_w / 2
             for bi in range(5):
                 bx = start_x + bi * (bar_w + bar_gap)
                 if self.state == "SPEAKING":
-                    bh = math.sin(self.anim_phase * 3.5 + bi * 1.4) * 16 + 22
+                    bh = math.sin(self.anim_phase * 3.5 + bi * 1.4) * 12 + 16
                 elif self.state == "LISTENING":
-                    bh = math.sin(self.anim_phase * 2.8 + bi * 1.1) * 12 + 16
+                    bh = math.sin(self.anim_phase * 2.8 + bi * 1.1) * 10 + 14
                 elif self.state == "THINKING":
-                    bh = math.sin(self.anim_phase * 4.0 + bi * 1.8) * 8 + 14
+                    bh = math.sin(self.anim_phase * 4.0 + bi * 1.8) * 6 + 10
                 else:
-                    bh = math.sin(self.anim_phase + bi * 0.9) * 3 + 8
+                    bh = math.sin(self.anim_phase + bi * 0.9) * 2 + 5
 
                 by1 = cy - bh / 2
                 by2 = cy + bh / 2
                 # Core bar
                 self.cv_arc.create_rectangle(bx, by1, bx + bar_w, by2, fill="#06B6D4", outline="")
                 # Top glowing tip
-                self.cv_arc.create_rectangle(bx, by1, bx + bar_w, by1 + 2, fill="#FFFFFF", outline="")
+                self.cv_arc.create_rectangle(bx, by1, bx + bar_w, by1 + 1.5, fill="#FFFFFF", outline="")
 
             self.anim_phase += 0.08 if is_active else 0.03
             if self.root:

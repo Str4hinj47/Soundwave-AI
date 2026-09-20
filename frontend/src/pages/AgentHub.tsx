@@ -27,6 +27,7 @@ import {
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
 import { toast } from "../store/toast";
+import { ThinkingOrbVisualizer } from "../components/agent/ThinkingOrbVisualizer";
 
 interface NicheInfo {
   id: string;
@@ -180,9 +181,7 @@ export function AgentHub() {
   const [voiceFeedback, setVoiceFeedback] = useState(true);
 
   // Refs
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const pointerOffset = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
 
   // Save chat to localStorage
   useEffect(() => {
@@ -363,153 +362,6 @@ export function AgentHub() {
     const m = String(Math.floor((secs % 3600) / 60)).padStart(2, "0");
     const s = String(secs % 60).padStart(2, "0");
     return `${h}:${m}:${s}`;
-  };
-
-  // ── Central Concentric Arc Reactor / Soundwave Orb ──────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animId: number;
-    let phase = 0;
-
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const width = canvas.width;
-      const height = canvas.height;
-      const cx = width / 2;
-      const cy = height / 2;
-      const active = isGenerating || assistantState !== "STANDBY" || isMicActive;
-
-      pointerOffset.current.x += (pointerOffset.current.targetX - pointerOffset.current.x) * 0.08;
-      pointerOffset.current.y += (pointerOffset.current.targetY - pointerOffset.current.y) * 0.08;
-
-      const ox = pointerOffset.current.x;
-      const oy = pointerOffset.current.y;
-
-      let speedMult = 1.0;
-      if (assistantState === "LISTENING" || isMicActive) speedMult = 1.8;
-      else if (assistantState === "THINKING") speedMult = 2.6;
-      else if (assistantState === "SPEAKING") speedMult = 2.0;
-      else if (assistantState === "GENERATING") speedMult = 3.0;
-
-      phase += 0.03 * speedMult;
-
-      // 1. Ambient Background Cyan Core Glow
-      const bgGrad = ctx.createRadialGradient(cx + ox * 0.3, cy + oy * 0.3, 10, cx, cy, 140);
-      bgGrad.addColorStop(0, active ? "rgba(0, 240, 255, 0.25)" : "rgba(0, 240, 255, 0.1)");
-      bgGrad.addColorStop(0.5, active ? "rgba(0, 180, 255, 0.08)" : "rgba(0, 180, 255, 0.03)");
-      bgGrad.addColorStop(1, "rgba(8, 12, 20, 0)");
-      ctx.fillStyle = bgGrad;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 140, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 2. Outermost Concentric Faint Ring (R ~135)
-      ctx.beginPath();
-      ctx.arc(cx, cy, 132, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0, 240, 255, 0.08)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // 3. Concentric Ring 2 (R ~112) with subtle rotational ticks
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(phase * 0.15);
-      ctx.beginPath();
-      ctx.arc(0, 0, 110, 0, Math.PI * 2);
-      ctx.strokeStyle = active ? "rgba(0, 240, 255, 0.3)" : "rgba(0, 240, 255, 0.14)";
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([4, 16]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-
-      // 4. Concentric Ring 3 (R ~88) with 4 cardinal tick marks
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(-phase * 0.2);
-      ctx.beginPath();
-      ctx.arc(0, 0, 86, 0, Math.PI * 2);
-      ctx.strokeStyle = active ? "rgba(0, 240, 255, 0.5)" : "rgba(0, 240, 255, 0.25)";
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-
-      for (let i = 0; i < 4; i++) {
-        const ang = (i * Math.PI) / 2;
-        const tx1 = Math.cos(ang) * 82;
-        const ty1 = Math.sin(ang) * 82;
-        const tx2 = Math.cos(ang) * 90;
-        const ty2 = Math.sin(ang) * 90;
-        ctx.beginPath();
-        ctx.moveTo(tx1, ty1);
-        ctx.lineTo(tx2, ty2);
-        ctx.strokeStyle = "#00F0FF";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // 5. Concentric Ring 4 (R ~66) - Glowing Cyan Orbit
-      ctx.beginPath();
-      ctx.arc(cx + ox * 0.2, cy + oy * 0.2, 66, 0, Math.PI * 2);
-      ctx.strokeStyle = active ? "rgba(0, 240, 255, 0.8)" : "rgba(0, 240, 255, 0.4)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // 6. Deep Dark Arc Core (R ~48)
-      const coreGrad = ctx.createRadialGradient(cx + ox * 0.4, cy + oy * 0.4, 4, cx, cy, 48);
-      coreGrad.addColorStop(0, "#081E36");
-      coreGrad.addColorStop(0.7, "#051120");
-      coreGrad.addColorStop(1, "#030A14");
-      ctx.fillStyle = coreGrad;
-      ctx.beginPath();
-      ctx.arc(cx + ox * 0.4, cy + oy * 0.4, 48, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0, 240, 255, 0.6)";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      // 7. Center Audio Visualizer EQ Bars (5 vertical glowing bars like screenshot)
-      const barCount = 5;
-      const barWidth = 4;
-      const barGap = 4;
-      const totalWidth = barCount * barWidth + (barCount - 1) * barGap;
-      const startX = cx + ox * 0.4 - totalWidth / 2;
-
-      for (let i = 0; i < barCount; i++) {
-        const bx = startX + i * (barWidth + barGap);
-        const barH = active
-          ? Math.sin(phase * 2.5 + i * 1.2) * 14 + 18
-          : Math.sin(phase + i * 0.8) * 4 + 8;
-        const by = cy + oy * 0.4 - barH / 2;
-
-        ctx.fillStyle = "#00F0FF";
-        ctx.beginPath();
-        ctx.roundRect(bx, by, barWidth, barH, 2);
-        ctx.fill();
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-    return () => cancelAnimationFrame(animId);
-  }, [assistantState, isGenerating, isMicActive]);
-
-  const handleOrbMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - rect.width / 2;
-    const y = e.clientY - rect.top - rect.height / 2;
-    pointerOffset.current.targetX = Math.max(-20, Math.min(20, x * 0.2));
-    pointerOffset.current.targetY = Math.max(-20, Math.min(20, y * 0.2));
-  };
-
-  const handleOrbMouseLeave = () => {
-    pointerOffset.current.targetX = 0;
-    pointerOffset.current.targetY = 0;
   };
 
   // ── Conversation Dispatcher ─────────────────────────────────────────────
@@ -1007,22 +859,21 @@ export function AgentHub() {
         {/* ── CENTER COLUMN: ARC REACTOR ORB & DOCK (5.5 cols) ────────── */}
         <div className="lg:col-span-5 flex flex-col items-center justify-between py-6 px-4">
           <div className="flex-1 flex flex-col items-center justify-center w-full">
-            {/* Holographic Concentric Arc Reactor Visualizer */}
-            <div
-              className="relative flex items-center justify-center my-6 cursor-pointer"
-              onMouseMove={handleOrbMouseMove}
-              onMouseLeave={handleOrbMouseLeave}
-            >
-              <canvas
-                ref={canvasRef}
-                width={300}
-                height={300}
-                className="rounded-full"
-              />
-            </div>
+            {/* Jakubantalik Thinking Orb Visualizer (9 Hand-Tuned Cognitive States) */}
+            <ThinkingOrbVisualizer
+              assistantState={assistantState}
+              isMicActive={isMicActive}
+              size={280}
+              className="my-3"
+              onOrbClick={() => {
+                if (assistantState === "STANDBY") {
+                  setIsMicActive(!isMicActive);
+                }
+              }}
+            />
 
             {/* Assistant Name Label */}
-            <h2 className="text-lg font-bold tracking-[0.25em] text-white font-mono mt-2">
+            <h2 className="text-lg font-bold tracking-[0.25em] text-white font-mono mt-1">
               {assistantName}
             </h2>
 
