@@ -220,9 +220,11 @@ async function processJob(
   }
 }
 
-function emitJob(jobId: string, payload: Record<string, unknown>): void {
+export function emitJob(jobId: string, payload: Record<string, unknown>): void {
   jobEvents.emit(jobId, payload);
 }
+
+export { jobEvents };
 
 function isLocalAutomationUser(uid?: string | null): boolean {
   if (!uid) return false;

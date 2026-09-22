@@ -536,15 +536,16 @@ export function AgentHub() {
     try {
       setIsGenerating(true);
       setCompletedVideoUrl(null);
-      setProgressPercent(15);
+      setProgressPercent(8);
       setAssistantState("GENERATING");
-      setCurrentStep("Synthesizing script & audio...");
+      setCurrentStep("Initiating generation...");
 
       const payload = {
         topic: customTopic.trim() || selectedNiche,
         voice: selectedVoice,
         resolution,
         useDefaultBackground: true,
+        async: true,
       };
 
       const res = await fetch("/api/v1/agent/generate-short", {
@@ -554,37 +555,132 @@ export function AgentHub() {
       });
 
       const text = await res.text();
-      let data: any = {};
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data.error || text || "Generation failed");
+      let initData: any = {};
+      try { initData = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(initData.error || text || "Generation failed to start");
 
-      setProgressPercent(100);
-      setCurrentStep("Completed");
-      setAssistantState("STANDBY");
+      const jobId = initData.jobId;
+      if (!jobId) throw new Error("No job ID received from server");
 
-      const finalVideoUrl =
-        data.videoUrl ||
-        data.downloadUrl ||
-        (data.jobId ? `/api/v1/export/jobs/${data.jobId}/download` : null);
+      // Track REAL progress from FFmpeg and generation stages
+      await new Promise<void>((resolve, reject) => {
+        let isDone = false;
+        let eventSource: EventSource | null = null;
+        let pollTimer: any = null;
 
-      if (data.script) setGeneratedScript(data.script);
-      if (finalVideoUrl) setCompletedVideoUrl(finalVideoUrl);
+        const cleanup = () => {
+          isDone = true;
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+        };
 
-      const successNotice: ChatMessage = {
-        id: Date.now().toString(),
-        sender: "assistant",
-        text: `Rendered viral short for "${payload.topic}" in ${data.durationSeconds || 4}s (${resolution} 60fps). Your video is ready to preview and download!`,
-        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-        tag: "AUDIO",
-        videoUrl: finalVideoUrl || undefined,
-        downloadUrl: finalVideoUrl || undefined,
-      };
-      setChatMessages((prev) => [...prev, successNotice]);
-      speakText("Your video has finished rendering and is ready to download!");
-      toast.success("Video Ready", `Generated in ${data.durationSeconds || "4"}s`);
+        const finishSuccess = (resultData: any) => {
+          if (isDone) return;
+          cleanup();
+
+          setProgressPercent(100);
+          setCurrentStep("Completed!");
+          setAssistantState("STANDBY");
+
+          const finalVideoUrl =
+            resultData.outputUrl ||
+            resultData.videoUrl ||
+            resultData.downloadUrl ||
+            `/api/v1/export/jobs/${jobId}/download`;
+
+          if (resultData.script) setGeneratedScript(resultData.script);
+          setCompletedVideoUrl(finalVideoUrl);
+
+          const successNotice: ChatMessage = {
+            id: Date.now().toString(),
+            sender: "assistant",
+            text: `Rendered viral short for "${payload.topic}" (${resolution} 60fps). Your video is ready to preview and download!`,
+            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+            tag: "AUDIO",
+            videoUrl: finalVideoUrl,
+            downloadUrl: finalVideoUrl,
+          };
+          setChatMessages((prev) => [...prev, successNotice]);
+          speakText("Your video has finished rendering and is ready to download!");
+          toast.success("Video Ready", "Short generated successfully.");
+          resolve();
+        };
+
+        const finishFail = (errMessage: string) => {
+          if (isDone) return;
+          cleanup();
+          reject(new Error(errMessage));
+        };
+
+        // 1. Real-time EventSource SSE listener
+        try {
+          eventSource = new EventSource(`/api/v1/export/jobs/${jobId}/events`);
+          eventSource.onmessage = (e) => {
+            try {
+              const msg = JSON.parse(e.data);
+              if (typeof msg.progress === "number") {
+                setProgressPercent((prev) => Math.max(prev, msg.progress));
+              }
+              if (msg.step) {
+                setCurrentStep(msg.step);
+              }
+              if (msg.status === "COMPLETED") {
+                finishSuccess(msg);
+              } else if (msg.status === "FAILED") {
+                finishFail(msg.error || "Video export failed");
+              }
+            } catch {}
+          };
+          eventSource.onerror = () => {
+            if (eventSource) {
+              eventSource.close();
+              eventSource = null;
+            }
+          };
+        } catch {}
+
+        // 2. High-frequency 350ms Polling fallback
+        pollTimer = setInterval(async () => {
+          if (isDone) return;
+          try {
+            const pollRes = await fetch(`/api/v1/export/jobs/${jobId}`);
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              const j = pollData.job;
+              if (j) {
+                if (typeof j.progress === "number" && j.progress > 0) {
+                  setProgressPercent((prev) => Math.max(prev, j.progress));
+                }
+                if (j.settings?.step) {
+                  setCurrentStep(j.settings.step);
+                }
+                if (j.status === "COMPLETED") {
+                  finishSuccess(j);
+                } else if (j.status === "FAILED") {
+                  finishFail(j.errorMessage || "Export failed");
+                }
+              }
+            }
+          } catch {}
+        }, 350);
+
+        // Safety timeout
+        setTimeout(() => {
+          if (!isDone) {
+            finishFail("Generation timed out");
+          }
+        }, 180_000);
+      });
     } catch (err: any) {
       toast.error("Generation Error", err.message);
       setAssistantState("STANDBY");
+      setProgressPercent(0);
     } finally {
       setIsGenerating(false);
     }

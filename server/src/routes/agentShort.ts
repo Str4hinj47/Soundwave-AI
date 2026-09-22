@@ -15,6 +15,7 @@ import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleC
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
+import { emitJob } from "./export.js";
 
 // ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
 export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
@@ -392,7 +393,8 @@ export interface BuildShortOptions {
   backgroundFileKey?: string | null;
   useDefaultBackground?: boolean;
   userId?: string;
-  onProgress?: (pct: number) => void;
+  existingJobId?: string;
+  onProgress?: (pct: number, step?: string) => void;
 }
 
 export interface BuildShortResult {
@@ -408,20 +410,54 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
   const store = await getStore();
   const userId = params.userId || "agent-local";
   const resolution = params.resolution || "720p";
-  const voice = params.voice || "en-US-GuyNeural";
+  const voice = params.voice || "en-US-ChristopherNeural";
 
-  // 1. Script Generation
+  const dims = dimensionsFor(resolution, "9:16");
+
+  // Retrieve existing job or create a new job record
+  let job = params.existingJobId ? await store.getJob(params.existingJobId, userId) : null;
+  if (!job) {
+    job = await store.createJob({
+      projectId: null,
+      userId,
+      status: "PROCESSING",
+      progress: 5,
+      settings: { resolution: dims, topic: params.topic, step: "Crafting viral script..." } as any,
+      outputUrl: null,
+      errorMessage: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    });
+  }
+
+  const reportProgress = async (pct: number, step: string) => {
+    params.onProgress?.(pct, step);
+    emitJob(job.id, { progress: pct, step, status: "PROCESSING" });
+    try {
+      await store.updateJob(job.id, {
+        progress: pct,
+        settings: { ...(job.settings || {}), step },
+      });
+    } catch {}
+  };
+
+  // 1. Script Generation (10% -> 22%)
+  await reportProgress(10, "Crafting viral script & opening hook...");
   const script = params.script?.trim() || generateScript(params.topic);
+  await reportProgress(22, "Script crafted. Preparing neural narrator...");
 
-  // 2. Voiceover Synthesis (GuyNeural male default with offline fallback)
+  // 2. Voiceover Synthesis (28% -> 40%)
+  await reportProgress(28, "Synthesizing neural voiceover with natural pacing...");
   const ttsResult = await synthesizeResilientAudio(userId, script, voice);
   const audioBuf = Buffer.from(ttsResult.audioBase64, "base64");
   const audioFileKey = `${crypto.randomUUID()}.audio`;
   const audioPath = path.join(config.uploadsDir, audioFileKey);
   fs.mkdirSync(config.uploadsDir, { recursive: true });
   fs.writeFileSync(audioPath, audioBuf);
+  await reportProgress(40, "Speech synthesized. Aligning captions...");
 
-  // 3. Word-by-word Subtitles
+  // 3. Word-by-word Subtitles (40% -> 50%)
+  await reportProgress(44, "Generating synchronized word-by-word subtitles...");
   const cues = cuesFromTimings(ttsResult.wordTimings, ttsResult.duration);
   const tiktokStyle: SubtitleStyleInput = {
     fontFamily: "DejaVu Sans",
@@ -444,7 +480,8 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     shadowY: 2,
   };
 
-  // 4. Background: Authentic Minecraft parkour gameplay
+  // 4. Background: Authentic Minecraft parkour gameplay (50% -> 58%)
+  await reportProgress(50, "Sourcing 60s Minecraft parkour gameplay from pool...");
   let videoPath: string | null = null;
   if (params.backgroundFileKey) {
     const p = path.join(config.uploadsDir, params.backgroundFileKey);
@@ -454,8 +491,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
   if (!videoPath) {
     videoPath = await ensureMinecraftBackground(params.youtubeUrl);
   }
-
-  const dims = dimensionsFor(resolution, "9:16");
+  await reportProgress(58, "Background clip acquired. Initializing 60fps compositor...");
 
   // 5. Export Settings
   const exportSettings: ExportSettings = {
@@ -470,19 +506,6 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     duration: ttsResult.duration,
   };
 
-  // 6. Register Export Job
-  const job = await store.createJob({
-    projectId: null,
-    userId,
-    status: "PROCESSING",
-    progress: 10,
-    settings: { ...exportSettings, subtitleCount: cues.length, topic: params.topic } as any,
-    outputUrl: null,
-    errorMessage: null,
-    startedAt: new Date().toISOString(),
-    completedAt: null,
-  });
-
   const jobsDir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(jobsDir, { recursive: true });
   const outFilename = `soundwave_short_${job.id}.mp4`;
@@ -494,6 +517,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     end: Math.min(c.end, ttsResult.duration),
   }));
 
+  // 6. FFmpeg Compositing (58% -> 96%)
   try {
     await runFfmpegExport({
       videoPath,
@@ -502,18 +526,24 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
       subtitleStyle: tiktokStyle,
       settings: exportSettings,
       outputPath: outPath,
-      onProgress: async (p) => {
-        params.onProgress?.(p);
-        await store.updateJob(job.id, { progress: Math.min(99, Math.round(p * 100)) });
+      onProgress: async (ffmpegPct) => {
+        // Map FFmpeg 0..100% to overall 58..96%
+        const overall = Math.min(96, Math.max(58, Math.round(58 + (ffmpegPct * 0.38))));
+        const stepDesc = `Rendering 60fps vertical short (${Math.round(ffmpegPct)}%)...`;
+        await reportProgress(overall, stepDesc);
       },
     });
   } catch (err: any) {
-    if (err?.code === "ENOENT" || err?.message?.includes("ENOENT") || err?.message?.includes("spawn ffmpeg")) {
+    const errText = err?.message || "FFmpeg export failed";
+    emitJob(job.id, { status: "FAILED", error: errText });
+    await store.updateJob(job.id, { status: "FAILED", errorMessage: errText });
+    if (err?.code === "ENOENT" || errText.includes("ENOENT") || errText.includes("spawn ffmpeg")) {
       throw new Error("FFmpeg not found on system. Please run 'winget install ffmpeg' in PowerShell or launch via 'start_windows.bat'.");
     }
     throw err;
   }
 
+  await reportProgress(97, "Finalizing short video package...");
   try {
     fs.copyFileSync(outPath, jobFilePath);
   } catch {}
@@ -524,6 +554,17 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     progress: 100,
     outputUrl: finalUrl,
     completedAt: new Date().toISOString(),
+  });
+
+  emitJob(job.id, {
+    status: "COMPLETED",
+    progress: 100,
+    step: "Video Ready!",
+    outputUrl: finalUrl,
+    videoUrl: finalUrl,
+    downloadUrl: finalUrl,
+    script,
+    duration: ttsResult.duration,
   });
 
   return {
@@ -541,7 +582,7 @@ const router = Router();
 
 const generateShortSchema = z.object({
   topic: z.string().min(2).max(500).default("motivation"),
-  voice: z.string().min(2).max(100).default("en-US-GuyNeural"),
+  voice: z.string().min(2).max(100).default("en-US-ChristopherNeural"),
   youtubeUrl: z.string().max(2048).nullable().optional(),
   useDefaultBackground: z.boolean().default(true),
   backgroundFileKey: z.string().max(200).nullable().optional(),
@@ -560,15 +601,16 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       const job = await store.createJob({
         projectId: null,
         userId,
-        status: "QUEUED",
-        progress: 0,
-        settings: { resolution: dims, topic: body.topic } as any,
+        status: "PROCESSING",
+        progress: 8,
+        settings: { resolution: dims, topic: body.topic, step: "Crafting viral script & hook..." } as any,
         outputUrl: null,
         errorMessage: null,
-        startedAt: null,
+        startedAt: new Date().toISOString(),
         completedAt: null,
       });
 
+      // Launch async generation bound to this job.id
       buildShortVideo({
         topic: body.topic,
         voice: body.voice,
@@ -577,15 +619,20 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
         backgroundFileKey: body.backgroundFileKey,
         useDefaultBackground: body.useDefaultBackground,
         userId,
-      }).catch((e) => console.error("[agentShort async] export failed:", (e as Error).message));
+        existingJobId: job.id,
+      }).catch((e) => {
+        console.error("[agentShort async] export failed:", (e as Error).message);
+        store.updateJob(job.id, { status: "FAILED", errorMessage: (e as Error).message });
+        emitJob(job.id, { status: "FAILED", error: (e as Error).message });
+      });
 
       res.json({
         jobId: job.id,
-        status: "QUEUED",
+        status: "PROCESSING",
         pollUrl: `/api/v1/export/jobs/${job.id}`,
         eventsUrl: `/api/v1/export/jobs/${job.id}/events`,
         downloadUrl: `/api/v1/export/jobs/${job.id}/download`,
-        message: "Export queued — poll GET /api/v1/export/jobs/:jobId or stream /api/v1/export/jobs/:jobId/events",
+        message: "Short generation in progress",
         defaults: {
           aspect: "9:16",
           resolution: body.resolution,
