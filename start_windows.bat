@@ -1,8 +1,7 @@
 @echo off
-setlocal enabledelayedexpansion
 title Soundwave AI Suite Launcher
 echo =================================================================
-echo   🌊 Starting Soundwave AI Studio & Autonomous Agent
+echo   Waves Starting Soundwave AI Studio and Autonomous Agent
 echo =================================================================
 
 :: Check for Node.js
@@ -14,7 +13,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Check for Python
+:: Check for Python (optional)
 where python >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [WARNING] Python is not in PATH. Desktop agent requires Python 3.10+.
@@ -23,53 +22,56 @@ if %ERRORLEVEL% NEQ 0 (
 :: Ensure vendor\ffmpeg directory exists
 if not exist vendor\ffmpeg mkdir vendor\ffmpeg
 
-:: Check for FFmpeg: check PATH, vendor\ffmpeg\ffmpeg.exe, or auto-install
-set FFMPEG_FOUND=0
+:: Detect FFmpeg
 where ffmpeg >nul 2>&1
+if %ERRORLEVEL% EQU 0 goto :ffmpeg_ready
+
+if exist vendor\ffmpeg\ffmpeg.exe goto :ffmpeg_vendored
+
+:: FFmpeg missing on PATH and vendor - check WinGet Links folder
+if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
+    set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+    set "FFMPEG_PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
+    goto :ffmpeg_ready
+)
+
+:: Try installing via winget if available
+echo [INFO] FFmpeg not found on system PATH. Attempting automatic installation...
+where winget >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    set FFMPEG_FOUND=1
-    echo [INFO] FFmpeg detected on system PATH.
-) else (
-    if exist vendor\ffmpeg\ffmpeg.exe (
-        set FFMPEG_FOUND=1
-        set "PATH=%CD%\vendor\ffmpeg;!PATH!"
-        set "FFMPEG_PATH=%CD%\vendor\ffmpeg\ffmpeg.exe"
-        echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
-    ) else (
-        echo [INFO] FFmpeg was not detected on PATH or in vendor\ffmpeg.
-        echo [INFO] Attempting automatic FFmpeg installation for Windows...
-        
-        where winget >nul 2>&1
-        if %ERRORLEVEL% EQU 0 (
-            echo [INFO] Installing FFmpeg via winget (Gyan.FFmpeg)...
-            winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements --silent
-            if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
-                set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;!PATH!"
-                set "FFMPEG_PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
-                set FFMPEG_FOUND=1
-            )
-        )
-
-        where ffmpeg >nul 2>&1
-        if %ERRORLEVEL% EQU 0 (
-            set FFMPEG_FOUND=1
-        ) else if not "!FFMPEG_FOUND!"=="1" (
-            echo [INFO] Downloading portable FFmpeg for Windows...
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { $zip = 'vendor\ffmpeg.zip'; Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile $zip; Expand-Archive $zip -DestinationPath 'vendor\ffmpeg_tmp' -Force; $bin = (Get-ChildItem -Path 'vendor\ffmpeg_tmp' -Filter 'ffmpeg.exe' -Recurse | Select-Object -First 1).FullName; Copy-Item $bin -Destination 'vendor\ffmpeg\ffmpeg.exe'; Remove-Item -Recurse -Force $zip, 'vendor\ffmpeg_tmp'; Write-Host '[SUCCESS] FFmpeg installed to vendor\ffmpeg\ffmpeg.exe' } catch { Write-Warning ('Download failed: ' + $_.Exception.Message) }"
-            if exist vendor\ffmpeg\ffmpeg.exe (
-                set "PATH=%CD%\vendor\ffmpeg;!PATH!"
-                set "FFMPEG_PATH=%CD%\vendor\ffmpeg\ffmpeg.exe"
-                set FFMPEG_FOUND=1
-            )
-        )
-    )
+    echo [INFO] Installing FFmpeg via winget...
+    winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements --silent
 )
 
-if not "!FFMPEG_FOUND!"=="1" (
-    echo [WARNING] FFmpeg is required for video export and audio conversion.
-    echo To install manually, open PowerShell and run: winget install ffmpeg
+:: Check again after winget
+where ffmpeg >nul 2>&1
+if %ERRORLEVEL% EQU 0 goto :ffmpeg_ready
+
+if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
+    set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+    set "FFMPEG_PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
+    goto :ffmpeg_ready
 )
 
+:: Download standalone portable ffmpeg.exe via clean PowerShell script
+if exist scripts\download_ffmpeg.ps1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ffmpeg.ps1
+)
+
+if exist vendor\ffmpeg\ffmpeg.exe goto :ffmpeg_vendored
+
+echo [WARNING] FFmpeg was not detected. Video export may require manual install: winget install ffmpeg
+goto :continue_boot
+
+:ffmpeg_vendored
+set "PATH=%CD%\vendor\ffmpeg;%PATH%"
+set "FFMPEG_PATH=%CD%\vendor\ffmpeg\ffmpeg.exe"
+echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
+
+:ffmpeg_ready
+echo [INFO] FFmpeg is ready.
+
+:continue_boot
 :: Prepare server .env if missing
 if not exist server\.env (
     echo [INFO] Creating server\.env from .env.example...
@@ -77,7 +79,7 @@ if not exist server\.env (
 )
 
 :: Ensure DATABASE_URL is disabled for zero-infra local JSON store (no postgres needed)
-powershell -Command "if (Test-Path 'server\.env') { (Get-Content 'server\.env') -replace '^DATABASE_URL=postgresql:', '#DATABASE_URL=postgresql:' | Set-Content 'server\.env' }"
+powershell -NoProfile -Command "if (Test-Path 'server\.env') { (Get-Content 'server\.env') -replace '^DATABASE_URL=postgresql:', '#DATABASE_URL=postgresql:' | Set-Content 'server\.env' }"
 
 :: Install server dependencies if needed
 if not exist server\node_modules (
@@ -89,11 +91,6 @@ if not exist server\node_modules (
 if not exist frontend\node_modules (
     echo [INFO] Installing frontend dependencies...
     cd frontend && call npm install && cd ..
-)
-
-:: Pass FFMPEG_PATH to the child command shell if found
-if defined FFMPEG_PATH (
-    echo [INFO] Setting FFMPEG_PATH=!FFMPEG_PATH!
 )
 
 :: Start Backend API Server in a new window
@@ -115,11 +112,11 @@ echo [INFO] Opening Soundwave Agent in your default browser...
 start http://localhost:5173/agent
 
 echo =================================================================
-echo   🎉 Soundwave AI is now running!
-echo   - Web Studio & Agent Hub: http://localhost:5173/agent
+echo   Soundwave AI is now running!
+echo   - Web Studio and Agent Hub: http://localhost:5173/agent
 echo   - Backend API: http://localhost:4000
 echo
-echo   To launch the Standalone Python Desktop Agent & HUD:
+echo   To launch the Standalone Python Desktop Agent and HUD:
 echo   Run in terminal: python soundwave_agent.py --gui
 echo =================================================================
 pause
