@@ -491,18 +491,25 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     end: Math.min(c.end, ttsResult.duration),
   }));
 
-  await runFfmpegExport({
-    videoPath,
-    audioPath,
-    subtitles: finalCues,
-    subtitleStyle: tiktokStyle,
-    settings: exportSettings,
-    outputPath: outPath,
-    onProgress: async (p) => {
-      params.onProgress?.(p);
-      await store.updateJob(job.id, { progress: Math.min(99, Math.round(p * 100)) });
-    },
-  });
+  try {
+    await runFfmpegExport({
+      videoPath,
+      audioPath,
+      subtitles: finalCues,
+      subtitleStyle: tiktokStyle,
+      settings: exportSettings,
+      outputPath: outPath,
+      onProgress: async (p) => {
+        params.onProgress?.(p);
+        await store.updateJob(job.id, { progress: Math.min(99, Math.round(p * 100)) });
+      },
+    });
+  } catch (err: any) {
+    if (err?.code === "ENOENT" || err?.message?.includes("ENOENT") || err?.message?.includes("spawn ffmpeg")) {
+      throw new Error("FFmpeg not found on system. Please run 'winget install ffmpeg' in PowerShell or launch via 'start_windows.bat'.");
+    }
+    throw err;
+  }
 
   try {
     fs.copyFileSync(outPath, jobFilePath);

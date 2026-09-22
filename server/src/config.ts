@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs, { existsSync } from "node:fs";
 import path from "node:path";
 
 const env = process.env;
@@ -98,25 +99,78 @@ export function validateConfig(): void {
   }
 }
 
-/** Resolve the FFmpeg binary path (env override → vendored static binary → PATH). */
+/** Resolve the FFmpeg binary path (env override → vendored static binary → system PATH). */
 export function resolveFfmpegPath(): string {
-  if (config.ffmpegPath) return config.ffmpegPath;
-  // The vendored binary is a Linux ELF — skip it on Windows, where ffmpeg
-  // must come from PATH (e.g. `winget install ffmpeg`) or FFMPEG_PATH.
-  if (process.platform !== "win32") {
-    const candidates = [
-      path.join(process.cwd(), "..", "vendor", "ffmpeg", "ffmpeg"),
-      path.join(process.cwd(), "vendor", "ffmpeg", "ffmpeg"),
-      "/usr/bin/ffmpeg",
-    ];
-    for (const c of candidates) {
-      if (existsSyncSafe(c)) return c;
+  if (config.ffmpegPath && existsSyncSafe(config.ffmpegPath)) return config.ffmpegPath;
+
+  const isWin = process.platform === "win32";
+  const exeName = isWin ? "ffmpeg.exe" : "ffmpeg";
+
+  const candidates: string[] = [
+    path.join(process.cwd(), "..", "vendor", "ffmpeg", exeName),
+    path.join(process.cwd(), "vendor", "ffmpeg", exeName),
+    path.join(process.cwd(), "..", "vendor", "ffmpeg", "bin", exeName),
+    path.join(process.cwd(), "vendor", "ffmpeg", "bin", exeName),
+    path.join(process.cwd(), exeName),
+    path.join(process.cwd(), "..", exeName),
+  ];
+
+  if (isWin) {
+    const userProfile = process.env.USERPROFILE || "";
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programData = process.env.ProgramData || "C:\\ProgramData";
+
+    candidates.push(
+      "C:\\ffmpeg\\bin\\ffmpeg.exe",
+      "C:\\ffmpeg\\ffmpeg.exe",
+      path.join(programData, "chocolatey", "bin", "ffmpeg.exe"),
+      path.join(userProfile, "scoop", "shims", "ffmpeg.exe"),
+      path.join(programFiles, "ffmpeg", "bin", "ffmpeg.exe"),
+      path.join(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+      path.join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+      path.join(userProfile, "Downloads", "ffmpeg", "bin", "ffmpeg.exe"),
+      path.join(userProfile, "Downloads", "ffmpeg.exe")
+    );
+
+    // Auto-scan WinGet Packages directory for Gyan / Essentials build
+    if (localAppData) {
+      const wingetPkgs = path.join(localAppData, "Microsoft", "WinGet", "Packages");
+      try {
+        if (existsSyncSafe(wingetPkgs)) {
+          const dirs = fs.readdirSync(wingetPkgs);
+          for (const d of dirs) {
+            if (d.toLowerCase().includes("ffmpeg")) {
+              candidates.push(
+                path.join(wingetPkgs, d, "ffmpeg.exe"),
+                path.join(wingetPkgs, d, "bin", "ffmpeg.exe")
+              );
+              try {
+                const subdirs = fs.readdirSync(path.join(wingetPkgs, d));
+                for (const sub of subdirs) {
+                  candidates.push(path.join(wingetPkgs, d, sub, "bin", "ffmpeg.exe"));
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch {}
     }
+  } else {
+    candidates.push(
+      "/usr/local/bin/ffmpeg",
+      "/usr/bin/ffmpeg",
+      "/bin/ffmpeg"
+    );
   }
+
+  for (const c of candidates) {
+    if (existsSyncSafe(c)) return c;
+  }
+
   return "ffmpeg";
 }
 
-import { existsSync } from "node:fs";
 function existsSyncSafe(p: string): boolean {
   try {
     return existsSync(p);
