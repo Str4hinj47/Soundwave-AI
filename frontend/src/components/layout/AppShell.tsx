@@ -15,7 +15,6 @@ import {
   Search,
   Settings as SettingsIcon,
   Sparkles,
-  Video,
   X,
   Plus,
   Activity,
@@ -39,8 +38,7 @@ interface NavItem {
 
 const workspaceNav: NavItem[] = [
   { to: "/dashboard", label: "Overview", icon: <LayoutDashboard className="h-4 w-4" />, end: true },
-  { to: "/agent", label: "AI Agents", icon: <Bot className="h-4 w-4" />, badge: "Live" },
-  { to: "/creator", label: "Creator Studio", icon: <Video className="h-4 w-4" /> },
+  { to: "/agent", label: "Command Center", icon: <Bot className="h-4 w-4" />, badge: "Live" },
   { to: "/projects", label: "Projects", icon: <FolderKanban className="h-4 w-4" /> },
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-4 w-4" /> },
 ];
@@ -87,8 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Compute clean breadcrumbs
   const getBreadcrumb = () => {
     const path = location.pathname;
-    if (path.startsWith("/agent")) return { section: "Workspace", current: "AI Agents" };
-    if (path.startsWith("/creator")) return { section: "Workspace", current: "Creator Studio" };
+    if (path.startsWith("/agent")) return { section: "Workspace", current: "Command Center" };
     if (path.startsWith("/dashboard")) return { section: "Workspace", current: "Overview" };
     if (path.startsWith("/projects")) return { section: "Workspace", current: "Projects" };
     if (path.startsWith("/voices")) return { section: "Workspace", current: "Voice Library" };
@@ -113,7 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               Soundwave <span className="text-blue-400">AI</span>
             </span>
             <span className="text-[11px] text-gray-400 flex items-center gap-1">
-              Creator Studio
+              Command Suite
               <ChevronDown className="h-3 w-3 text-gray-400" />
             </span>
           </div>

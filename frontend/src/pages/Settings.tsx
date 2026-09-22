@@ -261,8 +261,9 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 
 // ── Preferences ─────────────────────────────────────────────────────────────
 function PreferencesTab() {
-  const [defaultVoice, setDefaultVoice] = useState(() => localStorage.getItem("sw.default_voice") ?? "en-US-JennyNeural");
+  const [defaultVoice, setDefaultVoice] = useState(() => localStorage.getItem("sw.default_voice") ?? "en-US-ChristopherNeural");
   const [exportQuality, setExportQuality] = useState(() => localStorage.getItem("sw.export_quality") ?? "medium");
+  const [orbMode, setOrbMode] = useState(() => localStorage.getItem("soundwave_orb_mode") ?? "auto");
   const [storageUsage, setStorageUsage] = useState(0);
 
   useEffect(() => {
@@ -272,6 +273,7 @@ function PreferencesTab() {
   const savePrefs = () => {
     localStorage.setItem("sw.default_voice", defaultVoice);
     localStorage.setItem("sw.export_quality", exportQuality);
+    localStorage.setItem("soundwave_orb_mode", orbMode);
     toast.success("Preferences saved");
   };
 
@@ -293,15 +295,35 @@ function PreferencesTab() {
 
   return (
     <>
-      <Card title="Defaults" icon={<Palette className="h-4 w-4" />}>
+      <Card title="Defaults & Agent Appearance" icon={<Palette className="h-4 w-4" />}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default voice</label>
+            <label className="mb-1.5 block text-sm text-gray-300">Default voice (Male default)</label>
             <Select
               value={defaultVoice}
               onChange={setDefaultVoice}
               options={DEFAULT_VOICES.map((v) => ({ value: v.id, label: `${v.displayName} (${v.gender}, ${v.accent})` }))}
               ariaLabel="Default voice"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-gray-300">Thinking Orb Visualizer Mode</label>
+            <Select
+              value={orbMode}
+              onChange={setOrbMode}
+              options={[
+                { value: "auto", label: "Auto Sync (Default — dynamic reactive states)" },
+                { value: "breathing", label: "Breathing (Morphing gentle standby ring)" },
+                { value: "listening", label: "Listening (Rolling rings waveform)" },
+                { value: "solving", label: "Solving (Scrambled concentric bands)" },
+                { value: "searching", label: "Searching (Sweeping scan meridian)" },
+                { value: "connecting", label: "Connecting (Constellation network)" },
+                { value: "weaving", label: "Weaving (Luminous triple plait)" },
+                { value: "composing", label: "Composing (Harmonic multi-band sash)" },
+                { value: "working", label: "Working (High-speed particle orbits)" },
+                { value: "shaping", label: "Shaping (Geometric metamorphosis)" },
+              ]}
+              ariaLabel="Orb mode"
             />
           </div>
           <div>

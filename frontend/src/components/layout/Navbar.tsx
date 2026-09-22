@@ -8,9 +8,8 @@ import { useAuth } from "../../store/auth";
 
 const links = [
   { label: "Features", href: "/#features" },
-  { label: "AI Agents", href: "/agent" },
+  { label: "Command Center", href: "/agent" },
   { label: "Voices", href: "/voices" },
-  { label: "Creator Studio", href: "/creator" },
   { label: "Pricing", href: "/pricing" },
 ];
 
@@ -57,7 +56,7 @@ export function Navbar() {
               onClick={() => navigate("/agent")}
               className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-500"
             >
-              Open Studio
+              Command Center
             </button>
           ) : (
             <>

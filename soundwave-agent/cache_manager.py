@@ -1,90 +1,91 @@
 """
-Soundwave AI — Background Gameplay Cache Manager
-Maintains a local pool of high-quality, copyright-free Minecraft parkour clips sliced into 80-second segments.
-
-Saves 80%+ processing time and bandwidth by avoiding repetitive 1-hour full video downloads.
+Soundwave AI — Background Gameplay Cache Manager & Clip Pool
+Maintains a rotating pool of 60-second Minecraft parkour clips.
+- Chops long videos into 60-second clips.
+- Consumes clips sequentially and deletes each clip upon use.
+- When the pool empties, automatically downloads an unused long video.
+- Persistently records used URLs in used_videos.json to prevent duplicates.
 """
 
 import os
 import sys
-import random
+import json
+import time
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
-CURATED_HIGH_QUALITY_MINECRAFT_PARKOUR = [
-    "https://www.youtube.com/watch?v=tiOl_mcAsF4", # High Quality 1-Hour Gameplay
-    "https://www.youtube.com/watch?v=BXUA2FncVPI", # 4K Parkour for Shorts
+CURATED_LONG_PARKOUR_VIDEOS = [
+    "https://www.youtube.com/watch?v=tiOl_mcAsF4", # 1 Hour 2026 4K 60fps Parkour
+    "https://www.youtube.com/watch?v=BXUA2FncVPI", # 4K 2025 Background for Shorts
     "https://www.youtube.com/watch?v=71YeZAUS9NQ", # 4K 60FPS Clean Gameplay
-    "https://www.youtube.com/watch?v=85z7jqGAGcc", # 2-Hour Smooth Runs
-    "https://www.youtube.com/watch?v=FOX3lBXVeck", # Free to Use / Drive
+    "https://www.youtube.com/watch?v=FOX3lBXVeck", # Free2Use long gameplay
+    "https://www.youtube.com/watch?v=85z7jqGAGcc", # 2 Hours gameplay
+    "https://www.youtube.com/watch?v=Geuaf2Nj_zE", # Smooth spiral parkour
+    "https://www.youtube.com/watch?v=s600FYgI5-s", # 1 Hour Minecraft parkour run
+    "https://www.youtube.com/watch?v=yve_DhR1F8s", # Free to use parkour
+    "https://www.youtube.com/watch?v=0w1u8k5eH3s", # Long parkour run
+    "https://www.youtube.com/watch?v=n5QZf6v3V7Y", # Minecraft parkour 60fps
+    "https://www.youtube.com/watch?v=7_r4mN4u1tQ", # Spiral tower parkour
+    "https://www.youtube.com/watch?v=2r1T2j3e4a5", # Speedrun parkour
 ]
 
 BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll", "rick roll"]
-CHUNK_DURATION = 80  # seconds
+CLIP_DURATION = 60  # seconds
 
-def is_blacklisted(url: str) -> boolean if False else bool:
+def is_blacklisted(url: str) -> bool:
     url_lower = url.lower()
     return any(b in url_lower for b in BLACKLIST_URLS)
 
-def get_cache_dir() -> Path:
+def get_base_dir() -> Path:
     """Return the primary background cache directory."""
-    # Priority order: local app folder -> user home .soundwave
     candidates = [
-        Path.cwd() / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
-        Path(__file__).parent.parent / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
-        Path.home() / ".soundwave" / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
+        Path.cwd() / "background_cache" / "minecraft_parkour",
+        Path(__file__).parent.parent / "background_cache" / "minecraft_parkour",
+        Path.home() / ".soundwave" / "background_cache" / "minecraft_parkour",
     ]
     for c in candidates:
         if c.exists():
             return c
-    # Default to first candidate and create it
     candidates[0].mkdir(parents=True, exist_ok=True)
     return candidates[0]
 
-def list_cached_clips() -> List[Path]:
-    """Return all valid cached .mp4 clips across all known locations (including Mark 54 / Mark-LIV)."""
-    candidates = [
-        Path.cwd() / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
-        Path.cwd() / "background_cache" / "minecraft_parkour",
-        Path.cwd() / "background_cache",
-        Path.cwd() / "clips",
-        Path.cwd() / "backgrounds",
-        Path.cwd() / "Mark-LIV" / "clips",
-        Path.cwd() / "Mark-LIV" / "backgrounds",
-        Path.cwd() / "Mark-54" / "clips",
-        Path.cwd() / "Mark 54" / "clips",
-        Path.cwd().parent / "Mark-LIV" / "clips",
-        Path.cwd().parent / "Mark-54" / "clips",
-        Path.cwd().parent / "Mark 54" / "clips",
-        Path(__file__).parent.parent / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
-        Path.home() / ".soundwave" / "background_cache" / "minecraft_parkour" / f"{CHUNK_DURATION}s",
-        Path.home() / "Downloads",
-        Path.home() / "Videos",
-    ]
-    clips = []
-    seen = set()
-    for d in candidates:
-        if d.exists() and d.is_dir():
-            for f in d.glob("*.mp4"):
-                try:
-                    if f.stat().st_size > 500 * 1024 and not f.name.startswith("solid-bg-") and f.name not in seen:
-                        clips.append(f)
-                        seen.add(f.name)
-                except Exception:
-                    continue
-    return sorted(clips, key=lambda x: x.name)
+def get_pool_dir() -> Path:
+    p = get_base_dir() / "pool"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-def get_random_cached_clip() -> Optional[Path]:
-    """Pick a random cached 80s background clip, or None if empty."""
-    clips = list_cached_clips()
-    if clips:
-        return random.choice(clips)
-    return None
+def get_history_file() -> Path:
+    return get_base_dir() / "used_videos.json"
+
+def load_history() -> Dict[str, Any]:
+    f = get_history_file()
+    if f.exists():
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                return json.load(fp)
+        except Exception:
+            pass
+    return {
+        "usedUrls": [],
+        "customUrls": [],
+        "totalClipsGenerated": 0,
+        "totalClipsConsumed": 0,
+        "lastReplenishedAt": None,
+        "currentSourceVideo": None,
+    }
+
+def save_history(hist: Dict[str, Any]) -> None:
+    f = get_history_file()
+    try:
+        with open(f, "w", encoding="utf-8") as fp:
+            json.dump(hist, fp, indent=2)
+    except Exception as e:
+        print(f"[CacheManager] Failed to write history: {e}")
 
 def find_tools() -> Tuple[Optional[str], Optional[str]]:
-    """Locate yt-dlp and ffmpeg binaries (vendored or system)."""
+    """Locate yt-dlp and ffmpeg binaries."""
     repo_root = Path(__file__).parent.parent
     vendored_ffmpeg = repo_root / "vendor" / "ffmpeg" / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
     vendored_ytdlp = repo_root / "vendor" / "yt-dlp" / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
@@ -94,44 +95,191 @@ def find_tools() -> Tuple[Optional[str], Optional[str]]:
 
     return ffmpeg_bin, ytdlp_bin
 
-def build_cache_clip(youtube_url: Optional[str] = None, timeout: int = 180) -> Optional[Path]:
-    """Download and slice an 80-second high-quality clip from curated gameplay."""
-    target_url = youtube_url or random.choice(CURATED_HIGH_QUALITY_MINECRAFT_PARKOUR)
-    if is_blacklisted(target_url):
-        return None
+def list_pool_clips() -> List[Path]:
+    """Return all remaining 60-second clips in pool directory sorted in order."""
+    pool = get_pool_dir()
+    clips = []
+    if pool.exists():
+        for f in sorted(pool.glob("*.mp4")):
+            try:
+                if f.stat().st_size > 200 * 1024:
+                    clips.append(f)
+            except Exception:
+                continue
+    return clips
 
-    ffmpeg_bin, ytdlp_bin = find_tools()
-    if not ytdlp_bin:
-        print("[CacheManager] yt-dlp not found; skipping background clip download.")
-        return None
+def slice_video_into_pool(source_path: Path, source_label: str) -> int:
+    """Slice long video file into 60s clips and add to pool directory."""
+    ffmpeg_bin, _ = find_tools()
+    if not ffmpeg_bin:
+        print("[CacheManager] ffmpeg not found!")
+        return 0
 
-    cache_dir = get_cache_dir()
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    out_file = cache_dir / f"parkour_{int(os.times().system * 1000)}_{random.randint(1000, 9999)}_{CHUNK_DURATION}s.mp4"
+    pool = get_pool_dir()
+    ts = int(time.time() * 1000)
+    segment_pattern = str(pool / f"mc_clip_{ts}_%03d.mp4")
 
+    print(f"[CacheManager] Slicing long video into 60s clips: {source_path.name}")
     cmd = [
-        ytdlp_bin,
-        "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "--no-playlist",
-        "--download-sections", f"*0-{CHUNK_DURATION}",
-        "--force-keyframes-at-cuts",
-        "-o", str(out_file),
-        target_url,
+        ffmpeg_bin,
+        "-y",
+        "-i", str(source_path),
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-f", "segment",
+        "-segment_time", str(CLIP_DURATION),
+        "-reset_timestamps", "1",
+        segment_pattern,
     ]
 
-    try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
-        if proc.returncode == 0 and out_file.exists() and out_file.stat().st_size > 500 * 1024:
-            return out_file
-    except Exception as e:
-        print(f"[CacheManager] Download error: {e}")
+    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if res.returncode != 0:
+        # Fallback to ultrafast transcoded segment
+        cmd_fallback = [
+            ffmpeg_bin,
+            "-y",
+            "-i", str(source_path),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "22",
+            "-c:a", "aac",
+            "-f", "segment",
+            "-segment_time", str(CLIP_DURATION),
+            "-reset_timestamps", "1",
+            segment_pattern,
+        ]
+        subprocess.run(cmd_fallback, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    return None
+    created = [f for f in list_pool_clips() if f"mc_clip_{ts}" in f.name]
+    hist = load_history()
+    hist["totalClipsGenerated"] = hist.get("totalClipsGenerated", 0) + len(created)
+    hist["lastReplenishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    hist["currentSourceVideo"] = source_label
+    save_history(hist)
+
+    print(f"[CacheManager] Created {len(created)} 60s clips in pool.")
+    return len(created)
+
+def replenish_pool(specific_url: Optional[str] = None) -> bool:
+    """Find a new unused long Minecraft parkour video, download, and slice into 60s clips."""
+    hist = load_history()
+    used = set(hist.get("usedUrls", []))
+
+    target_url = None
+    if specific_url and specific_url not in used:
+        target_url = specific_url
+    else:
+        # Check custom URLs first
+        for u in hist.get("customUrls", []):
+            if u not in used:
+                target_url = u
+                break
+        # Then curated URLs
+        if not target_url:
+            for u in CURATED_LONG_PARKOUR_VIDEOS:
+                if u not in used:
+                    target_url = u
+                    break
+        # If all used, cycle from beginning
+        if not target_url:
+            print("[CacheManager] All curated parkour videos used! Cycling from start.")
+            target_url = CURATED_LONG_PARKOUR_VIDEOS[0]
+            used.clear()
+            hist["usedUrls"] = []
+
+    print(f"[CacheManager] Selected new long video: {target_url}")
+
+    ffmpeg_bin, ytdlp_bin = find_tools()
+    long_video = None
+    downloads_dir = get_base_dir() / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    if ytdlp_bin and target_url:
+        dl_target = downloads_dir / f"long_{int(time.time())}.mp4"
+        cmd = [
+            ytdlp_bin,
+            "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "--no-playlist",
+            "--download-sections", "*0-600",
+            "--force-keyframes-at-cuts",
+            "-o", str(dl_target),
+            target_url,
+        ]
+        try:
+            p = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
+            if p.returncode == 0 and dl_target.exists() and dl_target.stat().st_size > 1_000_000:
+                long_video = dl_target
+        except Exception as e:
+            print(f"[CacheManager] yt-dlp download skipped: {e}")
+
+    # Fallback to local master file if offline or download failed
+    if not long_video:
+        master = get_base_dir() / "80s" / "parkour_master_80s.mp4"
+        if master.exists() and master.stat().st_size > 1_000_000:
+            long_video = master
+
+    if not long_video:
+        print("[CacheManager] No source long video available.")
+        return False
+
+    count = slice_video_into_pool(long_video, target_url or "master_parkour")
+
+    # Record persistent URL so it is never reused
+    if target_url and target_url not in hist.get("usedUrls", []):
+        hist.setdefault("usedUrls", []).append(target_url)
+        save_history(hist)
+        print(f"[CacheManager] Recorded video URL to persistent history. Total unique used: {len(hist['usedUrls'])}")
+
+    # Clean up temp downloaded long file
+    if long_video and long_video != get_base_dir() / "80s" / "parkour_master_80s.mp4":
+        try:
+            long_video.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    return count > 0
+
+def consume_next_clip() -> Optional[Path]:
+    """
+    Get the next 60s clip in the pool, DELETE it upon consumption,
+    and return the path to the working copy.
+    """
+    clips = list_pool_clips()
+    if not clips:
+        print("[CacheManager] Pool is empty! Fetching new unused long video...")
+        replenish_pool()
+        clips = list_pool_clips()
+
+    if not clips:
+        master = get_base_dir() / "80s" / "parkour_master_80s.mp4"
+        return master if master.exists() else None
+
+    clip_to_use = clips[0]
+    clip_name = clip_to_use.name
+
+    # Create a working copy for rendering
+    working_dir = get_base_dir() / "active_bg"
+    working_dir.mkdir(parents=True, exist_ok=True)
+    working_path = working_dir / f"used_{int(time.time())}_{clip_name}"
+    shutil.copy2(clip_to_use, working_path)
+
+    # DELETE the consumed clip from the pool!
+    try:
+        clip_to_use.unlink()
+        print(f"[CacheManager] Consumed and DELETED: {clip_name}. Remaining clips in pool: {len(clips) - 1}")
+        hist = load_history()
+        hist["totalClipsConsumed"] = hist.get("totalClipsConsumed", 0) + 1
+        save_history(hist)
+    except Exception as e:
+        print(f"[CacheManager] Warning: could not delete clip {clip_name}: {e}")
+
+    return working_path
 
 if __name__ == "__main__":
-    clips = list_cached_clips()
-    print(f"=== Soundwave Cache Manager ===")
-    print(f"Cache dir: {get_cache_dir()}")
-    print(f"Cached clips count: {len(clips)}")
-    for c in clips[:5]:
-        print(f" - {c.name} ({c.stat().st_size / 1024 / 1024:.1f} MB)")
+    clips = list_pool_clips()
+    hist = load_history()
+    print("=== Soundwave Background Pool ===")
+    print(f"Pool directory: {get_pool_dir()}")
+    print(f"Clips remaining: {len(clips)}")
+    print(f"Used source videos: {len(hist.get('usedUrls', []))}")
+    print(f"Total clips consumed: {hist.get('totalClipsConsumed', 0)}")

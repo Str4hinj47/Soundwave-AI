@@ -1,25 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { MODE_DRAWS, resolvePreset, type OrbState } from "thinking-orbs";
 
-interface ThinkingOrbVisualizerProps {
+export interface ThinkingOrbVisualizerProps {
   assistantState: "STANDBY" | "LISTENING" | "THINKING" | "SPEAKING" | "GENERATING";
   isMicActive?: boolean;
   size?: number;
   className?: string;
+  orbMode?: OrbState | "auto";
   onOrbClick?: () => void;
 }
 
-const ALL_STATES: { id: OrbState | "auto"; label: string; desc: string }[] = [
-  { id: "auto", label: "Auto Sync", desc: "Syncs with agent cognitive state" },
-  { id: "listening", label: "Listening", desc: "Waveform rolls through rings" },
-  { id: "solving", label: "Solving", desc: "Bands scramble & click back" },
-  { id: "searching", label: "Searching", desc: "Scan meridian sweeps globe" },
-  { id: "connecting", label: "Connecting", desc: "Constellation wires itself" },
-  { id: "weaving", label: "Weaving", desc: "Three strands plait sphere" },
-  { id: "composing", label: "Composing", desc: "Undulating multi-band sash" },
-  { id: "breathing", label: "Breathing", desc: "Morphing face-on ring" },
-  { id: "working", label: "Working", desc: "Particles on tilted orbits" },
-  { id: "shaping", label: "Shaping", desc: "Circle to triangle to square" },
+export const ALL_ORB_STATES: { id: OrbState | "auto"; label: string; desc: string }[] = [
+  { id: "auto", label: "Auto Sync", desc: "Syncs dynamically with agent cognitive state" },
+  { id: "breathing", label: "Breathing", desc: "Morphing face-on gentle standby pulse" },
+  { id: "listening", label: "Listening", desc: "Dynamic audio waveform rolling through rings" },
+  { id: "solving", label: "Solving", desc: "Bands scramble and click into alignment" },
+  { id: "searching", label: "Searching", desc: "Scan meridian sweeping around globe" },
+  { id: "connecting", label: "Connecting", desc: "Neural constellation wiring itself" },
+  { id: "weaving", label: "Weaving", desc: "Three luminous strands plaiting sphere" },
+  { id: "composing", label: "Composing", desc: "Undulating harmonic multi-band sash" },
+  { id: "working", label: "Working", desc: "Particles accelerating on tilted orbits" },
+  { id: "shaping", label: "Shaping", desc: "Morphing circle to triangle to square" },
 ];
 
 export function ThinkingOrbVisualizer({
@@ -27,16 +28,15 @@ export function ThinkingOrbVisualizer({
   isMicActive = false,
   size = 280,
   className = "",
+  orbMode = "auto",
   onOrbClick,
 }: ThinkingOrbVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [overrideState, setOverrideState] = useState<OrbState | "auto">("auto");
-  const [showStatePicker, setShowStatePicker] = useState(false);
 
   // Map agent cognitive state to Jakubantalik Thinking Orb state
   const resolvedState: OrbState =
-    overrideState !== "auto"
-      ? overrideState
+    orbMode !== "auto"
+      ? orbMode
       : assistantState === "LISTENING" || isMicActive
       ? "listening"
       : assistantState === "THINKING"
@@ -126,61 +126,6 @@ export function ThinkingOrbVisualizer({
           style={{ width: size, height: size }}
           className="relative z-10 transition-transform duration-300 group-hover:scale-105"
         />
-      </div>
-
-      {/* State Switcher & Mode Badge */}
-      <div className="flex flex-col items-center mt-3 gap-1.5 z-20">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-[#0C172E] px-3.5 py-1 text-xs font-mono font-semibold text-cyan-300 shadow-inner">
-            <span
-              className={`h-2 w-2 rounded-full animate-pulse ${
-                assistantState === "LISTENING" || isMicActive
-                  ? "bg-emerald-400"
-                  : assistantState === "THINKING"
-                  ? "bg-purple-400"
-                  : assistantState === "SPEAKING"
-                  ? "bg-cyan-400"
-                  : assistantState === "GENERATING"
-                  ? "bg-blue-400"
-                  : "bg-cyan-400/80"
-              }`}
-            />
-            {ALL_STATES.find((s) => s.id === resolvedState)?.label} Mode ({resolvedState})
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setShowStatePicker(!showStatePicker)}
-            className="rounded-lg border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[11px] font-mono text-gray-400 hover:text-cyan-300 transition-colors cursor-pointer"
-            title="Toggle Thinking Orb Animation State"
-          >
-            {showStatePicker ? "Hide Modes" : "Switch Orb"}
-          </button>
-        </div>
-
-        {/* 9-State Selector Pills */}
-        {showStatePicker && (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-sm p-2 rounded-xl border border-cyan-500/20 bg-[#070D18]/95 backdrop-blur-md mt-2 transition-all shadow-xl">
-            {ALL_STATES.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => {
-                  setOverrideState(st.id);
-                  if (st.id === "auto") setShowStatePicker(false);
-                }}
-                className={`rounded-md px-2.5 py-1 text-[10px] font-mono font-semibold transition-all cursor-pointer ${
-                  overrideState === st.id
-                    ? "bg-cyan-500 text-[#070B14] shadow-sm shadow-cyan-500/50"
-                    : "border border-[#172A4A] bg-[#0C172E] text-gray-300 hover:text-white hover:border-cyan-500/40"
-                }`}
-                title={st.desc}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

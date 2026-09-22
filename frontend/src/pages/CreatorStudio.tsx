@@ -211,7 +211,7 @@ export function CreatorStudio() {
   const uploadAndAnalyze = async (file: File) => {
     try {
       setIsAnalyzing(true);
-      setProcessingStep("Uploading video to Creator Studio...");
+      setProcessingStep("Uploading video to workspace...");
 
       const formData = new FormData();
       formData.append("file", file);
@@ -380,7 +380,7 @@ export function CreatorStudio() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold text-white tracking-tight">
-                Creator Studio & Smart Screen Recorder
+                Smart Video Production & Screen Capture
               </h1>
               <span className="rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] font-medium text-blue-400">
                 Auto-Cut 60fps

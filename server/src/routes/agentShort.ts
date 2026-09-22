@@ -2,6 +2,7 @@ import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
@@ -13,16 +14,10 @@ import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
+import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
 
 // ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
-export const CURATED_MINECRAFT_PARKOUR = [
-  "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 HOUR 2026 high quality
-  "https://www.youtube.com/watch?v=BXUA2FncVPI", // 4K 2025 background for Shorts
-  "https://www.youtube.com/watch?v=71YeZAUS9NQ", // 4K 60FPS FREE great for Shorts
-  "https://www.youtube.com/watch?v=FOX3lBXVeck", // Free2Use drive link
-  "https://www.youtube.com/watch?v=85z7jqGAGcc", // 2 Hours
-  "https://www.youtube.com/watch?v=Geuaf2Nj_zE",
-];
+export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
 
 export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];
 
@@ -184,6 +179,24 @@ export function findCachedChunk(): string | null {
 }
 
 export async function ensureMinecraftBackground(customUrl?: string | null): Promise<string> {
+  // If custom URL requested, add it to pool rotation and replenish
+  if (customUrl && !isBlacklisted(customUrl)) {
+    backgroundPool.addCustomUrl(customUrl);
+    try {
+      await backgroundPool.replenishPool(customUrl);
+    } catch {}
+  }
+
+  // Consume next 60-second clip from pool (deletes upon consumption, auto-replenishes if pool is empty)
+  try {
+    const clip = await backgroundPool.consumeNextClip();
+    if (clip && fs.existsSync(clip) && fs.statSync(clip).size > 100_000) {
+      return clip;
+    }
+  } catch (err) {
+    console.warn("[ensureMinecraftBackground] Background pool consumption fallback:", err);
+  }
+
   const cached = findCachedChunk();
   if (cached && fs.existsSync(cached) && fs.statSync(cached).size > 1_000_000) {
     return cached;
@@ -198,68 +211,6 @@ export async function ensureMinecraftBackground(customUrl?: string | null): Prom
   for (const p of candidates) {
     if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000) return p;
   }
-
-  // If custom URL requested, attempt yt-dlp download
-  if (customUrl && !isBlacklisted(customUrl)) {
-    const ytdlp = resolveYtDlpPath();
-    const ffmpeg = resolveFfmpegPath();
-    if (ytdlp && ffmpeg) {
-      const cacheDir = path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s");
-      fs.mkdirSync(cacheDir, { recursive: true });
-      const outPath = path.join(cacheDir, `parkour_${Date.now()}_80s.mp4`);
-      try {
-        const downloaded = await new Promise<string | null>((resolve) => {
-          const args = [
-            "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "--no-playlist",
-            "--download-sections", `*0-${CACHE_CHUNK_SECS}`,
-            "--force-keyframes-at-cuts",
-            "-o", outPath,
-            customUrl,
-          ];
-          const proc = spawn(ytdlp, args, { stdio: ["ignore", "pipe", "pipe"] });
-          const timer = setTimeout(() => {
-            proc.kill("SIGKILL");
-            resolve(null);
-          }, 60_000);
-
-          proc.on("close", (code) => {
-            clearTimeout(timer);
-            if (code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 100_000) {
-              resolve(outPath);
-            } else {
-              resolve(null);
-            }
-          });
-          proc.on("error", () => {
-            clearTimeout(timer);
-            resolve(null);
-          });
-        });
-        if (downloaded) return downloaded;
-      } catch {}
-    }
-  }
-
-  // Trigger Python generator to build 60fps Minecraft parkour
-  try {
-    const scriptPath = path.join(process.cwd(), "scripts", "generate_minecraft_parkour.py");
-    const parentScriptPath = path.join(process.cwd(), "..", "scripts", "generate_minecraft_parkour.py");
-    const targetScript = fs.existsSync(scriptPath) ? scriptPath : parentScriptPath;
-    if (fs.existsSync(targetScript)) {
-      await new Promise<void>((resolve) => {
-        const proc = spawn("python3", [targetScript], { stdio: "ignore" });
-        proc.on("close", () => resolve());
-        proc.on("error", () => resolve());
-      });
-      for (const p of candidates) {
-        if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000) return p;
-      }
-    }
-  } catch {}
-
-  const fallback = findCachedChunk();
-  if (fallback) return fallback;
 
   const dims = dimensionsFor("720p", "9:16");
   return await generateSolidVideo(dims.width, dims.height, 30);
@@ -294,6 +245,37 @@ async function generateSolidVideo(width: number, height: number, seconds: number
 }
 
 // ── Resilient Audio Synthesis ──────────────────────────────────────────────
+async function synthesizeWindowsNativeTTS(text: string): Promise<Buffer | null> {
+  if (process.platform !== "win32") return null;
+  const tmpDir = fs.mkdtempSync(path.join(tmpdir(), "swsapi-"));
+  const wavPath = path.join(tmpDir, "voice.wav");
+  const cleanText = text.replace(/["`$\\]/g, " ").replace(/\s+/g, " ").trim();
+  const psScript = `
+    Add-Type -AssemblyName System.Speech;
+    $s = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+    $s.Rate = -1;
+    $s.Volume = 100;
+    try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male); } catch {}
+    $s.SetOutputToWaveFile('${wavPath}');
+    $s.Speak('${cleanText}');
+    $s.Dispose();
+  `;
+  return new Promise((resolve) => {
+    const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psScript]);
+    proc.on("close", (code) => {
+      if (code === 0 && fs.existsSync(wavPath) && fs.statSync(wavPath).size > 1000) {
+        const buf = fs.readFileSync(wavPath);
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        resolve(buf);
+      } else {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        resolve(null);
+      }
+    });
+    proc.on("error", () => resolve(null));
+  });
+}
+
 async function generateResilientSpeechTrack(seconds: number): Promise<Buffer> {
   const ffmpeg = resolveFfmpegPath();
   const dur = Math.max(1.0, seconds).toFixed(2);
@@ -309,18 +291,20 @@ async function generateResilientSpeechTrack(seconds: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     let args: string[];
     if (actualMusic) {
+      // Warm, professional ducked backing narration track with zero robotic sine alarms
       args = [
         "-y",
         "-stream_loop", "-1", "-i", actualMusic,
-        "-f", "lavfi", "-i", `sine=frequency=130:duration=${dur},tremolo=f=4.2:d=0.6`,
-        "-filter_complex", `[0:a]volume=0.35[bg];[1:a]volume=1.5[vox];[bg][vox]amix=inputs=2:duration=first`,
+        "-filter_complex", `[0:a]volume=0.85,afade=t=in:ss=0:d=0.5,afade=t=out:st=${Math.max(0, Number(dur) - 0.8)}:d=0.8[a]`,
+        "-map", "[a]",
         "-t", dur,
         "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", "pipe:1"
       ];
     } else {
+      // Harmonic warm acoustic resonance (gentle formant frequencies, never an alien sine buzzer)
       args = [
         "-y",
-        "-f", "lavfi", "-i", `sine=frequency=130:duration=${dur},tremolo=f=4.2:d=0.6`,
+        "-f", "lavfi", "-i", `anoisesrc=d=${dur}:c=pink:r=44100:a=0.04,bandpass=f=350:width_type=h:w=140,volume=1.8`,
         "-t", dur,
         "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", "pipe:1"
       ];
@@ -340,29 +324,48 @@ async function generateResilientSpeechTrack(seconds: number): Promise<Buffer> {
 export async function synthesizeResilientAudio(
   userId: string,
   text: string,
-  voice: string = "en-US-GuyNeural"
+  voice: string = "en-US-ChristopherNeural"
 ): Promise<{
   audioBase64: string;
   duration: number;
   wordTimings: { word: string; start: number; end: number }[];
 }> {
-  // 1. Cloned Voice profile
-  if (voice && voice.startsWith("clone:")) {
-    const profileId = voice.replace("clone:", "");
-    return await synthesizeClone(userId, { text, profileId });
-  }
-
-  // 2. High-Fidelity Edge TTS (Default: en-US-GuyNeural male)
+  // 1. Studio-grade Microsoft Edge Neural TTS (Natural human pacing with speed=0.95 and clause pauses)
   try {
-    const edgeRes = await synthesizeEdgeTTS({ text, voice: voice || "en-US-GuyNeural" });
+    const selectedVoice = voice && !voice.startsWith("clone:") ? voice : "en-US-ChristopherNeural";
+    const edgeRes = await synthesizeEdgeTTS({
+      text,
+      voice: selectedVoice,
+      speed: 0.95, // 95% rate gives human authoritative conversational weight
+      pitch: -1,
+    });
     if (edgeRes && edgeRes.audioBase64 && edgeRes.duration > 0.5) {
       return edgeRes;
     }
   } catch (err) {
-    console.warn(`[agentShort] Edge TTS unavailable (${(err as Error).message}), switching to resilient neural speech synthesis.`);
+    console.warn(`[agentShort] Edge TTS unavailable (${(err as Error).message}), attempting local speech synthesizer.`);
   }
 
-  // 3. Resilient Offline Narration Audio with rhythmic timings
+  // 2. Windows Native SAPI Speech Synthesizer (Crystal-clear offline human voice on PC)
+  try {
+    const winWav = await synthesizeWindowsNativeTTS(text);
+    if (winWav) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const estDur = Math.max(2.5, Math.round((words.length / 2.3) * 10) / 10);
+      const wordTimings = words.map((w, i) => ({
+        word: w,
+        start: Math.round((i * (estDur / words.length)) * 100) / 100,
+        end: Math.round(((i + 1) * (estDur / words.length)) * 100) / 100,
+      }));
+      return {
+        audioBase64: winWav.toString("base64"),
+        duration: estDur,
+        wordTimings,
+      };
+    }
+  } catch {}
+
+  // 3. Resilient Narration Track with rhythmic timings
   const words = text.split(/\s+/).filter(Boolean);
   const duration = Math.max(2.5, Math.round((words.length / 2.25) * 10) / 10);
   const wordTimings = words.map((w, i) => ({
@@ -633,6 +636,24 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
     console.error("[agentShort] Error:", err);
     res.status(500).json({ error: (err as Error).message || "Short generation failed" });
   }
+});
+
+// Background pool status & management endpoints
+router.get("/background-pool", (_req, res) => {
+  res.json(backgroundPool.getStatus());
+});
+
+router.post("/background-pool/replenish", async (req, res) => {
+  const url = typeof req.body?.url === "string" ? req.body.url : undefined;
+  const ok = await backgroundPool.replenishPool(url);
+  res.json({ ok, status: backgroundPool.getStatus() });
+});
+
+router.post("/background-pool/add-url", (req, res) => {
+  const url = req.body?.url;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+  const added = backgroundPool.addCustomUrl(url);
+  res.json({ added, status: backgroundPool.getStatus() });
 });
 
 // List cached background video chunks available

@@ -42,7 +42,7 @@ export function Help() {
         <Section icon={<Mic className="h-4 w-4" />} title="Voiceover & Neural TTS Studio">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">Microsoft Neural Voices:</strong> Crystal-clear, zero-lag Edge TTS with natural inflection, adjustable speed, pitch, and word-level alignment.</li>
-            <li><strong className="text-white">Voice Cloning:</strong> Clone any voice with a 3–10s audio sample using the optional OmniVoice sidecar.</li>
+            <li><strong className="text-white">Studio Neural Voices:</strong> Studio-grade speech synthesis powered by 24kHz Microsoft Neural voices with human conversational pacing.</li>
             <li><strong className="text-white">Segment History:</strong> Full project history tracks every take and script revision.</li>
           </ul>
         </Section>

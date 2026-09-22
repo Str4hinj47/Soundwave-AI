@@ -11,12 +11,9 @@ import {
   Settings as SettingsIcon, 
   Send, 
   Play, 
-  Camera, 
-  Power, 
   Mic, 
   MicOff, 
   Activity, 
-  CloudRain, 
   Trash2, 
   Workflow, 
   Compass, 
@@ -27,7 +24,8 @@ import {
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
 import { toast } from "../store/toast";
-import { ThinkingOrbVisualizer } from "../components/agent/ThinkingOrbVisualizer";
+import { ThinkingOrbVisualizer, ALL_ORB_STATES } from "../components/agent/ThinkingOrbVisualizer";
+import type { OrbState } from "thinking-orbs";
 
 interface NicheInfo {
   id: string;
@@ -103,19 +101,35 @@ export function AgentHub() {
     loadPercent: 18,
   });
 
-  // Weather Telemetry
-  const [weather] = useState({
-    city: "Belgrade, RS",
-    temp: 24.5,
-    condition: "clear sky",
-    humidity: 48,
-    wind: "3.4 m/s",
-    feelsLike: 25.1,
+  // Background Gameplay 60s Pool Telemetry
+  const [poolStatus, setPoolStatus] = useState<{
+    clipsRemaining: number;
+    clipNames: string[];
+    usedUrlsCount: number;
+    usedUrls: string[];
+    customUrlsCount: number;
+    totalClipsConsumed: number;
+    totalClipsGenerated: number;
+    lastReplenishedAt: string | null;
+    isProcessing: boolean;
+  }>({
+    clipsRemaining: 0,
+    clipNames: [],
+    usedUrlsCount: 0,
+    usedUrls: [],
+    customUrlsCount: 0,
+    totalClipsConsumed: 0,
+    totalClipsGenerated: 0,
+    lastReplenishedAt: null,
+    isProcessing: false,
   });
+  const [customPoolUrl, setCustomPoolUrl] = useState("");
+  const [isReplenishingPool, setIsReplenishingPool] = useState(false);
 
-  // Vision / Camera Stream State
-  const [cameraActive, setCameraActive] = useState(false);
-  const [capturedSnapshot, setCapturedSnapshot] = useState<string | null>(null);
+  // Orb Visualizer Mode State (persisted)
+  const [orbMode, setOrbMode] = useState<OrbState | "auto">(() => {
+    return (localStorage.getItem("soundwave_orb_mode") as any) || "auto";
+  });
 
   // Chat conversation stream
   const [userPrompt, setUserPrompt] = useState("");
@@ -209,6 +223,9 @@ export function AgentHub() {
         }
       })
       .catch(() => {});
+
+    // Initial background pool status
+    fetchPoolStatus();
   }, []);
 
   // Clock & Uptime Ticker
@@ -475,32 +492,38 @@ export function AgentHub() {
     }
   };
 
-  // ── Camera / Screen Capture Toggle ──────────────────────────────────────
-  const toggleCamera = () => {
-    if (cameraActive) {
-      setCameraActive(false);
-      toast.info("Vision Inactive", "Camera / Screen stream deactivated.");
-    } else {
-      setCameraActive(true);
-      // Generate synthetic frame for HUD view
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = 180;
-      const c = canvas.getContext("2d");
-      if (c) {
-        c.fillStyle = "#0A1424";
-        c.fillRect(0, 0, 320, 180);
-        c.strokeStyle = "#00F0FF";
-        c.strokeRect(10, 10, 300, 160);
-        c.fillStyle = "#00F0FF";
-        c.font = "bold 11px JetBrains Mono, monospace";
-        c.fillText("OPTICAL FEED // ACTIVE", 24, 40);
-        c.fillStyle = "#7E90A8";
-        c.fillText(`FPS: 60 | RES: 1920x1080 | ${new Date().toLocaleTimeString()}`, 24, 70);
-        c.fillText("VISION OCR READY", 24, 100);
+  // ── Background Gameplay Pool Handlers ──────────────────────────────────
+  const fetchPoolStatus = async () => {
+    try {
+      const res = await fetch("/api/v1/agent/background-pool");
+      if (res.ok) {
+        const data = await res.json();
+        setPoolStatus(data);
       }
-      setCapturedSnapshot(canvas.toDataURL());
-      toast.success("Vision Active", "Display viewport initialized.");
+    } catch {}
+  };
+
+  const handleReplenishPool = async (url?: string) => {
+    setIsReplenishingPool(true);
+    toast.info("Replenishing Pool", "Downloading & slicing new long Minecraft video...");
+    try {
+      const res = await fetch("/api/v1/agent/background-pool/replenish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPoolStatus(data.status);
+        toast.success("Pool Updated", `${data.status.clipsRemaining} 60s clips available.`);
+        if (url) setCustomPoolUrl("");
+      } else {
+        toast.error("Pool replenishment failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to replenish pool");
+    } finally {
+      setIsReplenishingPool(false);
     }
   };
 
@@ -600,9 +623,9 @@ export function AgentHub() {
           <span className="text-gray-300">{currentDateStr || "September 20, 2026"}</span>
         </div>
 
-        {/* Right: Voice Capsule, Weather Capsule & Settings Gear Button */}
+        {/* Right: Voice Capsule, Background Pool Capsule & Settings Gear Button */}
         <div className="flex items-center gap-2">
-          {/* Quick Voice Selector Capsule */}
+          {/* Quick Male Voice Selector Capsule */}
           <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-2.5 py-1 text-xs text-gray-300 font-mono">
             <Volume2 className="h-3.5 w-3.5 text-cyan-400" />
             <select
@@ -611,18 +634,18 @@ export function AgentHub() {
               className="bg-transparent text-cyan-400 font-semibold focus:outline-none cursor-pointer text-xs"
               title="Select Assistant Voice"
             >
-              <option value="en-US-GuyNeural" className="bg-[#0A1224] text-white">Guy (US Male)</option>
               <option value="en-US-ChristopherNeural" className="bg-[#0A1224] text-white">Christopher (US Male - Studio)</option>
-              <option value="en-GB-RyanNeural" className="bg-[#0A1224] text-white">Ryan (UK Male)</option>
-              <option value="en-US-JennyNeural" className="bg-[#0A1224] text-white">Jenny (US Female)</option>
-              <option value="en-GB-SoniaNeural" className="bg-[#0A1224] text-white">Sonia (UK Female)</option>
+              <option value="en-US-GuyNeural" className="bg-[#0A1224] text-white">Guy (US Male - Deep)</option>
+              <option value="en-US-EricNeural" className="bg-[#0A1224] text-white">Eric (US Male - Narrator)</option>
+              <option value="en-GB-RyanNeural" className="bg-[#0A1224] text-white">Ryan (UK Male - British)</option>
+              <option value="en-US-AndrewNeural" className="bg-[#0A1224] text-white">Andrew (US Male - Warm)</option>
             </select>
           </div>
 
-          <div className="flex items-center gap-2 rounded-full border border-[#172A4A] bg-[#0C172E] px-3 py-1 text-xs text-gray-300 font-mono">
-            <CloudRain className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-white font-semibold">{weather.temp}°C</span>
-            <span className="hidden sm:inline text-gray-400">{weather.city}</span>
+          <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-3 py-1 text-xs text-gray-300 font-mono">
+            <Film className="h-3.5 w-3.5 text-cyan-400" />
+            <span className="text-white font-semibold">{poolStatus.clipsRemaining}</span>
+            <span className="hidden sm:inline text-gray-400">clips in pool</span>
           </div>
 
           <button
@@ -701,17 +724,17 @@ export function AgentHub() {
             </div>
           </div>
 
-          {/* Card 2: Weather */}
+          {/* Card 2: Minecraft Parkour 60s Background Pool */}
           <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-2.5 font-mono">
             <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
               <span className="flex items-center gap-1.5 font-semibold text-gray-200">
-                <CloudRain className="h-3.5 w-3.5 text-cyan-400" />
-                Weather
+                <Film className="h-3.5 w-3.5 text-cyan-400" />
+                Background Gameplay Pool
               </span>
               <button
-                onClick={() => toast.info("Weather Synchronized", "Belgrade telemetry refreshed.")}
+                onClick={fetchPoolStatus}
                 className="text-gray-400 hover:text-cyan-400 transition-colors"
-                title="Refresh weather"
+                title="Refresh pool status"
               >
                 <RefreshCw className="h-3 w-3" />
               </button>
@@ -719,67 +742,52 @@ export function AgentHub() {
 
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-2xl font-bold text-white tracking-tight">{weather.temp}°C</span>
-                <p className="text-xs text-gray-300">{weather.city}</p>
-                <p className="text-[11px] text-gray-400">{weather.condition}</p>
+                <span className="text-2xl font-bold text-white tracking-tight">{poolStatus.clipsRemaining}</span>
+                <span className="text-xs text-gray-400 ml-1.5">clips ready</span>
+                <p className="text-[11px] text-cyan-400/90 mt-0.5">60s clips · Auto-rotates & deletes on use</p>
               </div>
-              <div className="p-2 rounded-xl border border-[#14233D] bg-[#070D18] text-cyan-400">
-                <CloudRain className="h-7 w-7" />
+              <div className="text-right">
+                <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold block">
+                  {poolStatus.usedUrlsCount} LONG VIDEOS
+                </span>
+                <span className="text-[9px] text-gray-400 mt-1 block">Zero duplicates</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+            <div className="grid grid-cols-2 gap-2 pt-1 text-center">
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
-                <span className="text-[10px] text-gray-400 block">Humidity</span>
-                <span className="text-xs font-bold text-white">{weather.humidity}%</span>
+                <span className="text-[10px] text-gray-400 block">Consumed</span>
+                <span className="text-xs font-bold text-white">{poolStatus.totalClipsConsumed}</span>
               </div>
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
-                <span className="text-[10px] text-gray-400 block">Wind</span>
-                <span className="text-xs font-bold text-white">{weather.wind}</span>
-              </div>
-              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
-                <span className="text-[10px] text-gray-400 block">Feels Like</span>
-                <span className="text-xs font-bold text-white">{weather.feelsLike}°C</span>
+                <span className="text-[10px] text-gray-400 block">Unique Sources</span>
+                <span className="text-xs font-bold text-white">{poolStatus.usedUrlsCount}</span>
               </div>
             </div>
-          </div>
 
-          {/* Card 3: Camera / Vision Screen */}
-          <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-2.5 font-mono">
-            <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-gray-200">
-                <Camera className="h-3.5 w-3.5 text-cyan-400" />
-                Camera
-              </span>
-              <div className="flex items-center gap-2">
+            {/* Quick URL Adder & Replenish */}
+            <div className="pt-1 space-y-2">
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Paste YouTube parkour URL..."
+                  value={customPoolUrl}
+                  onChange={(e) => setCustomPoolUrl(e.target.value)}
+                  className="flex-1 rounded-lg border border-[#14233D] bg-[#070D18] px-2.5 py-1 text-[11px] text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
+                />
                 <button
-                  onClick={toggleCamera}
-                  className="text-gray-400 hover:text-cyan-400 transition-colors"
-                  title="Snap frame"
+                  onClick={() => handleReplenishPool(customPoolUrl || undefined)}
+                  disabled={isReplenishingPool}
+                  className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 hover:bg-cyan-500 hover:text-[#070B14] text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                  title="Download and slice a new 60s clip pool"
                 >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={toggleCamera}
-                  className={`transition-colors ${cameraActive ? "text-cyan-400" : "text-gray-400 hover:text-white"}`}
-                  title={cameraActive ? "Turn off camera" : "Turn on camera"}
-                >
-                  <Power className="h-3.5 w-3.5" />
+                  <RefreshCw className={`h-3 w-3 ${isReplenishingPool ? "animate-spin" : ""}`} />
+                  {isReplenishingPool ? "Slicing..." : "Replenish"}
                 </button>
               </div>
-            </div>
-
-            {/* Viewport Box */}
-            <div className="relative aspect-video w-full rounded-lg border border-[#14233D] bg-[#070D18] overflow-hidden flex flex-col items-center justify-center text-center p-3">
-              {cameraActive && capturedSnapshot ? (
-                <img src={capturedSnapshot} alt="Optical Feed" className="h-full w-full object-cover" />
-              ) : (
-                <>
-                  <Camera className="h-8 w-8 text-cyan-400/40 mb-1" />
-                  <span className="text-xs font-semibold text-gray-300">Camera Off</span>
-                  <span className="text-[10px] text-gray-500 mt-1">Camera is inactive. Click power to start.</span>
-                </>
-              )}
+              <p className="text-[10px] text-gray-400 italic">
+                *Clips are consumed and deleted 1-by-1. When empty, Soundwave auto-downloads a fresh unused video.
+              </p>
             </div>
           </div>
 
@@ -864,6 +872,7 @@ export function AgentHub() {
               assistantState={assistantState}
               isMicActive={isMicActive}
               size={280}
+              orbMode={orbMode}
               className="my-3"
               onOrbClick={() => {
                 if (assistantState === "STANDBY") {
@@ -894,18 +903,14 @@ export function AgentHub() {
             </div>
           </div>
 
-          {/* 3 Bottom Control Buttons (Camera, Mic, Shorts) */}
+          {/* Bottom Dock Control Buttons (Shorts, Mic, Automation, Settings) */}
           <div className="flex items-center gap-3 mt-8">
             <button
-              onClick={toggleCamera}
-              className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
-                cameraActive
-                  ? "border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-lg shadow-cyan-500/25"
-                  : "border-[#172A4A] bg-[#0C172E] text-gray-300 hover:border-cyan-500/50 hover:text-white"
-              }`}
-              title="Camera / Vision Feed"
+              onClick={() => setGeneratorModalOpen(true)}
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#172A4A] bg-[#0C172E] text-cyan-400 hover:border-cyan-500/50 hover:text-white transition-all cursor-pointer shadow-md shadow-cyan-950/20"
+              title="1-Click Viral Short Generator"
             >
-              <Camera className="h-5 w-5" />
+              <Film className="h-5 w-5" />
             </button>
 
             <button
@@ -930,19 +935,19 @@ export function AgentHub() {
             </button>
 
             <button
-              onClick={() => setGeneratorModalOpen(true)}
-              className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#172A4A] bg-[#0C172E] text-cyan-400 hover:border-cyan-500/50 hover:text-white transition-all cursor-pointer"
-              title="1-Click Viral Short Generator"
-            >
-              <Film className="h-5 w-5" />
-            </button>
-
-            <button
               onClick={() => setMacrosModalOpen(true)}
               className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#172A4A] bg-[#0C172E] text-purple-400 hover:border-purple-500/50 hover:text-white transition-all cursor-pointer"
               title="Ghost Operator Macro Automations"
             >
               <Workflow className="h-5 w-5" />
+            </button>
+
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#172A4A] bg-[#0C172E] text-cyan-400 hover:border-cyan-500/50 hover:text-white transition-all cursor-pointer"
+              title="Orb States & Assistant Settings"
+            >
+              <SettingsIcon className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -1331,11 +1336,11 @@ export function AgentHub() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-bold text-white">Neural Voice Talent</p>
-                  <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine</p>
+                  <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine (Natural Male Pacing)</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => speakText("Voice system operational. Neural synthesis online.")}
+                  onClick={() => speakText("Voice system operational. Natural neural synthesis online.")}
                   className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <Volume2 className="h-3 w-3" /> Test Voice
@@ -1347,12 +1352,47 @@ export function AgentHub() {
                 onChange={(e) => handleVoiceChange(e.target.value)}
                 className="w-full rounded-lg border border-[#172A4A] bg-[#0C172E] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
               >
-                <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
                 <option value="en-US-ChristopherNeural">Christopher (en-US Male - Studio JARVIS)</option>
+                <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
+                <option value="en-US-EricNeural">Eric (en-US Male - Dynamic Narrator)</option>
                 <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
-                <option value="en-US-JennyNeural">Jenny (en-US Female - Smooth)</option>
-                <option value="en-GB-SoniaNeural">Sonia (en-GB Female - British)</option>
+                <option value="en-US-AndrewNeural">Andrew (en-US Male - Warm Storyteller)</option>
               </select>
+            </div>
+
+            {/* Thinking Orb Visualizer Mode Selection */}
+            <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-white">Thinking Orb Visualizer Mode</p>
+                  <p className="text-[10px] text-gray-400">Auto Sync dynamically reacts to listening, thinking, & speaking</p>
+                </div>
+                <span className="rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold">
+                  {orbMode === "auto" ? "AUTO SYNC (DEFAULT)" : orbMode.toUpperCase()}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                {ALL_ORB_STATES.map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setOrbMode(st.id);
+                      localStorage.setItem("soundwave_orb_mode", st.id);
+                      toast.info("Orb Mode Set", `${st.label} mode active.`);
+                    }}
+                    className={`rounded-lg px-2.5 py-2 text-left text-[11px] font-mono transition-all border cursor-pointer ${
+                      orbMode === st.id
+                        ? "border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-sm shadow-cyan-500/30"
+                        : "border-[#14233D] bg-[#0A1224] text-gray-400 hover:text-white hover:border-[#1F3660]"
+                    }`}
+                  >
+                    <div className="font-semibold">{st.label}</div>
+                    <div className="text-[9px] text-gray-500 truncate">{st.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
