@@ -3,7 +3,7 @@
 // Produces crisp 24 kHz mono MP3 audio plus word-boundary timings (when the
 // service returns metadata). No local model, no API key.
 import fs from "node:fs";
-import os from "node:os";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { EdgeTTS } from "node-edge-tts";
@@ -65,7 +65,7 @@ function estimateDurationMp3(bytes: number): number {
 }
 
 export async function synthesizeEdgeTTS(input: EdgeVoiceInput): Promise<EdgeSynthResult> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "swtts-"));
+  const dir = fs.mkdtempSync(path.join(tmpdir(), "swtts-"));
   const audioPath = path.join(dir, "out.mp3");
   try {
     const tts = new EdgeTTS({
@@ -123,7 +123,7 @@ export async function synthesizeEdgeTTS(input: EdgeVoiceInput): Promise<EdgeSynt
 
 /** Regenerate one voice sample clip (used by scripts/generate-samples.ts). */
 export async function synthesizeSample(text: string, voice: string): Promise<Buffer> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "swsamp-"));
+  const dir = fs.mkdtempSync(path.join(tmpdir(), "swsamp-"));
   const audioPath = path.join(dir, `${randomUUID()}.mp3`);
   try {
     const tts = new EdgeTTS({

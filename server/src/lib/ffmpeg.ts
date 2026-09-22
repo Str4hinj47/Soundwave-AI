@@ -73,9 +73,13 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 // ── ASS generation ──────────────────────────────────────────────────────────
 function hexToAss(hex: string, opacityPct: number): string {
   const clean = (hex ?? "#FFFFFF").replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16) || 255;
-  const g = parseInt(clean.slice(2, 4), 16) || 255;
-  const b = parseInt(clean.slice(4, 6), 16) || 255;
+  const parseHex = (s: string) => {
+    const val = parseInt(s, 16);
+    return isNaN(val) ? 0 : val;
+  };
+  const r = parseHex(clean.slice(0, 2));
+  const g = parseHex(clean.slice(2, 4));
+  const b = parseHex(clean.slice(4, 6));
   const alpha = Math.round(((100 - clamp(opacityPct, 0, 100)) / 100) * 255);
   const toHex = (n: number) => n.toString(16).padStart(2, "0").toUpperCase();
   return `&H${toHex(alpha)}${toHex(b)}${toHex(g)}${toHex(r)}`;
@@ -114,24 +118,21 @@ export function buildAss(
   height: number,
   watermark = false,
 ): string {
-  // Scale relative to a 1280×720 reference. Using the smaller of the two
-  // axes keeps 16:9 behavior identical (both equal the old height/720) while
-  // preventing oversized subtitles in 9:16 portrait frames (Shorts/TikTok).
-  const scale = Math.min(width / 1280, height / 720);
-  const fontSize = Math.round((style.fontSize ?? 48) * scale);
-  const outline = style.strokeEnabled ? Math.max(0, Math.round((style.strokeWidth ?? 0) * scale)) : 0;
-  const shadow = style.shadowEnabled
-    ? Math.max(1, Math.round(Math.max(Math.abs(style.shadowX ?? 0), Math.abs(style.shadowY ?? 0), (style.shadowBlur ?? 0) / 2) * scale))
+  // Scale font appropriately: for vertical 9:16 videos, scale against 720 reference width
+  const scale = height > width ? (width / 720) : Math.min(width / 1280, height / 720);
+  const fontSize = Math.round((style.fontSize ?? 54) * scale);
+  const outline = style.strokeEnabled !== false ? Math.max(3, Math.round((style.strokeWidth ?? 4) * scale)) : 0;
+  const shadow = style.shadowEnabled !== false
+    ? Math.max(1, Math.round(Math.max(Math.abs(style.shadowX ?? 0), Math.abs(style.shadowY ?? 0), (style.shadowBlur ?? 2) / 2) * scale))
     : 0;
   const spacing = Math.round((style.letterSpacing ?? 0) * scale);
-  const borderStyle = (style.bgOpacity ?? 0) > 0 ? 3 : 1;
   const margin = Math.round((style.margin ?? 40) * scale);
-  const bold = (style.fontWeight ?? 700) >= 600 ? 1 : 0;
   const primary = hexToAss(style.color ?? "#FFFFFF", style.textOpacity ?? 100);
   const outlineColor = hexToAss(style.strokeColor ?? "#000000", 100);
-  const backColor = hexToAss(style.bgColor ?? "#000000", style.bgOpacity ?? 0);
+  const backColor = hexToAss("#000000", 60);
 
-  const header = [
+    const fontFace = (style.fontFamily || "DejaVu Sans").replace(/,/g, "").trim() || "DejaVu Sans";
+    const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${width}`,
@@ -141,8 +142,8 @@ export function buildAss(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${style.fontFamily ?? "Inter"},${fontSize},${primary},${primary},${outlineColor},${backColor},${bold},0,0,0,100,100,${spacing},0,${borderStyle},${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
-    `Style: Watermark,Inter,${Math.max(16, Math.round(28 * scale))},${hexToAss("#FFFFFF", 55)},${hexToAss("#FFFFFF", 55)},${hexToAss("#000000", 0)},${hexToAss("#000000", 0)},0,0,0,0,100,100,0,0,1,1,0,9,20,20,20,1`,
+    `Style: Default,${fontFace},${fontSize},${primary},${primary},${outlineColor},${backColor},0,0,0,0,100,100,${spacing},0,1,${outline},${shadow},${alignmentFor(style.hAlign, style.vAlign)},${margin},${margin},${margin},1`,
+    `Style: Watermark,DejaVu Sans,${Math.max(16, Math.round(28 * scale))},${hexToAss("#FFFFFF", 55)},${hexToAss("#FFFFFF", 55)},${hexToAss("#000000", 0)},${hexToAss("#000000", 0)},0,0,0,0,100,100,0,0,1,1,0,9,20,20,20,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
