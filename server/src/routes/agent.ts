@@ -8,7 +8,7 @@ import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
-import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR } from "./agentShort.js";
+import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 
@@ -208,7 +208,44 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       });
     }
 
-    // 4. Video Inquiries & Retrieval ("where is my video", "download video", "what video did you make", etc.)
+    // 4. Automated Video Generation Trigger
+    const isCreateVideoCommand =
+      (qLower.includes("generate") || qLower.includes("make") || qLower.includes("create") || qLower.includes("render") || qLower.includes("build") || qLower.includes("produce")) &&
+      (qLower.includes("video") || qLower.includes("short") || qLower.includes("reel") || qLower.includes("tiktok") || qLower.includes("clip"));
+
+    if (isCreateVideoCommand) {
+      let topic = "motivation";
+      const cleanTopic = qLower
+        .replace(/^(can you |please )?(generate|make|create|render|build|produce)\s+(a |an |me a )?(video|short|reel|tiktok|clip)\s*(about|on|for)?/i, "")
+        .trim();
+      if (cleanTopic.length > 2) {
+        topic = cleanTopic;
+      }
+
+      try {
+        const result = await buildShortVideo({
+          topic,
+          voice: "en-US-GuyNeural",
+          resolution: "720p",
+          userId,
+        });
+
+        return res.json({
+          success: true,
+          reply: `I have generated and rendered your 60fps 9:16 Minecraft parkour short on "${topic}"!\n\n**Script**: "${result.script}"\n\nDuration: ${result.duration.toFixed(1)}s with synchronized TikTok subtitles. You can preview and download it directly below.`,
+          action: "soundwave_shorts",
+          videoUrl: result.videoUrl,
+          downloadUrl: result.downloadUrl,
+          script: result.script,
+          jobId: result.jobId,
+          tag: "AUDIO",
+        });
+      } catch (shortErr) {
+        console.error("[agent/chat] buildShortVideo failed:", shortErr);
+      }
+    }
+
+    // 5. Video Inquiries & Retrieval ("where is my video", "download video", "what video did you make", etc.)
     const isVideoInquiry =
       qLower.includes("where is") ||
       qLower.includes("where's") ||
