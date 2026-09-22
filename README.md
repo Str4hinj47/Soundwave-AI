@@ -25,7 +25,7 @@ soundwave-ai/
 │   ├── viral_engine.py  # 7 High-performing niches & 6 viral hook frameworks
 │   ├── short_runner.py  # 1-Click & batch vertical video pipeline orchestrator
 │   ├── hud.py           # Futuristic acoustic visualizer HUD (no weird 3D avatar)
-│   ├── cache_manager.py # 80s Minecraft parkour gameplay chunk caching
+│   ├── cache_manager.py # 60s Minecraft parkour clip library (download once → slice → delete after use)
 │   ├── main.py          # Unified CLI & GUI desktop launcher
 │   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA

@@ -8,13 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from plugins.base_plugin import SoundwavePlugin
-from cache_manager import list_cached_clips, build_cache_clip, get_cache_dir
+from cache_manager import list_cached_clips, build_cache_clip, get_cache_dir, CLIP_DURATION
 
 class BackgroundCachePlugin(SoundwavePlugin):
     def __init__(self):
         super().__init__(
             name="soundwave_background_cache",
-            description="Manages 80-second Minecraft parkour background video clips to accelerate video rendering."
+            description="Manages a library of 60-second Minecraft parkour background clips: one long video is downloaded, sliced, and each clip is deleted once used."
         )
 
     def get_manifest(self) -> Dict[str, Any]:
@@ -47,7 +47,7 @@ class BackgroundCachePlugin(SoundwavePlugin):
             if not clips:
                 return f"No background clips found in {cache_dir}. Use action=build_clip to download and slice."
             total_mb = sum(c.stat().st_size for c in clips) / (1024 * 1024)
-            lines = [f"Found {len(clips)} cached 80s gameplay clips ({total_mb:.1f} MB total):"]
+            lines = [f"Found {len(clips)} cached {CLIP_DURATION}s gameplay clips ({total_mb:.1f} MB total):"]
             for c in clips[:10]:
                 lines.append(f"- {c.name} ({c.stat().st_size / 1024 / 1024:.1f} MB)")
             return "\n".join(lines)
@@ -56,7 +56,7 @@ class BackgroundCachePlugin(SoundwavePlugin):
             url = parameters.get("youtube_url")
             out_clip = build_cache_clip(youtube_url=url)
             if out_clip:
-                return f"Successfully sliced 80s background clip: {out_clip.name}"
+                return f"Successfully sliced {CLIP_DURATION}s background clip: {out_clip.name}"
             else:
                 return "Failed to download or slice clip. Ensure yt-dlp is available."
 

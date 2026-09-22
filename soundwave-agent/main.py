@@ -15,7 +15,7 @@ current_dir = Path(__file__).parent.resolve()
 sys.path.insert(0, str(current_dir))
 
 from viral_engine import generate_viral_script, NICHES, list_niches
-from cache_manager import list_cached_clips, build_cache_clip, get_cache_dir
+from cache_manager import list_cached_clips, build_cache_clip, get_cache_dir, CLIP_DURATION
 from short_runner import generate_single_short, generate_all_niches_batch, ensure_server_running
 from progress_tracker import get_html_path, open_in_browser
 from hud import SoundwaveHudTerminal, launch_gui_hud
@@ -34,7 +34,7 @@ def run_interactive_cli():
     server_ok = ensure_server_running()
     print(f"Status: Soundwave AI Server is {'ONLINE' if server_ok else 'OFFLINE (run: cd server && npm run dev)'}")
     clips = list_cached_clips()
-    print(f"Background Cache: {len(clips)} cached 80s clips available")
+    print(f"Background Cache: {len(clips)} cached {CLIP_DURATION}s clips available")
 
     hud = SoundwaveHudTerminal()
 
@@ -108,7 +108,7 @@ def main():
     parser.add_argument("--batch", action="store_true", help="Batch generate 1 short for every niche (7 total)")
     parser.add_argument("--voice", type=str, default="en-US-GuyNeural", help="TTS Voice (default: en-US-GuyNeural)")
     parser.add_argument("--resolution", type=str, default="720p", choices=["720p", "1080p"], help="Video resolution")
-    parser.add_argument("--build-cache", action="store_true", help="Download and slice an 80s background clip")
+    parser.add_argument("--build-cache", action="store_true", help="Download a long parkour video and slice 60s background clips")
     parser.add_argument("--open-progress", action="store_true", help="Open the live HTML progress monitor in the browser")
     parser.add_argument("--status", action="store_true", help="Check server health and cache statistics")
 
@@ -140,7 +140,7 @@ def main():
         return
 
     if args.build_cache:
-        print("Downloading and slicing 80s gameplay clip...")
+        print(f"Downloading a long parkour video and slicing {CLIP_DURATION}s clips...")
         clip = build_cache_clip()
         print(f"Result: {clip}")
         return

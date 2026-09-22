@@ -105,8 +105,12 @@ def generate_single_short(
     # 3. Call 1-Click Short API
     update_state(3, "Synthesizing voice & rendering 9:16 vertical video...", topic=topic, voice=voice, script=script)
 
+    # `script` is sent verbatim so the voiceover matches the script shown to
+    # the user. Only the niche is passed in `topic` — mashing the script text
+    # into `topic` made the server discard it and generate a different one.
     payload = {
-        "topic": f"{topic} {script[:80]}",
+        "topic": topic,
+        "script": script,
         "voice": voice,
         "resolution": resolution,
         "useDefaultBackground": True,

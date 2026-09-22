@@ -11,24 +11,22 @@ import { dimensionsFor } from "../lib/plans.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
-import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
+import {
+  acquireClip,
+  releaseClip,
+  seedSource,
+  getBackgroundStatus,
+  resetLibrary,
+  isBlacklisted,
+  CLIP_SECS,
+  CURATED_MINECRAFT_PARKOUR,
+  BLACKLIST,
+} from "../lib/backgroundClips.js";
 
-// ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
-export const CURATED_MINECRAFT_PARKOUR = [
-  "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 HOUR 2026 high quality
-  "https://www.youtube.com/watch?v=BXUA2FncVPI", // 4K 2025 background for Shorts
-  "https://www.youtube.com/watch?v=71YeZAUS9NQ", // 4K 60FPS FREE great for Shorts
-  "https://www.youtube.com/watch?v=FOX3lBXVeck", // Free2Use drive link
-  "https://www.youtube.com/watch?v=85z7jqGAGcc", // 2 Hours
-  "https://www.youtube.com/watch?v=Geuaf2Nj_zE",
-];
-
-export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];
-
-export function isBlacklisted(url: string): boolean {
-  return BLACKLIST.some((id) => url.includes(id));
-}
+// Background sourcing lives in lib/backgroundClips.ts (the 60s clip library).
+// Re-exported here because agent.ts and the /defaults endpoint read them.
+export { CURATED_MINECRAFT_PARKOUR, BLACKLIST, isBlacklisted };
 
 // ── Script templates for Soundwave Agent — VIRAL 2026 RESEARCH-BASED
 export const VIRAL_SCRIPTS: Record<string, string[]> = {
@@ -124,127 +122,6 @@ export function cuesFromTimings(
   return cues;
 }
 
-const CACHE_CHUNK_SECS = 80;
-function findCachedChunk(): string | null {
-  const roots = [
-    process.cwd(),
-    path.join(process.cwd(), ".."),
-    path.join(process.cwd(), "..", ".."),
-    config.dataDir,
-    path.dirname(config.uploadsDir),
-    os.homedir(),
-    path.join(os.homedir(), ".soundwave"),
-    path.join(os.homedir(), "Downloads"),
-    path.join(os.homedir(), "Videos"),
-  ];
-
-  const subdirs = [
-    path.join("background_cache", "minecraft_parkour", "80s"),
-    path.join("background_cache", "minecraft_parkour"),
-    "background_cache",
-    "clips",
-    "backgrounds",
-    "videos",
-    "assets",
-    path.join("Mark-LIV", "clips"),
-    path.join("Mark-LIV", "backgrounds"),
-    path.join("Mark-LIV", "background_cache"),
-    path.join("Mark-LIV", "background_cache", "minecraft_parkour", "80s"),
-    "Mark-LIV",
-    path.join("Mark-54", "clips"),
-    path.join("Mark-54", "backgrounds"),
-    path.join("Mark-54", "background_cache"),
-    "Mark-54",
-    path.join("Mark 54", "clips"),
-    path.join("Mark 54", "backgrounds"),
-    path.join("Mark 54", "background_cache"),
-    "Mark 54",
-    path.join("soundwave-agent", "clips"),
-    path.join("soundwave-agent", "backgrounds"),
-    path.join("server", "uploads"),
-    "uploads",
-  ];
-
-  for (const root of roots) {
-    for (const sub of subdirs) {
-      const d = path.resolve(root, sub);
-      try {
-        if (fs.existsSync(d) && fs.statSync(d).isDirectory()) {
-          const files = fs.readdirSync(d).filter((f) => {
-            const lower = f.toLowerCase();
-            return (
-              (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv") || lower.endsWith(".webm")) &&
-              !lower.startsWith("solid-bg-")
-            );
-          });
-          if (files.length > 0) {
-            for (const f of files) {
-              const fullPath = path.join(d, f);
-              try {
-                if (fs.statSync(fullPath).size > 500_000) {
-                  return fullPath;
-                }
-              } catch {}
-            }
-          }
-        }
-      } catch {}
-    }
-  }
-  return null;
-}
-
-async function ensureMinecraftBackground(customUrl?: string | null): Promise<string | null> {
-  const cached = findCachedChunk();
-  if (cached && fs.existsSync(cached)) {
-    return cached;
-  }
-
-  const targetUrl = customUrl || CURATED_MINECRAFT_PARKOUR[0]!;
-  if (isBlacklisted(targetUrl)) {
-    throw new Error("Provided YouTube URL is blacklisted");
-  }
-
-  const ytdlp = resolveYtDlpPath();
-  const ffmpeg = resolveFfmpegPath();
-  if (!ytdlp || !ffmpeg) {
-    return null;
-  }
-
-  const cacheDir = path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s");
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const outPath = path.join(cacheDir, `parkour_${Date.now()}_80s.mp4`);
-
-  return new Promise((resolve) => {
-    const args = [
-      "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-      "--no-playlist",
-      "--download-sections", `*0-${CACHE_CHUNK_SECS}`,
-      "--force-keyframes-at-cuts",
-      "-o", outPath,
-      targetUrl,
-    ];
-    const proc = spawn(ytdlp, args, { stdio: ["ignore", "pipe", "pipe"] });
-    const timer = setTimeout(() => {
-      proc.kill("SIGKILL");
-      resolve(null);
-    }, 120_000);
-
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 100_000) {
-        resolve(outPath);
-      } else {
-        resolve(null);
-      }
-    });
-    proc.on("error", () => {
-      clearTimeout(timer);
-      resolve(null);
-    });
-  });
-}
-
 async function generateSolidVideo(width: number, height: number, seconds: number): Promise<string> {
   const dir = path.join(config.uploadsDir, "jobs");
   fs.mkdirSync(dir, { recursive: true });
@@ -279,6 +156,9 @@ const router = Router();
 
 const generateShortSchema = z.object({
   topic: z.string().min(2).max(500).default("motivation"),
+  /** Optional verbatim voiceover script. When present it wins over `topic`.
+   *  Empty/whitespace is treated as "not supplied" and falls back to `topic`. */
+  script: z.string().max(8000).nullable().optional(),
   voice: z.string().min(2).max(100).default("en-US-JennyNeural"),
   youtubeUrl: z.string().max(2048).nullable().optional(),
   useDefaultBackground: z.boolean().default(true),
@@ -294,8 +174,11 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
 
     const userId = req.user?.id ?? "agent-local";
 
-    // 1. Generate script
-    const script = generateScript(body.topic);
+    // 1. Script — a caller-supplied script is used verbatim; otherwise the
+    //    niche-matched viral template for `topic` is generated here.
+    const customScript = typeof body.script === "string" ? body.script.trim() : "";
+    const script = customScript.length > 0 ? customScript : generateScript(body.topic);
+    const scriptSource = customScript.length > 0 ? "custom" : "generated";
 
     // 2. TTS via Cloned Voice or Edge TTS
     let ttsResult;
@@ -337,40 +220,45 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       shadowY: 2,
     };
 
-    // 4. Background video: either custom key, downloaded, cached, or solid
+    // 4. Background video — one 60s parkour clip from the managed library.
+    //    Order: explicit upload → clip library → solid colour fallback.
     let videoPath: string | null = null;
+    let clipToRelease: string | null = null;
+    let backgroundLabel = "solid #070d18";
+
     if (body.backgroundFileKey) {
       const p = path.join(config.uploadsDir, body.backgroundFileKey);
-      if (fs.existsSync(p)) videoPath = p;
+      if (fs.existsSync(p)) {
+        videoPath = p;
+        backgroundLabel = "uploaded file";
+      }
+    }
+
+    // An explicit youtubeUrl seeds the library with that specific video.
+    if (!videoPath && body.useDefaultBackground && body.youtubeUrl && !isBlacklisted(body.youtubeUrl)) {
+      try {
+        const seeded = await seedSource(body.youtubeUrl);
+        if (seeded) console.log(`[agentShort] library seeded from ${body.youtubeUrl}`);
+      } catch (e) {
+        console.warn("[agentShort] youtubeUrl seed failed, using library:", (e as Error).message);
+      }
     }
 
     if (!videoPath && body.useDefaultBackground) {
-      if (body.youtubeUrl && !isBlacklisted(body.youtubeUrl)) {
-        try {
-          const downloaded = await ensureMinecraftBackground(body.youtubeUrl);
-          if (downloaded) videoPath = downloaded;
-        } catch (e) {
-          console.warn("[agentShort] youtubeUrl download failed, falling back to curated:", (e as Error).message);
+      try {
+        // Pulls the next unused clip; downloads+slices a new long video when
+        // the library is empty, and remembers which videos were already used.
+        const clip = await acquireClip();
+        if (clip && fs.existsSync(clip.path)) {
+          videoPath = clip.path;
+          clipToRelease = clip.path;
+          backgroundLabel = `minecraft_parkour ${CLIP_SECS}s clip (${clip.clipsRemaining} left)`;
+          console.log(
+            `[agentShort] background clip ${clip.name} ${clip.freshSource ? "from NEW source " + clip.sourceUrl : "from library"} — ${clip.clipsRemaining} remaining`,
+          );
         }
-      }
-
-      if (!videoPath) {
-        const cached = findCachedChunk();
-        if (cached && fs.existsSync(cached)) {
-          videoPath = cached;
-        } else {
-          for (const curatedUrl of CURATED_MINECRAFT_PARKOUR) {
-            try {
-              const bg = await ensureMinecraftBackground(curatedUrl);
-              if (bg && fs.existsSync(bg)) {
-                videoPath = bg;
-                break;
-              }
-            } catch (e) {
-              console.warn(`[agentShort] curated ${curatedUrl} failed:`, (e as Error).message);
-            }
-          }
-        }
+      } catch (e) {
+        console.warn("[agentShort] clip library unavailable:", (e as Error).message);
       }
     }
 
@@ -378,6 +266,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
 
     if (!videoPath || !fs.existsSync(videoPath)) {
       videoPath = await generateSolidVideo(dims.width, dims.height, Math.ceil(ttsResult.duration) + 2);
+      backgroundLabel = "solid #070d18";
     }
 
     // 5. Export settings: 9:16 vertical short format, 720p or 1080p, 60fps
@@ -417,7 +306,8 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       end: Math.min(c.end, ttsResult.duration),
     }));
 
-    const process = async () => {
+    // Named `runExport` — it must NOT shadow Node's global `process`.
+    const runExport = async () => {
       try {
         await store.updateJob(job.id, { status: "PROCESSING", startedAt: new Date().toISOString() });
         await runFfmpegExport({
@@ -440,6 +330,11 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
           outputUrl: `/api/v1/export/jobs/${job.id}/download`,
           completedAt: new Date().toISOString(),
         });
+        // Clip served its purpose — delete it so the next short gets a new one.
+        if (clipToRelease) {
+          releaseClip(clipToRelease);
+          console.log(`[agentShort] used clip deleted: ${path.basename(clipToRelease)}`);
+        }
       } catch (err) {
         await store.updateJob(job.id, {
           status: "FAILED",
@@ -450,7 +345,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
     };
 
     if (body.async) {
-      process().catch((e) => console.error("[agentShort async] export failed:", e.message));
+      runExport().catch((e) => console.error("[agentShort async] export failed:", e.message));
       res.json({
         jobId: job.id,
         status: "QUEUED",
@@ -458,7 +353,9 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
         eventsUrl: `/api/v1/export/jobs/${job.id}/events`,
         downloadUrl: `/api/v1/export/jobs/${job.id}/download`,
         script,
+        scriptSource,
         duration: ttsResult.duration,
+        durationSeconds: Math.round(ttsResult.duration * 10) / 10,
         cues: finalCues.length,
         message: "Export queued — poll GET /api/v1/export/jobs/:jobId or stream /api/v1/export/jobs/:jobId/events",
         defaults: {
@@ -470,7 +367,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
           fitToVoice: true,
           voice: body.voice,
           subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle",
-          background: "ONLY minecraft_parkour high quality 1080p 4K 80s cache",
+          background: backgroundLabel,
         },
       });
       return;
@@ -478,14 +375,17 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
 
     // Synchronous
     try {
-      await process();
+      await runExport();
       const completed = await store.getJob(job.id, userId);
       res.json({
         jobId: job.id,
         status: "COMPLETED",
         downloadUrl: completed?.outputUrl ?? `/api/v1/export/jobs/${job.id}/download`,
+        videoUrl: completed?.outputUrl ?? `/api/v1/export/jobs/${job.id}/download`,
         script,
+        scriptSource,
         duration: ttsResult.duration,
+        durationSeconds: Math.round(ttsResult.duration * 10) / 10,
         cues: finalCues.length,
         defaults: {
           aspect: "9:16",
@@ -496,7 +396,7 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
           fitToVoice: true,
           voice: body.voice,
           subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle scale",
-          background: videoPath ? "minecraft_parkour 80s cached" : "solid #0A0F1C",
+          background: backgroundLabel,
         },
       });
     } catch (e) {
@@ -547,15 +447,43 @@ router.get("/defaults", (_req, res) => {
       type: "minecraft_parkour",
       only: "minecraft_parkour high quality 1080p 4K",
       blacklist: BLACKLIST,
-      cacheChunkDuration: 80,
+      clipDuration: CLIP_SECS,
       curated: CURATED_MINECRAFT_PARKOUR,
+      lifecycle:
+        "One long parkour video is downloaded, sliced into 60s clips, and each short consumes one clip which is then deleted. When the library is empty a NEW video is found online; already-clipped URLs are remembered and never reused.",
+    },
+    script: {
+      source: "custom script (body.script) when supplied, else generated from body.topic",
+      niches: Object.keys(VIRAL_SCRIPTS),
     },
     workflow: {
       oneClickEndpoint: "POST /api/v1/agent/generate-short",
       body: { topic: "motivation", voice: "en-US-JennyNeural", useDefaultBackground: true, resolution: "720p" },
+      backgroundStatusEndpoint: "GET /api/v1/agent/background/status",
+      backgroundResetEndpoint: "POST /api/v1/agent/background/reset",
       result: "downloadUrl -> ~/Downloads/soundwave_short_*.mp4",
     },
   });
+});
+
+// GET /background/status — which long video is clipped, how many 60s clips are
+// left, and which source URLs have already been consumed.
+router.get("/background/status", optionalAuth, (_req, res) => {
+  try {
+    res.json(getBackgroundStatus());
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// POST /background/reset — wipe the library so the next short finds a new video.
+router.post("/background/reset", optionalAuth, (_req, res) => {
+  try {
+    resetLibrary();
+    res.json({ ok: true, message: "Background clip library cleared — next short will download a new source." });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
 });
 
 export default router;
