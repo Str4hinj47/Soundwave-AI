@@ -512,13 +512,15 @@ export function AgentHub() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {}
+      if (res.ok && data.status) {
         setPoolStatus(data.status);
-        toast.success("Pool Updated", `${data.status.clipsRemaining} 60s clips available.`);
+        toast.success("Pool Updated", `${data.status.clipsRemaining} 60s clips ready in pool.`);
         if (url) setCustomPoolUrl("");
       } else {
-        toast.error("Pool replenishment failed");
+        toast.error("Pool replenishment", data.error || "Replenishment failed");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to replenish pool");
@@ -551,8 +553,10 @@ export function AgentHub() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data.error || text || "Generation failed");
 
       setProgressPercent(100);
       setCurrentStep("Completed");

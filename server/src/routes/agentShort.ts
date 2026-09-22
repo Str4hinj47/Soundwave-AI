@@ -640,20 +640,33 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
 
 // Background pool status & management endpoints
 router.get("/background-pool", (_req, res) => {
-  res.json(backgroundPool.getStatus());
+  try {
+    res.json(backgroundPool.getStatus());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post("/background-pool/replenish", async (req, res) => {
-  const url = typeof req.body?.url === "string" ? req.body.url : undefined;
-  const ok = await backgroundPool.replenishPool(url);
-  res.json({ ok, status: backgroundPool.getStatus() });
+  try {
+    const url = typeof req.body?.url === "string" ? req.body.url : undefined;
+    const ok = await backgroundPool.replenishPool(url);
+    res.json({ ok, status: backgroundPool.getStatus() });
+  } catch (err: any) {
+    console.error("[background-pool/replenish] Error:", err.message);
+    res.json({ ok: false, error: err.message, status: backgroundPool.getStatus() });
+  }
 });
 
 router.post("/background-pool/add-url", (req, res) => {
-  const url = req.body?.url;
-  if (!url) return res.status(400).json({ error: "URL is required" });
-  const added = backgroundPool.addCustomUrl(url);
-  res.json({ added, status: backgroundPool.getStatus() });
+  try {
+    const url = req.body?.url;
+    if (!url) return res.status(400).json({ error: "URL is required" });
+    const added = backgroundPool.addCustomUrl(url);
+    res.json({ added, status: backgroundPool.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
+  }
 });
 
 // List cached background video chunks available

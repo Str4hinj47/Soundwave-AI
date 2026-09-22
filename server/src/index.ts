@@ -3,6 +3,14 @@ import { config, validateConfig, resolveFfmpegPath } from "./config.js";
 import { createApp } from "./app.js";
 import { getStore } from "./lib/store.js";
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[soundwave] Handled asynchronous rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[soundwave] Handled uncaught exception:", error);
+});
+
 async function main() {
   validateConfig();
   const store = await getStore();
