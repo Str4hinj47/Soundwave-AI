@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
+import multer from "multer";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
@@ -15,8 +16,8 @@ import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleC
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
+import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
-import { youtubePublisher } from "../lib/youtubePublisher.js";
 
 // ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
 export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
@@ -76,25 +77,40 @@ export const VIRAL_SCRIPTS: Record<string, string[]> = {
 };
 
 export function generateScript(topic: string): string {
-  const t = topic.toLowerCase();
+  const t = topic.toLowerCase().trim();
   let category = "motivation";
-  if (t.includes("fact") || t.includes("did you know") || t.includes("science") || t.includes("space")) category = "facts";
-  else if (t.includes("history")) category = "history";
-  else if (t.includes("horror") || t.includes("scary") || t.includes("creepy") || t.includes("ghost")) category = "horror";
-  else if (t.includes("money") || t.includes("finance") || t.includes("invest") || t.includes("saving")) category = "finance";
-  else if (t.includes("ai") || t.includes("tool") || t.includes("productivity")) category = "ai";
+  if (t.includes("fact") || t.includes("science") || t.includes("space")) category = "facts";
+  else if (t.includes("history") || t.includes("ancient") || t.includes("war")) category = "history";
+  else if (t.includes("horror") || t.includes("scary") || t.includes("creepy") || t.includes("ghost") || t.includes("dark")) category = "horror";
+  else if (t.includes("money") || t.includes("finance") || t.includes("invest") || t.includes("saving") || t.includes("wealth")) category = "finance";
+  else if (t.includes("ai") || t.includes("tool") || t.includes("tech") || t.includes("productivity")) category = "ai";
   else if (t.includes("motivat") || t.includes("inspir") || t.includes("success") || t.includes("mindset") || t.includes("discipline")) category = "motivation";
-  else if (t.includes("psych")) category = "psychology";
+  else if (t.includes("psych") || t.includes("brain") || t.includes("behavior")) category = "psychology";
   else {
-    const rot = ["motivation", "psychology", "facts", "history", "finance"];
+    const rot = ["motivation", "psychology", "facts", "history", "finance", "ai", "horror"];
     category = rot[Math.floor(Math.random() * rot.length)]!;
   }
   const templates = VIRAL_SCRIPTS[category] ?? VIRAL_SCRIPTS.motivation!;
   const idx = Math.floor(Math.random() * templates.length);
   const base = templates[idx]!;
-  if (topic.length > 5 && topic.length < 80 && !["psychology", "facts", "history", "motivation", "horror", "finance", "ai"].includes(t)) {
-    return `Did you know this about ${topic}? ${base}`;
+
+  // NEVER include the niche title or "Did you know this about [topic]?"
+  // If the user entered a custom sentence with >=5 words that doesn't just name the niche, use it directly as the hook
+  const isNicheTitle = [
+    "psychology", "facts", "mind-bending facts", "mind bending facts",
+    "history", "untold history", "finance", "money", "money & wealth",
+    "ai", "ai & future tech", "motivation", "deep mindset", "horror",
+    "unexplained horror", "random", "viral", "short", "video",
+  ].some((n) => t === n || t.includes(`about ${n}`));
+
+  if (!isNicheTitle && topic.length > 20 && topic.split(" ").length >= 5) {
+    const cleanTopic = topic.replace(/^(create a short|generate a short|make a short|did you know|fact|hook):\s*/i, "").trim();
+    if (cleanTopic.length > 15) {
+      return `${cleanTopic}. ${base}`;
+    }
   }
+
+  // Jump straight into the viral hook with zero niche title prefix
   return base;
 }
 
@@ -204,18 +220,8 @@ export async function ensureMinecraftBackground(customUrl?: string | null): Prom
     return cached;
   }
 
-  // Look for generated parkour master
-  const candidates = [
-    path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000) return p;
-  }
-
-  const dims = dimensionsFor("720p", "9:16");
-  return await generateSolidVideo(dims.width, dims.height, 30);
+  // Generate or return guaranteed local 60fps master video (zero static photos)
+  return await backgroundPool.ensureLocalMasterVideo();
 }
 
 async function generateSolidVideo(width: number, height: number, seconds: number): Promise<string> {
@@ -395,6 +401,9 @@ export interface BuildShortOptions {
   useDefaultBackground?: boolean;
   userId?: string;
   existingJobId?: string;
+  autoPublishYouTube?: boolean;
+  youtubePrivacy?: "public" | "unlisted" | "private";
+  youtubeTags?: string[];
   onProgress?: (pct: number, step?: string) => void;
 }
 
@@ -405,7 +414,8 @@ export interface BuildShortResult {
   script: string;
   duration: number;
   cuesCount: number;
-  youtube?: any;
+  youtubeUrl?: string;
+  youtubeVideoId?: string;
 }
 
 export async function buildShortVideo(params: BuildShortOptions): Promise<BuildShortResult> {
@@ -550,6 +560,37 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     fs.copyFileSync(outPath, jobFilePath);
   } catch {}
 
+  // 7. Auto-Publish to YouTube Shorts (if configured & requested)
+  let ytResult: { videoId: string; youtubeUrl: string } | undefined = undefined;
+  const ytConfig = youtubeService.getConfig();
+  const shouldPublish = params.autoPublishYouTube ?? ytConfig.autoPublish;
+
+  if (shouldPublish && ytConfig.clientId && ytConfig.clientSecret && ytConfig.refreshToken) {
+    try {
+      await reportProgress(98, "Uploading short to YouTube Shorts...");
+      const rawTitle = script.split("\n")[0]?.replace(/^[#\s*]+/, "").slice(0, 75) || `Viral Motivation #${Math.floor(Math.random() * 1000)}`;
+      const pubTitle = rawTitle.endsWith(".") ? rawTitle.slice(0, -1) : rawTitle;
+      const privacy = params.youtubePrivacy || ytConfig.defaultPrivacy || "public";
+      const tags = params.youtubeTags || ytConfig.defaultTags || ["shorts", "minecraft", "parkour", "viral", "facts"];
+
+      const uploadRes = await youtubeService.uploadShort({
+        videoPath: outPath,
+        title: pubTitle,
+        description: `${script}\n\nProduced with Soundwave AI Automated Shorts Pipeline.\n#shorts #minecraft #motivation #viral`,
+        privacy,
+        tags,
+      });
+
+      ytResult = {
+        videoId: uploadRes.videoId,
+        youtubeUrl: uploadRes.youtubeUrl,
+      };
+      console.log(`[agentShort] Auto-published to YouTube Shorts: ${uploadRes.youtubeUrl}`);
+    } catch (ytErr: any) {
+      console.error("[agentShort] YouTube auto-publish error (continuing):", ytErr.message);
+    }
+  }
+
   const finalUrl = `/api/v1/export/jobs/${job.id}/download`;
   await store.updateJob(job.id, {
     status: "COMPLETED",
@@ -558,52 +599,17 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     completedAt: new Date().toISOString(),
   });
 
-  // 7. Auto-Post to YouTube if enabled
-  let youtubeResult: any = null;
-  try {
-    const ytConfig = youtubePublisher.getConfig();
-    if (ytConfig.connected && ytConfig.autoPostEnabled) {
-      await reportProgress(98, "Publishing short directly to YouTube Shorts...");
-      const titleTopic = (params.topic || "Daily Wisdom")
-        .split(" ")
-        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-      const ytTitle = `${titleTopic} #shorts #facts #motivation`.slice(0, 100);
-      
-      const pubRes = await youtubePublisher.uploadShort({
-        videoPath: outPath,
-        title: ytTitle,
-        description: `${script}\n\nGenerated automatically with Soundwave AI.\n\n#shorts #minecraftparkour #facts #viral`,
-        privacy: ytConfig.defaultPrivacy || "public",
-        tags: ["shorts", "minecraft", "parkour", "ai", "soundwave", "facts", "motivation"],
-      });
-
-      youtubeResult = {
-        videoId: pubRes.videoId,
-        videoUrl: pubRes.videoUrl,
-        title: pubRes.title,
-        status: "PUBLISHED",
-      };
-      console.log(`[agentShort] Short auto-published to YouTube: ${pubRes.videoUrl}`);
-    }
-  } catch (ytErr: any) {
-    console.warn(`[agentShort] YouTube auto-post failed: ${ytErr?.message || ytErr}`);
-    youtubeResult = {
-      status: "FAILED",
-      error: ytErr?.message || "YouTube auto-post failed",
-    };
-  }
-
   emitJob(job.id, {
     status: "COMPLETED",
     progress: 100,
-    step: "Video Ready!",
+    step: ytResult ? `Video Ready & Published to YouTube Shorts!` : "Video Ready!",
     outputUrl: finalUrl,
     videoUrl: finalUrl,
     downloadUrl: finalUrl,
+    youtubeUrl: ytResult?.youtubeUrl,
+    youtubeVideoId: ytResult?.videoId,
     script,
     duration: ttsResult.duration,
-    youtube: youtubeResult,
   });
 
   return {
@@ -613,12 +619,18 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     script,
     duration: ttsResult.duration,
     cuesCount: finalCues.length,
-    youtube: youtubeResult,
+    youtubeUrl: ytResult?.youtubeUrl,
+    youtubeVideoId: ytResult?.videoId,
   };
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
 const router = Router();
+
+const poolUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
+});
 
 const generateShortSchema = z.object({
   topic: z.string().min(2).max(500).default("motivation"),
@@ -628,6 +640,9 @@ const generateShortSchema = z.object({
   backgroundFileKey: z.string().max(200).nullable().optional(),
   resolution: z.enum(["720p", "1080p"]).default("720p"),
   async: z.boolean().default(false),
+  autoPublishYouTube: z.boolean().optional(),
+  youtubePrivacy: z.enum(["public", "unlisted", "private"]).optional(),
+  youtubeTags: z.array(z.string()).optional(),
 });
 
 router.post("/generate-short", optionalAuth, validate({ body: generateShortSchema }), async (req, res) => {
@@ -660,6 +675,9 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
         useDefaultBackground: body.useDefaultBackground,
         userId,
         existingJobId: job.id,
+        autoPublishYouTube: body.autoPublishYouTube,
+        youtubePrivacy: body.youtubePrivacy,
+        youtubeTags: body.youtubeTags,
       }).catch((e) => {
         console.error("[agentShort async] export failed:", (e as Error).message);
         store.updateJob(job.id, { status: "FAILED", errorMessage: (e as Error).message });
@@ -697,6 +715,9 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       backgroundFileKey: body.backgroundFileKey,
       useDefaultBackground: body.useDefaultBackground,
       userId,
+      autoPublishYouTube: body.autoPublishYouTube,
+      youtubePrivacy: body.youtubePrivacy,
+      youtubeTags: body.youtubeTags,
     });
 
     res.json({
@@ -704,6 +725,8 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       status: "COMPLETED",
       videoUrl: result.videoUrl,
       downloadUrl: result.downloadUrl,
+      youtubeUrl: result.youtubeUrl,
+      youtubeVideoId: result.youtubeVideoId,
       script: result.script,
       duration: result.duration,
       cues: result.cuesCount,
@@ -719,9 +742,39 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
         background: "ONLY minecraft_parkour high quality 1080p 4K 80s cache",
       },
     });
-  } catch (err) {
-    console.error("[agentShort] Error:", err);
-    res.status(500).json({ error: (err as Error).message || "Short generation failed" });
+  } catch (err: any) {
+    console.error("[agentShort] Generation failed:", err);
+    res.status(500).json({ error: err.message || "Failed to generate viral short" });
+  }
+});
+
+// Upload custom gameplay footage directly into the 60s background pool
+router.post("/background-pool/upload", poolUpload.single("video"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No video file provided." });
+    }
+
+    const tempDir = path.join(config.uploadsDir, "temp");
+    fs.mkdirSync(tempDir, { recursive: true });
+    const safeName = (req.file.originalname || "custom.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const tempPath = path.join(tempDir, `pool_upload_${Date.now()}_${safeName}`);
+    fs.writeFileSync(tempPath, req.file.buffer);
+
+    console.log(`[background-pool/upload] Received custom video upload: ${safeName} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
+    const clipsCreated = await backgroundPool.addCustomVideoFile(tempPath, req.file.originalname);
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {}
+
+    res.json({
+      ok: true,
+      clipsAdded: clipsCreated,
+      status: backgroundPool.getStatus(),
+    });
+  } catch (err: any) {
+    console.error("[background-pool/upload] Error:", err.message);
+    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
   }
 });
 
@@ -731,6 +784,15 @@ router.get("/background-pool", (_req, res) => {
     res.json(backgroundPool.getStatus());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/background-pool/purge", (_req, res) => {
+  try {
+    const purged = backgroundPool.purgeOldClips();
+    res.json({ ok: true, purged, status: backgroundPool.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
   }
 });
 

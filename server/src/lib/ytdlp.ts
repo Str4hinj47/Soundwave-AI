@@ -41,10 +41,15 @@ export function parseYouTubeUrl(raw: string): URL | null {
   return null;
 }
 
-/** Resolve how to launch yt-dlp: env override → vendored exe/zipapp → PATH. */
+/** Resolve how to launch yt-dlp: env override → vendored zipapp → PATH.
+ * The vendored zipapp needs a Python interpreter; POSIX spawns it directly
+ * via its shebang, Windows spawns it through `python`/`py`. */
 export function resolveYtDlpPath(): string {
   if (config.ytDlpPath) return config.ytDlpPath;
+  const isWin = process.platform === "win32";
   const candidates = [
+    path.join(process.cwd(), "..", "vendor", "yt-dlp", isWin ? "yt-dlp.exe" : "yt-dlp"),
+    path.join(process.cwd(), "vendor", "yt-dlp", isWin ? "yt-dlp.exe" : "yt-dlp"),
     path.join(process.cwd(), "..", "vendor", "yt-dlp", "yt-dlp.exe"),
     path.join(process.cwd(), "vendor", "yt-dlp", "yt-dlp.exe"),
     path.join(process.cwd(), "..", "vendor", "yt-dlp", "yt-dlp"),
@@ -54,7 +59,7 @@ export function resolveYtDlpPath(): string {
   ];
   for (const c of candidates) {
     try {
-      if (fs.existsSync(c)) {
+      if (fs.existsSync(c) && fs.statSync(c).size > 100_000) {
         return c;
       }
     } catch {
@@ -64,12 +69,10 @@ export function resolveYtDlpPath(): string {
   return "yt-dlp";
 }
 
-export function ytDlpSpawn(): { command: string; prefixArgs: string[] } {
+function ytDlpSpawn(): { command: string; prefixArgs: string[] } {
   const bin = resolveYtDlpPath();
-  if (process.platform === "win32") {
-    if (bin.toLowerCase().endsWith(".exe")) {
-      return { command: bin, prefixArgs: [] };
-    }
+  // A vendored zipapp can't be executed natively on Windows — run it via Python.
+  if (process.platform === "win32" && (bin.endsWith("yt-dlp") || bin.endsWith(".pyz")) && !bin.toLowerCase().endsWith(".exe")) {
     const py = process.env.PYTHON ?? "python";
     return { command: py, prefixArgs: [bin] };
   }

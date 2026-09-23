@@ -16,6 +16,18 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
+# Ensure yt_clipper is importable
+repo_root = Path(__file__).resolve().parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from yt_clipper.plugin import ParkourClippingPlugin
+    from yt_clipper.config import ClippingConfig
+    HAS_YT_CLIPPER = True
+except Exception:
+    HAS_YT_CLIPPER = False
+
 CURATED_LONG_PARKOUR_VIDEOS = [
     "https://www.youtube.com/watch?v=tiOl_mcAsF4", # 1 Hour 2026 4K 60fps Parkour
     "https://www.youtube.com/watch?v=BXUA2FncVPI", # 4K 2025 Background for Shorts
@@ -117,6 +129,32 @@ def slice_video_into_pool(source_path: Path, source_label: str) -> int:
 
     pool = get_pool_dir()
     ts = int(time.time() * 1000)
+
+    # 1. Use high-precision yt_clipper engine if available
+    if HAS_YT_CLIPPER:
+        try:
+            print(f"[CacheManager] Using yt_clipper engine to cut: {source_path.name}")
+            plugin = ParkourClippingPlugin(output_dir=str(get_base_dir()), ffmpeg_path=ffmpeg_bin)
+            clips_meta = plugin.clip_local(str(source_path), clip_length=CLIP_DURATION, overlap=0.0)
+            if clips_meta:
+                copied = 0
+                for c in clips_meta:
+                    src_f = Path(c["file"])
+                    if src_f.exists() and src_f.stat().st_size > 200 * 1024:
+                        dest_f = pool / f"mc_clip_{ts}_{src_f.name}"
+                        shutil.copy2(src_f, dest_f)
+                        copied += 1
+                if copied > 0:
+                    hist = load_history()
+                    hist["totalClipsGenerated"] = hist.get("totalClipsGenerated", 0) + copied
+                    hist["lastReplenishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    hist["currentSourceVideo"] = source_label
+                    save_history(hist)
+                    print(f"[CacheManager] yt_clipper sliced {copied} 60s clips into pool.")
+                    return copied
+        except Exception as e:
+            print(f"[CacheManager] yt_clipper local slicing fallback ({e}); using direct ffmpeg...")
+
     segment_pattern = str(pool / f"mc_clip_{ts}_%03d.mp4")
 
     print(f"[CacheManager] Slicing long video into 60s clips: {source_path.name}")
@@ -174,7 +212,21 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
             if u not in used:
                 target_url = u
                 break
-        # Then curated URLs
+        # Then discover with yt_clipper or use curated URLs
+        if not target_url and HAS_YT_CLIPPER:
+            try:
+                ffmpeg_bin, _ = find_tools()
+                plugin = ParkourClippingPlugin(output_dir=str(get_base_dir()), ffmpeg_path=ffmpeg_bin)
+                top_vids = plugin.find_videos(limit=5)
+                for tv in top_vids:
+                    u = tv.get("url") or f"https://www.youtube.com/watch?v={tv.get('video_id')}"
+                    if u and u not in used and not is_blacklisted(u):
+                        target_url = u
+                        print(f"[CacheManager] yt_clipper discovered top video: {tv.get('title')} (score: {tv.get('score')})")
+                        break
+            except Exception as e:
+                print(f"[CacheManager] yt_clipper discovery fallback: {e}")
+
         if not target_url:
             for u in CURATED_LONG_PARKOUR_VIDEOS:
                 if u not in used:

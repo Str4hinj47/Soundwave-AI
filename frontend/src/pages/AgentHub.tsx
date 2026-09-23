@@ -20,9 +20,9 @@ import {
   TrendingUp, 
   Flame, 
   Eye, 
-  Youtube,
-  ExternalLink,
-  Check,
+  Upload, 
+  Youtube, 
+  ExternalLink, 
 } from "lucide-react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
@@ -70,16 +70,6 @@ interface ChatMessage {
   videoUrl?: string;
   downloadUrl?: string;
   youtubeUrl?: string;
-  youtubeTitle?: string;
-}
-
-export interface YouTubeConfigState {
-  connected: boolean;
-  channelTitle?: string;
-  autoPostEnabled: boolean;
-  defaultPrivacy: "public" | "unlisted" | "private";
-  hasClientId: boolean;
-  hasRefreshToken: boolean;
 }
 
 interface MacroWorkflow {
@@ -168,6 +158,7 @@ export function AgentHub() {
 
   // Modals & Tools
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "youtube" | "orb">("general");
   const [generatorModalOpen, setGeneratorModalOpen] = useState(false);
   const [macrosModalOpen, setMacrosModalOpen] = useState(false);
 
@@ -195,25 +186,38 @@ export function AgentHub() {
   const [generatedScript, setGeneratedScript] = useState<string>("");
   const [completedVideoUrl, setCompletedVideoUrl] = useState<string | null>(null);
 
-  // YouTube Channel & Publishing State
-  const [ytConfig, setYtConfig] = useState<YouTubeConfigState>({
+  // YouTube Automation State
+  const [ytStatus, setYtStatus] = useState<{
+    connected: boolean;
+    configured: boolean;
+    channelTitle: string | null;
+    channelId: string | null;
+    autoPublish: boolean;
+    defaultPrivacy: "public" | "unlisted" | "private";
+    defaultTags: string[];
+  }>({
     connected: false,
-    channelTitle: undefined,
-    autoPostEnabled: false,
+    configured: false,
+    channelTitle: null,
+    channelId: null,
+    autoPublish: false,
     defaultPrivacy: "public",
-    hasClientId: false,
-    hasRefreshToken: false,
+    defaultTags: ["shorts", "minecraft", "viral"],
   });
-  const [ytClientIdInput, setYtClientIdInput] = useState("");
-  const [ytClientSecretInput, setYtClientSecretInput] = useState("");
-  const [ytRefreshTokenInput, setYtRefreshTokenInput] = useState("");
+  const [ytClientId, setYtClientId] = useState("");
+  const [ytClientSecret, setYtClientSecret] = useState("");
+  const [ytRefreshToken, setYtRefreshToken] = useState("");
+  const [ytAutoPublish, setYtAutoPublish] = useState(false);
+  const [ytPrivacy, setYtPrivacy] = useState<"public" | "unlisted" | "private">("public");
+  const [isTestingYt, setIsTestingYt] = useState(false);
   const [isSavingYt, setIsSavingYt] = useState(false);
-  const [isPublishingYt, setIsPublishingYt] = useState(false);
-  const [latestYtVideo, setLatestYtVideo] = useState<{
-    videoId: string;
-    videoUrl: string;
-    title: string;
-  } | null>(null);
+  const [isUploadingToYt, setIsUploadingToYt] = useState(false);
+  const [uploadedYoutubeUrl, setUploadedYoutubeUrl] = useState<string | null>(null);
+
+  // Custom Gameplay Video Upload State
+  const [isUploadingGameplay, setIsUploadingGameplay] = useState(false);
+  const gameplayFileRef = useRef<HTMLInputElement | null>(null);
+  const generatorGameplayFileRef = useRef<HTMLInputElement | null>(null);
 
   // Ghost Operator Macros State
   const [macrosList, setMacrosList] = useState<MacroWorkflow[]>([]);
@@ -230,6 +234,29 @@ export function AgentHub() {
 
   // Refs
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Status Fetchers
+  const fetchPoolStatus = async () => {
+    try {
+      const res = await fetch("/api/v1/agent/background-pool");
+      if (res.ok) {
+        const data = await res.json();
+        setPoolStatus(data);
+      }
+    } catch {}
+  };
+
+  const fetchYtStatus = async () => {
+    try {
+      const res = await fetch("/api/v1/youtube/status");
+      if (res.ok) {
+        const data = await res.json();
+        setYtStatus(data);
+        setYtAutoPublish(data.autoPublish || false);
+        setYtPrivacy(data.defaultPrivacy || "public");
+      }
+    } catch {}
+  };
 
   // Save chat to localStorage
   useEffect(() => {
@@ -258,144 +285,10 @@ export function AgentHub() {
       })
       .catch(() => {});
 
-    // Initial background pool status
+    // Initial background pool status & YouTube status
     fetchPoolStatus();
-
-    // Initial YouTube connection status
-    fetchYouTubeConfig();
+    fetchYtStatus();
   }, []);
-
-  const fetchYouTubeConfig = async () => {
-    try {
-      const res = await fetch("/api/v1/youtube/status");
-      if (res.ok) {
-        const data = await res.json();
-        setYtConfig(data);
-      }
-    } catch (e) {
-      console.warn("Failed to fetch YouTube status:", e);
-    }
-  };
-
-  const handleToggleAutoPost = async (enabled: boolean) => {
-    try {
-      const res = await fetch("/api/v1/youtube/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ autoPostEnabled: enabled }),
-      });
-      const data = await res.json();
-      if (res.ok && data.config) {
-        setYtConfig(data.config);
-        toast.success(
-          enabled ? "YouTube Auto-Post Enabled" : "YouTube Auto-Post Disabled",
-          enabled ? "Rendered shorts will automatically publish to YouTube." : "Manual publishing active."
-        );
-      }
-    } catch (err: any) {
-      toast.error("Config Error", err.message);
-    }
-  };
-
-  const handleConnectYouTubeOAuth = async () => {
-    try {
-      const res = await fetch("/api/v1/youtube/auth-url");
-      const data = await res.json();
-      if (res.ok && data.url) {
-        window.open(data.url, "_blank", "width=600,height=700");
-        toast.info("Google Authorization", "Complete sign-in in the popup window.");
-      } else {
-        toast.error("OAuth Notice", data.message || "Please provide Google Client ID and Secret in settings.");
-      }
-    } catch (err: any) {
-      toast.error("OAuth Error", err.message);
-    }
-  };
-
-  const handleSaveYouTubeCredentials = async () => {
-    setIsSavingYt(true);
-    try {
-      const body: any = {};
-      if (ytClientIdInput.trim()) body.clientId = ytClientIdInput.trim();
-      if (ytClientSecretInput.trim()) body.clientSecret = ytClientSecretInput.trim();
-      if (ytRefreshTokenInput.trim()) body.refreshToken = ytRefreshTokenInput.trim();
-      body.defaultPrivacy = ytConfig.defaultPrivacy;
-      body.autoPostEnabled = ytConfig.autoPostEnabled;
-
-      const res = await fetch("/api/v1/youtube/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (res.ok && data.config) {
-        setYtConfig(data.config);
-        toast.success("YouTube Configuration Saved", "Credentials recorded successfully.");
-      } else {
-        throw new Error(data.message || "Failed to save configuration");
-      }
-    } catch (err: any) {
-      toast.error("Config Error", err.message);
-    } finally {
-      setIsSavingYt(false);
-    }
-  };
-
-  const handleDisconnectYouTube = async () => {
-    try {
-      const res = await fetch("/api/v1/youtube/disconnect", { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.config) {
-        setYtConfig(data.config);
-        setLatestYtVideo(null);
-        toast.info("YouTube Disconnected", "Channel unlinked.");
-      }
-    } catch (err: any) {
-      toast.error("Disconnect Error", err.message);
-    }
-  };
-
-  const handlePublishToYouTube = async (targetVideoUrl?: string, customTitle?: string) => {
-    const vid = targetVideoUrl || completedVideoUrl;
-    if (!vid) {
-      toast.error("No Video Found", "Please generate or select a video first.");
-      return;
-    }
-    if (!ytConfig.connected) {
-      toast.error("YouTube Not Connected", "Connect your YouTube channel in Settings first.");
-      setSettingsOpen(true);
-      return;
-    }
-    setIsPublishingYt(true);
-    try {
-      const defaultTitle = `${customTopic || selectedNiche || "Mind-Blowing Truth"} #shorts #facts`.slice(0, 100);
-      const title = customTitle || defaultTitle;
-      const res = await fetch("/api/v1/youtube/publish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoUrl: vid,
-          title,
-          description: `${generatedScript || "Viral short rendered with Soundwave AI"}\n\n#shorts #minecraftparkour #facts #viral`,
-          privacy: ytConfig.defaultPrivacy || "public",
-          tags: ["shorts", "minecraft", "parkour", "ai", "soundwave", "facts"],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || "Publishing to YouTube failed");
-
-      setLatestYtVideo({
-        videoId: data.videoId,
-        videoUrl: data.videoUrl,
-        title: data.title,
-      });
-      toast.success("Short Published to YouTube!", `Available at: ${data.videoUrl}`);
-    } catch (err: any) {
-      toast.error("YouTube Publish Error", err.message || "Failed to publish");
-    } finally {
-      setIsPublishingYt(false);
-    }
-  };
 
   // Clock & Uptime Ticker
   useEffect(() => {
@@ -661,15 +554,139 @@ export function AgentHub() {
     }
   };
 
-  // ── Background Gameplay Pool Handlers ──────────────────────────────────
-  const fetchPoolStatus = async () => {
+  // ── YouTube API & Automation Handlers ──────────────────────────────────
+  const handleTestYt = async () => {
     try {
-      const res = await fetch("/api/v1/agent/background-pool");
-      if (res.ok) {
-        const data = await res.json();
-        setPoolStatus(data);
+      setIsTestingYt(true);
+      const res = await fetch("/api/v1/youtube/test", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        toast.success("YouTube Connected", `Authenticated channel: ${data.channelTitle || "Active"}`);
+        fetchYtStatus();
+      } else {
+        toast.error("Connection Failed", data.error || "Could not verify credentials with Google");
       }
-    } catch {}
+    } catch (err: any) {
+      toast.error("Test Failed", err.message);
+    } finally {
+      setIsTestingYt(false);
+    }
+  };
+
+  const handleSaveYtConfig = async () => {
+    try {
+      setIsSavingYt(true);
+      const payload: any = {
+        autoPublish: ytAutoPublish,
+        defaultPrivacy: ytPrivacy,
+      };
+      if (ytClientId.trim()) payload.clientId = ytClientId.trim();
+      if (ytClientSecret.trim()) payload.clientSecret = ytClientSecret.trim();
+      if (ytRefreshToken.trim()) payload.refreshToken = ytRefreshToken.trim();
+
+      const res = await fetch("/api/v1/youtube/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast.success("YouTube Settings Saved", data.connected ? "Channel linked and auto-publish ready!" : "Preferences updated.");
+        fetchYtStatus();
+      } else {
+        toast.error("Save Error", data.error || "Failed to update configuration");
+      }
+    } catch (err: any) {
+      toast.error("Save Error", err.message);
+    } finally {
+      setIsSavingYt(false);
+    }
+  };
+
+  const handleManualUploadYt = async (targetVideoUrl: string, scriptText?: string) => {
+    if (!ytStatus.connected && !ytStatus.configured) {
+      toast.error("YouTube Not Connected", "Please enter your YouTube API credentials in Settings first.");
+      setSettingsOpen(true);
+      return;
+    }
+
+    try {
+      setIsUploadingToYt(true);
+      toast.info("Uploading to YouTube", "Transmitting short to YouTube Shorts API...");
+      const rawTitle = (scriptText || generatedScript || customTopic || selectedNiche)
+        .split("\n")[0]
+        ?.replace(/^[#\s*]+/, "")
+        .slice(0, 75) || `Viral Short #${Math.floor(Math.random() * 1000)}`;
+
+      const res = await fetch("/api/v1/youtube/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: targetVideoUrl,
+          title: rawTitle,
+          description: scriptText || generatedScript || "",
+          privacy: ytPrivacy,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setUploadedYoutubeUrl(data.youtubeUrl);
+        toast.success("Published to YouTube Shorts!", data.youtubeUrl);
+        speakText("Short successfully published to YouTube Shorts!");
+      } else {
+        throw new Error(data.error || "Upload failed");
+      }
+    } catch (err: any) {
+      toast.error("YouTube Upload Failed", err.message);
+    } finally {
+      setIsUploadingToYt(false);
+    }
+  };
+
+  // ── Gameplay Video Upload & Purge Handlers ──────────────────────────────
+  const handlePurgePool = async () => {
+    try {
+      const res = await fetch("/api/v1/agent/background-pool/purge", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Pool Purged", `Cleared ${data.purged || 0} old/legacy clips. Pool is fresh.`);
+        fetchPoolStatus();
+      }
+    } catch (err: any) {
+      toast.error("Purge Failed", err.message);
+    }
+  };
+
+  const handleGameplayUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingGameplay(true);
+      toast.info("Processing Gameplay", `Uploading "${file.name}" and slicing into 60s clips...`);
+      const formData = new FormData();
+      formData.append("video", file);
+
+      const res = await fetch("/api/v1/agent/background-pool/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast.success("Gameplay Sliced", `Added ${data.clipsAdded || "new"} 60s clips to rotation pool!`);
+        if (data.status) setPoolStatus(data.status);
+      } else {
+        throw new Error(data.error || "Upload failed");
+      }
+    } catch (err: any) {
+      toast.error("Upload Error", err.message);
+    } finally {
+      setIsUploadingGameplay(false);
+      if (gameplayFileRef.current) gameplayFileRef.current.value = "";
+      if (generatorGameplayFileRef.current) generatorGameplayFileRef.current.value = "";
+    }
   };
 
   const handleReplenishPool = async (url?: string) => {
@@ -715,6 +732,8 @@ export function AgentHub() {
         resolution,
         useDefaultBackground: true,
         async: true,
+        autoPublishYouTube: ytAutoPublish,
+        youtubePrivacy: ytPrivacy,
       };
 
       const res = await fetch("/api/v1/agent/generate-short", {
@@ -765,36 +784,26 @@ export function AgentHub() {
 
           if (resultData.script) setGeneratedScript(resultData.script);
           setCompletedVideoUrl(finalVideoUrl);
-
-          let ytLink: string | undefined;
-          let ytTitle: string | undefined;
-          if (resultData.youtube && resultData.youtube.status === "PUBLISHED" && resultData.youtube.videoUrl) {
-            ytLink = resultData.youtube.videoUrl;
-            ytTitle = resultData.youtube.title;
-            setLatestYtVideo({
-              videoId: resultData.youtube.videoId,
-              videoUrl: resultData.youtube.videoUrl,
-              title: resultData.youtube.title,
-            });
-            toast.success("YouTube Short Auto-Posted!", "Live on YouTube Shorts.");
+          if (resultData.youtubeUrl) {
+            setUploadedYoutubeUrl(resultData.youtubeUrl);
           }
 
+          const hasYt = !!resultData.youtubeUrl;
           const successNotice: ChatMessage = {
             id: Date.now().toString(),
             sender: "assistant",
-            text: ytLink
-              ? `Rendered viral short for "${payload.topic}" (${resolution} 60fps) and auto-published directly to YouTube Shorts!`
+            text: hasYt
+              ? `Rendered viral short for "${payload.topic}" (${resolution} 60fps) and automatically published to YouTube Shorts: ${resultData.youtubeUrl}`
               : `Rendered viral short for "${payload.topic}" (${resolution} 60fps). Your video is ready to preview, download, or post to YouTube!`,
             time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
             tag: "AUDIO",
             videoUrl: finalVideoUrl,
             downloadUrl: finalVideoUrl,
-            youtubeUrl: ytLink,
-            youtubeTitle: ytTitle,
+            youtubeUrl: resultData.youtubeUrl,
           };
           setChatMessages((prev) => [...prev, successNotice]);
-          speakText("Your video has finished rendering and is ready!");
-          toast.success("Video Ready", "Short generated successfully.");
+          speakText(hasYt ? "Your short has been rendered and posted to YouTube Shorts!" : "Your video has finished rendering and is ready to download!");
+          toast.success(hasYt ? "Published to YouTube!" : "Video Ready", hasYt ? resultData.youtubeUrl : "Short generated successfully.");
           resolve();
         };
 
@@ -934,22 +943,6 @@ export function AgentHub() {
             <span className="hidden sm:inline text-gray-400">clips in pool</span>
           </div>
 
-          {/* YouTube Status Capsule */}
-          <div
-            onClick={() => setSettingsOpen(true)}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-mono cursor-pointer transition-colors ${
-              ytConfig.connected
-                ? "border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                : "border-[#172A4A] bg-[#0C172E] text-gray-400 hover:text-white"
-            }`}
-            title={ytConfig.connected ? `YouTube: Connected (${ytConfig.channelTitle || "Channel"})` : "Click to configure YouTube API"}
-          >
-            <Youtube className={`h-3.5 w-3.5 ${ytConfig.connected ? "text-red-500" : "text-gray-500"}`} />
-            <span className="hidden sm:inline">
-              {ytConfig.connected ? (ytConfig.autoPostEnabled ? "Auto-Post ON" : "YouTube Linked") : "YouTube: Off"}
-            </span>
-          </div>
-
           <button
             onClick={() => setSettingsOpen(true)}
             className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#172A4A] bg-[#0C172E] text-gray-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors cursor-pointer"
@@ -1033,13 +1026,24 @@ export function AgentHub() {
                 <Film className="h-3.5 w-3.5 text-cyan-400" />
                 Background Gameplay Pool
               </span>
-              <button
-                onClick={fetchPoolStatus}
-                className="text-gray-400 hover:text-cyan-400 transition-colors"
-                title="Refresh pool status"
-              >
-                <RefreshCw className="h-3 w-3" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePurgePool}
+                  className="text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
+                  title="Purge legacy/cached clips from disk"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchPoolStatus}
+                  className="text-gray-400 hover:text-cyan-400 transition-colors cursor-pointer"
+                  title="Refresh pool status"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center justify-between">
@@ -1087,9 +1091,108 @@ export function AgentHub() {
                   {isReplenishingPool ? "Slicing..." : "Replenish"}
                 </button>
               </div>
+
+              {/* Custom Gameplay Upload */}
+              <div className="flex items-center justify-between pt-0.5">
+                <input
+                  type="file"
+                  ref={gameplayFileRef}
+                  onChange={handleGameplayUpload}
+                  accept="video/mp4,video/webm,video/quicktime,video/mkv"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => gameplayFileRef.current?.click()}
+                  disabled={isUploadingGameplay}
+                  className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] hover:border-cyan-400/60 hover:bg-cyan-500/10 text-gray-300 hover:text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="h-3 w-3 text-cyan-400" />
+                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Custom Gameplay (MP4)"}
+                </button>
+              </div>
+
               <p className="text-[10px] text-gray-400 italic">
-                *Clips are consumed and deleted 1-by-1. When empty, Soundwave auto-downloads a fresh unused video.
+                *Clips are sliced into 60s segments, rotated, and auto-deleted on use. Never reuses the same video.
               </p>
+            </div>
+          </div>
+
+          {/* YouTube Shorts Studio & Automation Card */}
+          <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-2.5 font-mono">
+            <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
+              <span className="flex items-center gap-1.5 font-semibold text-gray-200">
+                <Youtube className="h-3.5 w-3.5 text-red-500" />
+                YouTube Automation
+              </span>
+              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                ytStatus.connected || ytStatus.configured
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  : "bg-gray-800 text-gray-400 border border-gray-700"
+              }`}>
+                {ytStatus.connected || ytStatus.configured ? (ytStatus.channelTitle || "CONNECTED") : "NOT LINKED"}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400">Auto-Post Shorts:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !ytAutoPublish;
+                  setYtAutoPublish(next);
+                  fetch("/api/v1/youtube/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ autoPublish: next }),
+                  }).then(() => fetchYtStatus());
+                }}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-all cursor-pointer ${
+                  ytAutoPublish ? "bg-red-600 text-white shadow-sm shadow-red-500/40" : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                {ytAutoPublish ? "ENABLED" : "DISABLED"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400">Default Visibility:</span>
+              <span className="font-bold uppercase text-white text-[11px]">{ytPrivacy}</span>
+            </div>
+
+            <div className="pt-1 flex gap-1.5">
+              {completedVideoUrl && !uploadedYoutubeUrl && (
+                <button
+                  type="button"
+                  onClick={() => handleManualUploadYt(completedVideoUrl, generatedScript)}
+                  disabled={isUploadingToYt}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold py-1.5 text-[11px] transition-all shadow-md shadow-red-600/30 cursor-pointer disabled:opacity-50"
+                >
+                  <Youtube className="h-3 w-3" />
+                  {isUploadingToYt ? "Posting..." : "Post to YouTube"}
+                </button>
+              )}
+              {uploadedYoutubeUrl && (
+                <a
+                  href={uploadedYoutubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-red-600/20 border border-red-500/40 hover:bg-red-600/30 text-red-300 font-bold py-1.5 text-[11px] transition-all cursor-pointer"
+                >
+                  <Youtube className="h-3 w-3 text-red-400" />
+                  View on YouTube
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="rounded-lg border border-[#14233D] bg-[#070D18] hover:border-cyan-400 text-gray-300 hover:text-white px-2 py-1 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                title="Configure YouTube API Keys"
+              >
+                <SettingsIcon className="h-3 w-3" />
+                Setup
+              </button>
             </div>
           </div>
 
@@ -1113,7 +1216,7 @@ export function AgentHub() {
                   className="h-full w-full object-contain"
                 />
               </div>
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1.5">
                 <a
                   href={completedVideoUrl}
                   download="soundwave_viral_short.mp4"
@@ -1122,37 +1225,27 @@ export function AgentHub() {
                   <Download className="h-3.5 w-3.5" />
                   Download Short (MP4)
                 </a>
-
-                {ytConfig.connected ? (
-                  <button
-                    onClick={() => handlePublishToYouTube()}
-                    disabled={isPublishingYt}
-                    className="flex items-center justify-center gap-1.5 w-full rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold py-1.5 text-xs transition-all shadow-md shadow-red-950/40 cursor-pointer disabled:opacity-50"
-                  >
-                    <Youtube className="h-3.5 w-3.5" />
-                    {isPublishingYt ? "Uploading to YouTube..." : "Post to YouTube Shorts"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setSettingsOpen(true)}
-                    className="flex items-center justify-center gap-1.5 w-full rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-bold py-1.5 text-xs transition-all cursor-pointer"
-                  >
-                    <Youtube className="h-3.5 w-3.5 text-red-400" />
-                    Connect YouTube to 1-Click Post
-                  </button>
-                )}
-
-                {latestYtVideo && (
+                {uploadedYoutubeUrl ? (
                   <a
-                    href={latestYtVideo.videoUrl}
+                    href={uploadedYoutubeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold py-1 text-[11px] transition-all"
+                    className="flex items-center justify-center gap-1.5 w-full rounded-lg bg-red-950/50 border border-red-500/40 text-red-300 hover:bg-red-900/60 font-bold py-1.5 text-xs transition-all cursor-pointer"
                   >
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span>View on YouTube Shorts</span>
+                    <Youtube className="h-3.5 w-3.5 text-red-500" />
+                    Live on YouTube Shorts
                     <ExternalLink className="h-3 w-3" />
                   </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleManualUploadYt(completedVideoUrl, generatedScript)}
+                    disabled={isUploadingToYt}
+                    className="flex items-center justify-center gap-1.5 w-full rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 font-bold py-1.5 text-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Youtube className="h-3.5 w-3.5 text-red-500" />
+                    {isUploadingToYt ? "Posting..." : "1-Click Post to YouTube Shorts"}
+                  </button>
                 )}
               </div>
             </div>
@@ -1360,48 +1453,37 @@ export function AgentHub() {
                       />
                     </div>
 
-                    <div className="flex flex-col gap-1.5 pt-1">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pt-1">
+                      <a
+                        href={msg.downloadUrl || msg.videoUrl}
+                        download="soundwave_viral_short.mp4"
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#070B14] font-bold py-1.5 px-3 text-xs transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download Video (MP4)
+                      </a>
+                      {msg.youtubeUrl ? (
                         <a
-                          href={msg.downloadUrl || msg.videoUrl}
-                          download="soundwave_viral_short.mp4"
-                          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#070B14] font-bold py-1.5 px-3 text-xs transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Download MP4
-                        </a>
-
-                        {ytConfig.connected ? (
-                          <button
-                            onClick={() => handlePublishToYouTube(msg.videoUrl || msg.downloadUrl)}
-                            disabled={isPublishingYt}
-                            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold py-1.5 px-3 text-xs transition-all shadow-md shadow-red-950/40 cursor-pointer disabled:opacity-50"
-                          >
-                            <Youtube className="h-3.5 w-3.5" />
-                            {isPublishingYt ? "Posting..." : "Post to YouTube"}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setSettingsOpen(true)}
-                            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-bold py-1.5 px-2 text-xs transition-all cursor-pointer"
-                          >
-                            <Youtube className="h-3.5 w-3.5 text-red-400" />
-                            YouTube API
-                          </button>
-                        )}
-                      </div>
-
-                      {Boolean(msg.youtubeUrl || latestYtVideo?.videoUrl) && (
-                        <a
-                          href={msg.youtubeUrl || latestYtVideo?.videoUrl}
+                          href={msg.youtubeUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold py-1 px-3 text-[11px] transition-all"
+                          className="flex items-center gap-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 border border-red-500/50 text-red-300 font-bold py-1.5 px-3 text-xs transition-all cursor-pointer"
                         >
-                          <Check className="h-3 w-3 text-emerald-400" />
-                          <span>Watch on YouTube Shorts</span>
-                          <ExternalLink className="h-3 w-3" />
+                          <Youtube className="h-3.5 w-3.5 text-red-500" />
+                          Shorts Link
+                          <ExternalLink className="h-2.5 w-2.5" />
                         </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleManualUploadYt(msg.videoUrl || msg.downloadUrl!, msg.text)}
+                          disabled={isUploadingToYt}
+                          className="flex items-center gap-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 font-bold py-1.5 px-3 text-xs transition-all cursor-pointer disabled:opacity-50"
+                          title="Post this video to YouTube Shorts"
+                        >
+                          <Youtube className="h-3.5 w-3.5 text-red-500" />
+                          {isUploadingToYt ? "Posting..." : "Post to YouTube"}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1479,6 +1561,7 @@ export function AgentHub() {
           open={generatorModalOpen}
           onClose={() => setGeneratorModalOpen(false)}
           title="1-Click Viral Short Generator"
+          size="lg"
         >
           <div className="space-y-4 font-mono text-xs">
             <p className="text-gray-400 text-[11px]">
@@ -1495,9 +1578,8 @@ export function AgentHub() {
                     type="button"
                     onClick={() => {
                       setSelectedNiche(n.id);
-                      if (!customTopic) setCustomTopic(n.name);
                     }}
-                    className={`p-2 rounded-lg border text-left transition-all ${
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
                       selectedNiche === n.id
                         ? "border-cyan-400 bg-cyan-500/10 text-white"
                         : "border-[#172A4A] bg-[#070D18] text-gray-400 hover:text-white"
@@ -1531,14 +1613,13 @@ export function AgentHub() {
                 <label className="text-gray-300 font-semibold">Voice Talent</label>
                 <select
                   value={selectedVoice}
-                  onChange={(e) => handleVoiceChange(e.target.value)}
+                  onChange={(e) => setSelectedVoice(e.target.value)}
                   className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
                 >
-                  <option value="en-US-ChristopherNeural">Christopher (en-US Male - Authority)</option>
-                  <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
-                  <option value="en-US-EricNeural">Eric (en-US Male - Dynamic Narrator)</option>
-                  <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
-                  <option value="en-US-AndrewNeural">Andrew (en-US Male - Warm Storyteller)</option>
+                  <option value="en-US-JennyNeural">Jenny (en-US Female)</option>
+                  <option value="en-US-GuyNeural">Guy (en-US Male)</option>
+                  <option value="en-US-ChristopherNeural">Christopher (en-US Authority)</option>
+                  <option value="en-US-AriaNeural">Aria (en-US Expressive)</option>
                 </select>
               </div>
 
@@ -1555,41 +1636,90 @@ export function AgentHub() {
               </div>
             </div>
 
-            {/* YouTube Auto-Post Option */}
-            <div className="flex items-center justify-between rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5">
-              <div className="flex items-center gap-2">
-                <Youtube className="h-4 w-4 text-red-500" />
-                <div>
-                  <span className="font-semibold text-gray-200 text-xs">Auto-Post to YouTube Shorts</span>
-                  <p className="text-[10px] text-gray-500">
-                    {ytConfig.connected
-                      ? `Channel connected (${ytConfig.channelTitle || "Ready"}). Uploads automatically on render completion.`
-                      : "Channel not connected. You can link your YouTube API in settings."}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleToggleAutoPost(!ytConfig.autoPostEnabled)}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold transition-all cursor-pointer ${
-                  ytConfig.autoPostEnabled
-                    ? "bg-red-600 text-white shadow-sm shadow-red-600/30"
-                    : "bg-gray-800 text-gray-400 hover:text-white"
-                }`}
-              >
-                {ytConfig.autoPostEnabled ? "ON" : "OFF"}
-              </button>
-            </div>
-
-            {/* Background Footage Source Info */}
-            <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 space-y-1">
+            {/* Background Footage Source Info & Upload */}
+            <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 space-y-2">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-semibold text-gray-300">Background Footage Source</span>
-                <span className="text-cyan-400 font-bold">Auto-Scans Soundwave Pool & Cache</span>
+                <span className="text-cyan-400 font-bold">
+                  {poolStatus.clipsRemaining > 0 ? `${poolStatus.clipsRemaining} Clips in Rotation` : "Auto-Replenish Active"}
+                </span>
               </div>
-              <p className="text-[10px] text-gray-500 leading-normal">
-                Soundwave auto-detects your local clips in <span className="text-cyan-400">background_cache</span>, <span className="text-cyan-400">clips</span>, or your <span className="text-cyan-400">Videos</span> folder. Any .mp4 clip placed in those folders will be sliced and used automatically.
+              <p className="text-[10px] text-gray-400 leading-normal">
+                Continuous 60s gameplay slices. Auto-rotates, consumes without duplicates, and auto-fetches fresh runs.
               </p>
+              <div className="pt-1 flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={generatorGameplayFileRef}
+                  onChange={handleGameplayUpload}
+                  accept="video/mp4,video/webm,video/quicktime,video/mkv"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => generatorGameplayFileRef.current?.click()}
+                  disabled={isUploadingGameplay}
+                  className="flex-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="h-3 w-3 text-cyan-400" />
+                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Custom Gameplay Footage"}
+                </button>
+              </div>
+            </div>
+
+            {/* YouTube Shorts Auto-Publish Section */}
+            <div className="rounded-lg border border-red-500/30 bg-red-950/20 p-2.5 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-gray-200 flex items-center gap-1.5">
+                  <Youtube className="h-3.5 w-3.5 text-red-500" />
+                  YouTube Shorts Auto-Publish
+                </span>
+                <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold ${
+                  ytStatus.connected || ytStatus.configured
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "bg-gray-800 text-gray-400 border border-gray-700"
+                }`}>
+                  {ytStatus.connected || ytStatus.configured ? (ytStatus.channelTitle || "LINKED") : "NOT LINKED"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] pt-0.5">
+                <label className="text-gray-300 flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ytAutoPublish}
+                    onChange={(e) => setYtAutoPublish(e.target.checked)}
+                    className="rounded border-[#172A4A] bg-[#070D18] text-red-600 focus:ring-0 cursor-pointer h-3.5 w-3.5"
+                  />
+                  <span>Automatically post to YouTube Shorts after rendering</span>
+                </label>
+                <select
+                  value={ytPrivacy}
+                  onChange={(e) => setYtPrivacy(e.target.value as any)}
+                  className="rounded border border-[#172A4A] bg-[#070D18] px-2 py-0.5 text-[10px] text-white focus:outline-none"
+                >
+                  <option value="public">Public</option>
+                  <option value="unlisted">Unlisted</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+
+              {(!ytStatus.connected && !ytStatus.configured) && (
+                <p className="text-[10px] text-gray-400">
+                  Tip: Add your Google OAuth keys in{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeneratorModalOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                    className="text-red-400 underline hover:text-red-300 cursor-pointer"
+                  >
+                    Assistant Settings
+                  </button>{" "}
+                  to enable automatic posting.
+                </p>
+              )}
             </div>
 
             {/* Progress Bar */}
@@ -1629,54 +1759,37 @@ export function AgentHub() {
                   </div>
                 )}
                 {completedVideoUrl && (
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+                  <div className="flex flex-col gap-1.5 pt-1">
                     <a
                       href={completedVideoUrl.includes("?") ? `${completedVideoUrl}&download=1` : `${completedVideoUrl}?download=1`}
                       download="soundwave_viral_short.mp4"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 text-[#070B14] px-4 py-1.5 text-xs font-bold hover:bg-cyan-400 transition-colors cursor-pointer shadow-md shadow-cyan-500/20"
+                      className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 text-[#070B14] py-1.5 text-xs font-bold hover:bg-cyan-400 transition-colors cursor-pointer shadow-md shadow-cyan-500/20"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Download Short (MP4)
+                      Download 9:16 Short (MP4)
                     </a>
-
-                    {ytConfig.connected ? (
-                      <button
-                        type="button"
-                        onClick={() => handlePublishToYouTube()}
-                        disabled={isPublishingYt}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-red-500 transition-colors cursor-pointer shadow-md shadow-red-950/40 disabled:opacity-50"
+                    {uploadedYoutubeUrl ? (
+                      <a
+                        href={uploadedYoutubeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-red-600/30 border border-red-500/50 text-red-300 hover:bg-red-600/40 py-1.5 text-xs font-bold transition-all cursor-pointer"
                       >
-                        <Youtube className="h-3.5 w-3.5" />
-                        {isPublishingYt ? "Uploading..." : "Post to YouTube Shorts"}
-                      </button>
+                        <Youtube className="h-3.5 w-3.5 text-red-500" />
+                        Watch on YouTube Shorts
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          setGeneratorModalOpen(false);
-                          setSettingsOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-1.5 text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
+                        onClick={() => handleManualUploadYt(completedVideoUrl, generatedScript)}
+                        disabled={isUploadingToYt}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-red-600/20 border border-red-500/40 text-red-300 hover:bg-red-600/30 py-1.5 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <Youtube className="h-3.5 w-3.5 text-red-400" />
-                        Connect YouTube
+                        <Youtube className="h-3.5 w-3.5 text-red-500" />
+                        {isUploadingToYt ? "Uploading..." : "Post to YouTube Shorts Now"}
                       </button>
                     )}
-                  </div>
-                )}
-
-                {latestYtVideo && (
-                  <div className="pt-1 text-center">
-                    <a
-                      href={latestYtVideo.videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-xs font-bold transition-colors"
-                    >
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      Watch live on YouTube Shorts: {latestYtVideo.title}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
                   </div>
                 )}
               </div>
@@ -1755,266 +1868,308 @@ export function AgentHub() {
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           title="Assistant Configuration"
-        >
-          <div className="space-y-4 font-mono text-xs">
-            <div className="space-y-1">
-              <label className="text-gray-300 font-semibold">Assistant Name</label>
-              <input
-                type="text"
-                value={assistantName}
-                onChange={(e) => setAssistantName(e.target.value)}
-                className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
-              />
-            </div>
-
-            {/* Voice Talent Selection */}
-            <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-white">Neural Voice Talent</p>
-                  <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine (Natural Male Pacing)</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => speakText("Voice system operational. Natural neural synthesis online.")}
-                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <Volume2 className="h-3 w-3" /> Test Voice
-                </button>
-              </div>
-
-              <select
-                value={selectedVoice}
-                onChange={(e) => handleVoiceChange(e.target.value)}
-                className="w-full rounded-lg border border-[#172A4A] bg-[#0C172E] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
-              >
-                <option value="en-US-ChristopherNeural">Christopher (en-US Male - Studio JARVIS)</option>
-                <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
-                <option value="en-US-EricNeural">Eric (en-US Male - Dynamic Narrator)</option>
-                <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
-                <option value="en-US-AndrewNeural">Andrew (en-US Male - Warm Storyteller)</option>
-              </select>
-            </div>
-
-            {/* Thinking Orb Visualizer Mode Selection */}
-            <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-white">Thinking Orb Visualizer Mode</p>
-                  <p className="text-[10px] text-gray-400">Auto Sync dynamically reacts to listening, thinking, & speaking</p>
-                </div>
-                <span className="rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold">
-                  {orbMode === "auto" ? "AUTO SYNC (DEFAULT)" : orbMode.toUpperCase()}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
-                {ALL_ORB_STATES.map((st) => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => {
-                      setOrbMode(st.id);
-                      localStorage.setItem("soundwave_orb_mode", st.id);
-                      toast.info("Orb Mode Set", `${st.label} mode active.`);
-                    }}
-                    className={`rounded-lg px-2.5 py-2 text-left text-[11px] font-mono transition-all border cursor-pointer ${
-                      orbMode === st.id
-                        ? "border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-sm shadow-cyan-500/30"
-                        : "border-[#14233D] bg-[#0A1224] text-gray-400 hover:text-white hover:border-[#1F3660]"
-                    }`}
-                  >
-                    <div className="font-semibold">{st.label}</div>
-                    <div className="text-[9px] text-gray-500 truncate">{st.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
-              <div>
-                <p className="text-xs font-bold text-white">Voice Speech Synthesis</p>
-                <p className="text-[10px] text-gray-400">Speak assistant replies aloud via browser speech audio</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVoiceFeedback(!voiceFeedback)}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-bold transition-colors ${
-                  voiceFeedback ? "bg-cyan-500 text-[#070B14]" : "bg-gray-800 text-gray-400"
-                }`}
-              >
-                {voiceFeedback ? "Enabled" : "Disabled"}
-              </button>
-            </div>
-
-            {/* YouTube Shorts Publisher & API Automation */}
-            <div className="space-y-3 p-3 rounded-lg border border-red-950/60 bg-[#0c0812]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Youtube className="h-4 w-4 text-red-500" />
-                  <div>
-                    <p className="text-xs font-bold text-white">YouTube Shorts Auto-Publisher</p>
-                    <p className="text-[10px] text-gray-400">Google OAuth 2.0 & YouTube Data API v3 integration</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                      ytConfig.connected
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                        : "border-gray-700 bg-gray-900 text-gray-400"
-                    }`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${ytConfig.connected ? "bg-emerald-400 animate-pulse" : "bg-gray-500"}`} />
-                    {ytConfig.connected ? (ytConfig.channelTitle || "Connected") : "Not Connected"}
-                  </span>
-                  {ytConfig.connected && (
-                    <button
-                      type="button"
-                      onClick={handleDisconnectYouTube}
-                      className="text-[10px] text-gray-400 hover:text-red-400 transition-colors"
-                      title="Disconnect channel"
-                    >
-                      Unlink
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Auto-Post Switch & Default Privacy */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/[0.06]">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-300 font-semibold">Auto-Publish to YouTube</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleAutoPost(!ytConfig.autoPostEnabled)}
-                      className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
-                        ytConfig.autoPostEnabled
-                          ? "bg-red-600 text-white shadow-md shadow-red-900/40"
-                          : "bg-gray-800 text-gray-400"
-                      }`}
-                    >
-                      {ytConfig.autoPostEnabled ? "Enabled" : "Disabled"}
-                    </button>
-                    <span className="text-[10px] text-gray-500">Auto-posts on render</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-300 font-semibold">Default Privacy</label>
-                  <select
-                    value={ytConfig.defaultPrivacy}
-                    onChange={(e) => {
-                      const val = e.target.value as "public" | "unlisted" | "private";
-                      setYtConfig((p) => ({ ...p, defaultPrivacy: val }));
-                      fetch("/api/v1/youtube/config", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ defaultPrivacy: val }),
-                      }).catch(() => {});
-                    }}
-                    className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-2 py-1 text-xs text-white focus:border-red-500 focus:outline-none"
-                  >
-                    <option value="public">Public (Immediate Live)</option>
-                    <option value="unlisted">Unlisted (Share Link)</option>
-                    <option value="private">Private (Draft)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* OAuth Sign-In or API Token Setup */}
-              <div className="space-y-2 pt-1 border-t border-white/[0.06]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-gray-300">Google OAuth 2.0 Connection</span>
-                  <button
-                    type="button"
-                    onClick={handleConnectYouTubeOAuth}
-                    className="rounded-lg bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 text-[11px] font-bold transition-all shadow-sm shadow-red-950/40 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Youtube className="h-3.5 w-3.5" />
-                    Sign in with Google
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
-                  <input
-                    type="text"
-                    placeholder="Client ID (Optional)"
-                    value={ytClientIdInput}
-                    onChange={(e) => setYtClientIdInput(e.target.value)}
-                    className="rounded border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[11px] text-white placeholder-gray-600 focus:border-red-400 focus:outline-none"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Client Secret (Optional)"
-                    value={ytClientSecretInput}
-                    onChange={(e) => setYtClientSecretInput(e.target.value)}
-                    className="rounded border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[11px] text-white placeholder-gray-600 focus:border-red-400 focus:outline-none"
-                  />
-                  <div className="flex gap-1">
-                    <input
-                      type="password"
-                      placeholder="Refresh Token"
-                      value={ytRefreshTokenInput}
-                      onChange={(e) => setYtRefreshTokenInput(e.target.value)}
-                      className="flex-1 rounded border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[11px] text-white placeholder-gray-600 focus:border-red-400 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveYouTubeCredentials}
-                      disabled={isSavingYt}
-                      className="rounded bg-gray-800 hover:bg-gray-700 text-cyan-400 px-2 py-1 text-[10px] font-bold border border-gray-700 cursor-pointer disabled:opacity-50"
-                    >
-                      {isSavingYt ? "..." : "Save"}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-gray-500">
-                  Tip: Provide your Google Cloud OAuth Client ID & Secret or Refresh Token. Token refreshes automatically in the background.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-gray-300 font-semibold">Learned Memory & Preferences</label>
-              <div className="max-h-24 overflow-y-auto space-y-1 border border-[#172A4A] rounded-lg p-2 bg-[#070D18]">
-                {memories.map((m, i) => (
-                  <div key={i} className="text-[11px] text-gray-300 flex items-start gap-1.5">
-                    <span className="text-cyan-400">·</span>
-                    <span>{m}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Add memory..."
-                  value={newMemoryText}
-                  onChange={(e) => setNewMemoryText(e.target.value)}
-                  className="flex-1 rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (newMemoryText.trim()) {
-                      setMemories((p) => [...p, newMemoryText.trim()]);
-                      setNewMemoryText("");
-                      toast.success("Saved", "Preference recorded in memory.");
-                    }
-                  }}
-                >
-                  Add
-                </Button>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-[#172A4A] flex justify-end">
+          size="lg"
+          footer={
+            <div className="flex w-full items-center justify-between font-mono text-xs">
+              <span className="text-[11px] text-gray-500">Soundwave AI Control Center</span>
               <Button variant="primary" size="sm" onClick={() => setSettingsOpen(false)}>
                 Done
               </Button>
             </div>
+          }
+        >
+          <div className="space-y-4 font-mono text-xs">
+            {/* Settings Tab Navigation */}
+            <div className="flex border-b border-[#172A4A] pb-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSettingsTab("general")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  settingsTab === "general"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                    : "text-gray-400 hover:text-white bg-[#0A1224] border border-[#14233D]"
+                }`}
+              >
+                <SettingsIcon className="h-3.5 w-3.5" />
+                General & Voice
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab("youtube")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  settingsTab === "youtube"
+                    ? "bg-red-500/20 text-red-300 border border-red-500/40 shadow-sm"
+                    : "text-gray-400 hover:text-white bg-[#0A1224] border border-[#14233D]"
+                }`}
+              >
+                <Youtube className="h-3.5 w-3.5 text-red-500" />
+                YouTube API & Shorts
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab("orb")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  settingsTab === "orb"
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm"
+                    : "text-gray-400 hover:text-white bg-[#0A1224] border border-[#14233D]"
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                Thinking Orb
+              </button>
+            </div>
+
+            {/* TAB 1: General & Voice */}
+            {settingsTab === "general" && (
+              <div className="space-y-3.5 animate-fadeIn">
+                <div className="space-y-1">
+                  <label className="text-gray-300 font-semibold">Assistant Identity Name</label>
+                  <input
+                    type="text"
+                    value={assistantName}
+                    onChange={(e) => setAssistantName(e.target.value)}
+                    className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                {/* Voice Talent Selection */}
+                <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-white">Neural Voice Talent</p>
+                      <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine (Natural Male Pacing)</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => speakText("Voice system operational. Natural neural synthesis online.")}
+                      className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Volume2 className="h-3 w-3" /> Test Voice
+                    </button>
+                  </div>
+
+                  <select
+                    value={selectedVoice}
+                    onChange={(e) => handleVoiceChange(e.target.value)}
+                    className="w-full rounded-lg border border-[#172A4A] bg-[#0C172E] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                  >
+                    <option value="en-US-ChristopherNeural">Christopher (en-US Male - Studio JARVIS)</option>
+                    <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
+                    <option value="en-US-EricNeural">Eric (en-US Male - Dynamic Narrator)</option>
+                    <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
+                    <option value="en-US-AndrewNeural">Andrew (en-US Male - Warm Storyteller)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
+                  <div>
+                    <p className="text-xs font-bold text-white">Voice Speech Synthesis</p>
+                    <p className="text-[10px] text-gray-400">Speak assistant replies aloud via browser speech audio</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceFeedback(!voiceFeedback)}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold transition-colors cursor-pointer ${
+                      voiceFeedback ? "bg-cyan-500 text-[#070B14]" : "bg-gray-800 text-gray-400"
+                    }`}
+                  >
+                    {voiceFeedback ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+
+                {/* Learned Memory */}
+                <div className="space-y-1.5">
+                  <label className="text-gray-300 font-semibold">Learned Memory & Preferences</label>
+                  <div className="max-h-24 overflow-y-auto space-y-1 border border-[#172A4A] rounded-lg p-2 bg-[#070D18]">
+                    {memories.map((m, i) => (
+                      <div key={i} className="text-[11px] text-gray-300 flex items-start gap-1.5">
+                        <span className="text-cyan-400">·</span>
+                        <span>{m}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add memory..."
+                      value={newMemoryText}
+                      onChange={(e) => setNewMemoryText(e.target.value)}
+                      className="flex-1 rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (newMemoryText.trim()) {
+                          setMemories((p) => [...p, newMemoryText.trim()]);
+                          setNewMemoryText("");
+                          toast.success("Saved", "Preference recorded in memory.");
+                        }
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: YouTube API & Shorts Auto-Publish */}
+            {settingsTab === "youtube" && (
+              <div className="space-y-3.5 animate-fadeIn">
+                <div className="p-3 rounded-lg border border-red-500/30 bg-[#070D18] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Youtube className="h-4 w-4 text-red-500" />
+                      <span className="text-xs font-bold text-white">YouTube Data API v3 & Auto-Publish</span>
+                    </div>
+                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                      ytStatus.connected || ytStatus.configured
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-gray-800 text-gray-400"
+                    }`}>
+                      {ytStatus.connected || ytStatus.configured ? (ytStatus.channelTitle || "CONNECTED") : "NOT CONFIGURED"}
+                    </span>
+                  </div>
+
+                  <p className="text-[10px] text-gray-400">
+                    Connect your Google Cloud OAuth2 credentials to automatically publish viral Shorts directly to your YouTube channel.
+                  </p>
+
+                  <div className="space-y-2 pt-1">
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-0.5">Google OAuth Client ID</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 123456789-abc.apps.googleusercontent.com"
+                        value={ytClientId}
+                        onChange={(e) => setYtClientId(e.target.value)}
+                        className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-gray-400 block mb-0.5">Client Secret</label>
+                        <input
+                          type="password"
+                          placeholder="GOCSPX-..."
+                          value={ytClientSecret}
+                          onChange={(e) => setYtClientSecret(e.target.value)}
+                          className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 block mb-0.5">OAuth Refresh Token</label>
+                        <input
+                          type="password"
+                          placeholder="1//04..."
+                          value={ytRefreshToken}
+                          onChange={(e) => setYtRefreshToken(e.target.value)}
+                          className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <label className="text-gray-300 text-[11px] flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ytAutoPublish}
+                          onChange={(e) => setYtAutoPublish(e.target.checked)}
+                          className="rounded border-[#172A4A] bg-[#070D18] text-red-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Auto-Publish Shorts to YouTube upon generation</span>
+                      </label>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-gray-400">Privacy:</span>
+                        <select
+                          value={ytPrivacy}
+                          onChange={(e) => setYtPrivacy(e.target.value as any)}
+                          className="rounded border border-[#172A4A] bg-[#0A1224] px-2 py-1 text-[10px] text-white focus:outline-none"
+                        >
+                          <option value="public">Public</option>
+                          <option value="unlisted">Unlisted</option>
+                          <option value="private">Private</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-[#172A4A]/60">
+                      <a
+                        href="/api/v1/youtube/oauth-guide"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 underline"
+                      >
+                        <ExternalLink className="h-2.5 w-2.5" />
+                        OAuth 2.0 Setup Guide
+                      </a>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleTestYt}
+                          disabled={isTestingYt}
+                          className="rounded border border-[#172A4A] bg-[#0A1224] hover:bg-[#111E3A] text-gray-200 px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isTestingYt ? "Testing..." : "Test Connection"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveYtConfig}
+                          disabled={isSavingYt}
+                          className="rounded bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 text-[11px] font-bold transition-all cursor-pointer shadow-sm shadow-red-600/30 disabled:opacity-50"
+                        >
+                          {isSavingYt ? "Saving..." : "Save API Keys"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: Thinking Orb Visualizer */}
+            {settingsTab === "orb" && (
+              <div className="space-y-3 animate-fadeIn">
+                <div className="p-3 rounded-lg border border-[#172A4A] bg-[#070D18] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-white">Thinking Orb Visualizer Mode</p>
+                      <p className="text-[10px] text-gray-400">Auto Sync dynamically reacts to listening, thinking, & speaking</p>
+                    </div>
+                    <span className="rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold">
+                      {orbMode === "auto" ? "AUTO SYNC (DEFAULT)" : orbMode.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                    {ALL_ORB_STATES.map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => {
+                          setOrbMode(st.id);
+                          localStorage.setItem("soundwave_orb_mode", st.id);
+                          toast.info("Orb Mode Set", `${st.label} mode active.`);
+                        }}
+                        className={`rounded-lg px-2.5 py-2 text-left text-[11px] font-mono transition-all border cursor-pointer ${
+                          orbMode === st.id
+                            ? "border-cyan-400 bg-cyan-500/20 text-cyan-200 font-bold shadow-sm shadow-cyan-500/30"
+                            : "border-[#14233D] bg-[#0A1224] text-gray-400 hover:text-white hover:border-[#1F3660]"
+                        }`}
+                      >
+                        <div className="font-semibold">{st.label}</div>
+                        <div className="text-[9px] text-gray-500 truncate">{st.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}

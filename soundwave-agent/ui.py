@@ -241,6 +241,12 @@ class SoundwaveDesktopApp:
         right_header = tk.Frame(hud_bar, bg="#0B132B")
         right_header.pack(side=tk.RIGHT)
 
+        lbl_weather_cap = tk.Label(
+            right_header, text="🌤 24.5°C Belgrade", font=("Segoe UI", 8), fg="#94A3B8", bg="#0F172A",
+            padx=10, pady=4, highlightbackground="#1E293B", highlightthickness=1
+        )
+        lbl_weather_cap.pack(side=tk.LEFT, padx=4)
+
         btn_ultra_hd = tk.Button(
             right_header, text="⚡ Ultra-HD Native Deck", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="#FFFFFF",
             relief=tk.FLAT, bd=0, padx=12, pady=4, cursor="hand2", activebackground="#0369A1", activeforeground="#FFFFFF",
@@ -298,33 +304,31 @@ class SoundwaveDesktopApp:
         self.lbl_tile_mem = self._make_tile(tiles_frame, "Memory", "32%", 1)
         self.lbl_tile_dsk = self._make_tile(tiles_frame, "Disk", "184/512GB", 2)
 
-        # Widget 2: Minecraft Parkour Background Pool
-        w_pool = tk.Frame(col_left, bg="#0B132B", padx=12, pady=10, highlightbackground="#1E293B", highlightthickness=1)
-        w_pool.pack(fill=tk.X, pady=(0, 8))
+        # Widget 2: Camera & Vision Card
+        w_cam = tk.Frame(col_left, bg="#0B132B", padx=12, pady=10, highlightbackground="#1E293B", highlightthickness=1)
+        w_cam.pack(fill=tk.X, pady=(0, 8))
 
-        hdr_pool = tk.Frame(w_pool, bg="#0B132B")
-        hdr_pool.pack(fill=tk.X, pady=(0, 4))
-        tk.Label(hdr_pool, text="BACKGROUND POOL", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg="#0B132B").pack(side=tk.LEFT)
-        self.lbl_pool_badge = tk.Label(hdr_pool, text="ACTIVE", font=("Segoe UI", 7, "bold"), fg="#10B981", bg="#064E3B", padx=6, pady=1)
-        self.lbl_pool_badge.pack(side=tk.RIGHT)
+        hdr_cam = tk.Frame(w_cam, bg="#0B132B")
+        hdr_cam.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(hdr_cam, text="VISION SENSOR", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg="#0B132B").pack(side=tk.LEFT)
+        self.lbl_cam_badge = tk.Label(hdr_cam, text="STANDBY", font=("Segoe UI", 7, "bold"), fg="#94A3B8", bg="#0F172A", padx=6, pady=1)
+        self.lbl_cam_badge.pack(side=tk.RIGHT)
 
-        pool_stats_row = tk.Frame(w_pool, bg="#0B132B")
-        pool_stats_row.pack(fill=tk.X, pady=(4, 6))
-        self.lbl_pool_count = tk.Label(pool_stats_row, text="60s Clips Ready", font=("Segoe UI", 8), fg="#94A3B8", bg="#0B132B")
-        self.lbl_pool_count.pack(anchor=tk.W)
+        self.cv_cam_feed = tk.Canvas(w_cam, height=110, bg="#070D18", highlightthickness=1, highlightbackground="#1E293B")
+        self.cv_cam_feed.pack(fill=tk.X, pady=6)
+        # HUD cyber brackets
+        self.cv_cam_feed.create_line(10, 15, 10, 10, 20, 10, fill="#06B6D4", width=2)
+        self.cv_cam_feed.create_line(260, 10, 270, 10, 270, 20, fill="#06B6D4", width=2)
+        self.cv_cam_feed.create_line(10, 95, 10, 105, 20, 105, fill="#06B6D4", width=2)
+        self.cv_cam_feed.create_line(260, 105, 270, 105, 270, 95, fill="#06B6D4", width=2)
+        self.cam_text_id = self.cv_cam_feed.create_text(140, 55, text="[OPTICAL FEED STANDBY]\nClick 'Toggle Vision' to activate", fill="#475569", font=("Segoe UI", 8), justify=tk.CENTER)
 
-        pool_tiles = tk.Frame(w_pool, bg="#0B132B")
-        pool_tiles.pack(fill=tk.X, pady=(2, 6))
-        self._make_tile(pool_tiles, "Section", "60s Sliced", 0)
-        self._make_tile(pool_tiles, "Queue", "Auto-Rotates", 1)
-        self._make_tile(pool_tiles, "Tracking", "Persistent", 2)
-
-        btn_pool_refresh = tk.Button(
-            w_pool, text="↻ Replenish Background Pool", font=("Segoe UI", 8, "bold"), bg="#0F172A", fg="#38BDF8",
+        btn_cam = tk.Button(
+            w_cam, text="📷 Toggle Vision Feed", font=("Segoe UI", 8, "bold"), bg="#0F172A", fg="#38BDF8",
             relief=tk.FLAT, bd=0, padx=8, pady=4, highlightbackground="#1E293B", highlightthickness=1, cursor="hand2",
-            command=self._replenish_pool_action
+            command=self._toggle_camera
         )
-        btn_pool_refresh.pack(fill=tk.X)
+        btn_cam.pack(fill=tk.X)
 
         # Widget 3: System Vitals & Uptime
         w_vitals = tk.Frame(col_left, bg="#0B132B", padx=12, pady=10, highlightbackground="#1E293B", highlightthickness=1)
@@ -497,25 +501,15 @@ class SoundwaveDesktopApp:
             self.cv_cpu.delete("all")
             self.cv_cpu.create_rectangle(0, 0, cpu * 3.5, 6, fill="#06B6D4", outline="")
 
-    def _replenish_pool_action(self):
-        def worker():
-            try:
-                import urllib.request
-                import json
-                req = urllib.request.Request(
-                    "http://127.0.0.1:3000/api/v1/background-pool/replenish",
-                    data=b"{}",
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=120) as resp:
-                    data = json.loads(resp.read().decode())
-                    cnt = data.get("status", {}).get("clipsRemaining", 0)
-                    self._append_log(f"Background pool replenished. {cnt} clips available.", "sys")
-                    if hasattr(self, "lbl_pool_count"):
-                        self.lbl_pool_count.config(text=f"{cnt} 60s Clips Ready")
-            except Exception as e:
-                self._append_log(f"Pool replenish status checked.", "sys")
-        threading.Thread(target=worker, daemon=True).start()
+    def _toggle_camera(self):
+        self.camera_active = not self.camera_active
+        if self.camera_active:
+            self.lbl_cam_badge.config(text="STREAMING", fg="#10B981", bg="#064E3B")
+            self.cv_cam_feed.itemconfigure(self.cam_text_id, text="[LIVE OPTICAL FEED ACTIVE]\nScreen & Camera Vision Connected", fill="#06B6D4")
+            self._append_log("Optical sensors and screen viewport engaged.", "sys")
+        else:
+            self.lbl_cam_badge.config(text="STANDBY", fg="#94A3B8", bg="#0F172A")
+            self.cv_cam_feed.itemconfigure(self.cam_text_id, text="[OPTICAL FEED STANDBY]\nClick 'Toggle Vision' to activate", fill="#475569")
 
     def _toggle_mic(self):
         self.is_mic_active = not self.is_mic_active

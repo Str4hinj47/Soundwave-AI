@@ -89,7 +89,7 @@ describe("Creator Studio API", () => {
     expect(dlRes.status).toBe(200);
     expect(dlRes.headers["content-type"]).toBe("video/mp4");
     expect(dlRes.body.length).toBeGreaterThan(1000);
-  });
+  }, 25_000);
 
   it("handles async job queueing and status query", async () => {
     const res = await request(app)

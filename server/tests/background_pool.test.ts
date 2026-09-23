@@ -32,6 +32,12 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
   });
 
   it("consumes a 60s clip, deletes it from the pool, and moves to the next sequentially", async () => {
+    // Ensure at least one test clip exists in pool to test consumption & rotation
+    const poolDir = (backgroundPool as any).poolDir;
+    fs.mkdirSync(poolDir, { recursive: true });
+    const dummyClip = path.join(poolDir, `mc_clip_test_${Date.now()}_001.mp4`);
+    fs.writeFileSync(dummyClip, Buffer.alloc(300_000, 0));
+
     const initialStatus = backgroundPool.getStatus();
     const consumedClip = await backgroundPool.consumeNextClip();
     

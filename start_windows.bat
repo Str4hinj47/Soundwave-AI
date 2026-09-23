@@ -17,6 +17,12 @@ if %ERRORLEVEL% NEQ 0 (
 where python >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [WARNING] Python is not in PATH. Desktop agent requires Python 3.10+.
+) else (
+    where pip >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [INFO] Verifying Python dependencies for YouTube Parkour Clipper...
+        pip install -r requirements.txt --quiet
+    )
 )
 
 :: Ensure vendor\ffmpeg directory exists
@@ -71,20 +77,27 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
-:: Ensure yt-dlp is available for background video downloads
+:: Check for yt-dlp
 where yt-dlp >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    if not exist vendor\yt-dlp\yt-dlp.exe (
-        if exist scripts\download_ytdlp.ps1 (
-            powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
-        )
-    )
+if %ERRORLEVEL% EQU 0 goto :ytdlp_ready
+
+if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
+
+:: Download standalone portable yt-dlp.exe via PowerShell script
+if exist scripts\download_ytdlp.ps1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
 )
-if exist vendor\yt-dlp\yt-dlp.exe (
-    set "PATH=%CD%\vendor\yt-dlp;%PATH%"
-    set "YTDLP_PATH=%CD%\vendor\yt-dlp\yt-dlp.exe"
-    echo [INFO] Using vendored yt-dlp at vendor\yt-dlp\yt-dlp.exe.
-)
+
+if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
+goto :continue_boot
+
+:ytdlp_vendored
+set "PATH=%CD%\vendor\yt-dlp;%PATH%"
+set "YTDLP_PATH=%CD%\vendor\yt-dlp\yt-dlp.exe"
+echo [INFO] Using vendored yt-dlp at vendor\yt-dlp\yt-dlp.exe.
+
+:ytdlp_ready
+echo [INFO] yt-dlp is ready.
 
 :continue_boot
 :: Prepare server .env if missing
