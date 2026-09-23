@@ -4,6 +4,7 @@ import {
   Captions,
   Download,
   Film,
+  FolderOpen,
   Gauge,
   Mic,
   Pause,
@@ -47,6 +48,11 @@ export function Studio() {
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [online] = useState(() => navigator.onLine);
 
+  const nameFor = useCallback(
+    (id: string) => displayNameFor(id),
+    [],
+  );
+
   const onComplete = useCallback(
     (r: TTSResult) => {
       studio.setResult({
@@ -65,11 +71,11 @@ export function Studio() {
         createdAt: Date.now(),
         duration: r.duration,
       });
-      // Usage is accounted server-side by /tts/synthesize — just refresh quota.
+      // Usage is accounted server-side by /tts/synthesize (and /tts/clone) — just refresh quota.
       refreshQuota();
-      toast.success("Audio ready", `Generated ${formatDuration(r.duration)} with ${displayNameFor(r.voiceId)}.`);
+      toast.success("Audio ready", `Generated ${formatDuration(r.duration)} with ${nameFor(r.voiceId)}.`);
     },
-    [refreshQuota, studio],
+    [nameFor, refreshQuota, studio],
   );
 
   const tts = useTTS(onComplete);
@@ -126,6 +132,22 @@ export function Studio() {
   };
 
   const download = async () => {
+    if (!tts.audioBlob) return;
+    // If the generated audio is already in the requested format (Edge/cloned
+    // voices are MP3, the offline voice is WAV), download it as-is — faster,
+    // lossless, and doesn't depend on client-side encoders.
+    const byMime: Record<string, string> = {
+      "audio/mpeg": "mp3",
+      "audio/mp3": "mp3",
+      "audio/wav": "wav",
+      "audio/x-wav": "wav",
+      "audio/wave": "wav",
+      "audio/ogg": "ogg",
+    };
+    if (byMime[tts.audioBlob.type] === format) {
+      downloadBlob(tts.audioBlob, `soundwave-${studio.voiceId}-${Date.now()}.${format}`);
+      return;
+    }
     if (!tts.audioBuffer) return;
     setEncoding(true);
     try {
@@ -224,6 +246,9 @@ export function Studio() {
           <p className="text-sm text-gray-400">Generate professional voice audio with Microsoft Neural voices.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" icon={<FolderOpen className="h-4 w-4" />} onClick={() => navigate("/projects")}>
+            Saved projects
+          </Button>
           <Badge tone="green" dot>Microsoft Neural</Badge>
           {tts.engine === "offline" && <Badge tone="amber">Demo fallback</Badge>}
         </div>
@@ -276,10 +301,19 @@ export function Studio() {
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <p className="mb-2 text-sm font-medium text-gray-300">Voice</p>
             <VoicePicker voices={voices} value={studio.voiceId} onChange={studio.setVoiceId} />
+
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-gray-400">Selected:</span>
-              <span className="font-semibold text-white">{displayNameFor(studio.voiceId)}</span>
-              <Badge tone={studio.voiceId.includes("-GB-") ? "violet" : "blue"}>{studio.voiceId.includes("-GB-") ? "British" : "American"}</Badge>
+              <span className="font-semibold text-white">{nameFor(studio.voiceId)}</span>
+              {(() => {
+                const v = voices.find((x) => x.id === studio.voiceId);
+                return v ? (
+                  <>
+                    <Badge tone="gray">{v.accent}</Badge>
+                    <Badge tone="gray">{v.gender}</Badge>
+                  </>
+                ) : null;
+              })()}
             </div>
           </div>
 
@@ -414,7 +448,7 @@ export function Studio() {
                     >
                       <span className="block truncate text-sm text-white">{truncate(h.text, 60)}</span>
                       <span className="block text-xs text-gray-500">
-                        {displayNameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
+                        {nameFor(h.voiceId)} · {formatDuration(h.duration)} · {new Date(h.createdAt).toLocaleTimeString()}
                       </span>
                     </button>
                     <button

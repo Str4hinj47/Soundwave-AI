@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs, { existsSync } from "node:fs";
 import path from "node:path";
 
 const env = process.env;
@@ -31,26 +32,40 @@ export const config = {
   resendApiKey: str("RESEND_API_KEY", ""),
   googleClientId: str("GOOGLE_CLIENT_ID", ""),
   googleClientSecret: str("GOOGLE_CLIENT_SECRET", ""),
-  githubClientId: str("GITHUB_CLIENT_ID", ""),
-  githubClientSecret: str("GITHUB_CLIENT_SECRET", ""),
   stripeSecretKey: str("STRIPE_SECRET_KEY", ""),
   stripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
   ffmpegPath: str("FFMPEG_PATH", ""),
+  // YouTube import (yt-dlp). The vendored zipapp is auto-detected (needs python3);
+  // set YTDLP_PATH to override with a system binary.
+  ytDlpPath: str("YTDLP_PATH", ""),
+  ytDlpCookies: str("YTDLP_COOKIES", ""), // optional cookies.txt for age/bot-gated videos
+  ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
+  ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
+  // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
+  voiceCloneUrl: str("VOICECLONE_URL", ""),
+  elevenLabsApiKey: str("ELEVENLABS_API_KEY", ""),
+  // Shared secret for the sidecar — REQUIRED when VOICECLONE_URL is a public
+  // URL (Hugging Face Space, tunnel, remote GPU host). Must match the
+  // sidecar's own VOICECLONE_TOKEN.
+  voiceCloneToken: str("VOICECLONE_TOKEN", ""),
+  // Minimum plan allowed to clone/generate with cloned voices.
+  voiceCloneMinPlan: str("VOICECLONE_MIN_PLAN", "FREE"),
+  voiceCloneTimeoutMs: int("VOICECLONE_TIMEOUT_MS", 600_000), // CPU cloning is slow
+  // Plan assigned to NEW accounts. Keep FREE for any production deployment;
+  // bump to ENTERPRISE locally to test everything (4K export, full quota).
+  defaultSignupPlan: ((): "FREE" | "PRO" | "ENTERPRISE" => {
+    const v = str("DEFAULT_SIGNUP_PLAN", "FREE").toUpperCase();
+    return v === "PRO" || v === "ENTERPRISE" ? v : "FREE";
+  })(),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
 } as const;
 
-const REQUIRED_PROD = [
-  "JWT_ACCESS_SECRET",
-  "JWT_REFRESH_SECRET",
-  "DATABASE_URL",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
-];
+// Everything optional at runtime is intentionally absent here so lean (free)
+// deployments boot without extra accounts: blank Google keys hide the OAuth
+// button, blank Stripe keys make billing endpoints return a clear error, and
+// a missing DATABASE_URL falls back to the local JSON store.
+const REQUIRED_PROD = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
 const REQUIRED_DEV = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
@@ -73,23 +88,89 @@ export function validateConfig(): void {
       throw new Error("JWT_REFRESH_SECRET is using the default value. Please set a custom secret in development.");
     }
   }
+
+  // Non-FREE default plans are for local testing only — yell very loudly if
+  // this ever reaches a production boot.
+  if (config.isProd && config.defaultSignupPlan !== "FREE") {
+    console.error(
+      "[soundwave] ⚠⚠⚠  DEFAULT_SIGNUP_PLAN=" + config.defaultSignupPlan +
+      " — new accounts get a paid plan for free. This should NEVER be set in production; remove it before publishing.",
+    );
+  }
 }
 
-/** Resolve the FFmpeg binary path (env override → vendored static binary → PATH). */
+/** Resolve the FFmpeg binary path (env override → vendored static binary → system PATH). */
 export function resolveFfmpegPath(): string {
-  if (config.ffmpegPath) return config.ffmpegPath;
-  const candidates = [
-    path.join(process.cwd(), "..", "vendor", "ffmpeg", "ffmpeg"),
-    path.join(process.cwd(), "vendor", "ffmpeg", "ffmpeg"),
-    "/usr/bin/ffmpeg",
+  if (config.ffmpegPath && existsSyncSafe(config.ffmpegPath)) return config.ffmpegPath;
+
+  const isWin = process.platform === "win32";
+  const exeName = isWin ? "ffmpeg.exe" : "ffmpeg";
+
+  const candidates: string[] = [
+    path.join(process.cwd(), "..", "vendor", "ffmpeg", exeName),
+    path.join(process.cwd(), "vendor", "ffmpeg", exeName),
+    path.join(process.cwd(), "..", "vendor", "ffmpeg", "bin", exeName),
+    path.join(process.cwd(), "vendor", "ffmpeg", "bin", exeName),
+    path.join(process.cwd(), exeName),
+    path.join(process.cwd(), "..", exeName),
   ];
+
+  if (isWin) {
+    const userProfile = process.env.USERPROFILE || "";
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programData = process.env.ProgramData || "C:\\ProgramData";
+
+    candidates.push(
+      "C:\\ffmpeg\\bin\\ffmpeg.exe",
+      "C:\\ffmpeg\\ffmpeg.exe",
+      path.join(programData, "chocolatey", "bin", "ffmpeg.exe"),
+      path.join(userProfile, "scoop", "shims", "ffmpeg.exe"),
+      path.join(programFiles, "ffmpeg", "bin", "ffmpeg.exe"),
+      path.join(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+      path.join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+      path.join(userProfile, "Downloads", "ffmpeg", "bin", "ffmpeg.exe"),
+      path.join(userProfile, "Downloads", "ffmpeg.exe")
+    );
+
+    // Auto-scan WinGet Packages directory for Gyan / Essentials build
+    if (localAppData) {
+      const wingetPkgs = path.join(localAppData, "Microsoft", "WinGet", "Packages");
+      try {
+        if (existsSyncSafe(wingetPkgs)) {
+          const dirs = fs.readdirSync(wingetPkgs);
+          for (const d of dirs) {
+            if (d.toLowerCase().includes("ffmpeg")) {
+              candidates.push(
+                path.join(wingetPkgs, d, "ffmpeg.exe"),
+                path.join(wingetPkgs, d, "bin", "ffmpeg.exe")
+              );
+              try {
+                const subdirs = fs.readdirSync(path.join(wingetPkgs, d));
+                for (const sub of subdirs) {
+                  candidates.push(path.join(wingetPkgs, d, sub, "bin", "ffmpeg.exe"));
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+    }
+  } else {
+    candidates.push(
+      "/usr/local/bin/ffmpeg",
+      "/usr/bin/ffmpeg",
+      "/bin/ffmpeg"
+    );
+  }
+
   for (const c of candidates) {
     if (existsSyncSafe(c)) return c;
   }
+
   return "ffmpeg";
 }
 
-import { existsSync } from "node:fs";
 function existsSyncSafe(p: string): boolean {
   try {
     return existsSync(p);

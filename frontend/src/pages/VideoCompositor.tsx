@@ -4,16 +4,22 @@ import {
   Clapperboard,
   Download,
   FileVideo,
+  Monitor,
   Music,
+  Pause,
+  Play,
+  Scissors,
+  Smartphone,
   Trash2,
   Upload,
+  Youtube,
 } from "lucide-react";
 import { useStudio } from "../store/studio";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
 import { cn } from "../lib/cn";
-import { formatBytes } from "../lib/format";
+import { formatBytes, formatDuration } from "../lib/format";
 import { decodeAudioBlob } from "../lib/audio";
 import { Waveform } from "../components/Waveform";
 import { Button } from "../components/ui/Button";
@@ -21,26 +27,44 @@ import { Select } from "../components/ui/Select";
 import { Slider } from "../components/ui/Slider";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Badge } from "../components/ui/Badge";
+import { Toggle } from "../components/ui/Toggle";
 import { ColorPicker } from "../components/ui/ColorPicker";
 import { subtitleStyleToCss, subtitlePosition } from "../lib/subtitleStyle";
 import { PLANS, type Plan } from "../lib/plans";
 import type { SubtitleCue } from "../lib/types";
 
 type Resolution = "720p" | "1080p" | "1440p" | "4K";
+type Aspect = "16:9" | "9:16";
 
 const RES_ORDER: Resolution[] = ["720p", "1080p", "1440p", "4K"];
+
+const RES_DIMS: Record<Resolution, [number, number]> = {
+  "720p": [1280, 720],
+  "1080p": [1920, 1080],
+  "1440p": [2560, 1440],
+  "4K": [3840, 2160],
+};
+
+/** Pixel dimensions label honoring the chosen aspect (9:16 swaps the axes). */
+function dimsLabel(r: Resolution, aspect: Aspect): string {
+  const [w, h] = RES_DIMS[r];
+  return aspect === "9:16" ? `${h}×${w}` : `${w}×${h}`;
+}
 
 export function VideoCompositor() {
   const navigate = useNavigate();
   const studio = useStudio();
   const { user } = useAuth();
-  const plan: Plan = (user?.plan as Plan) ?? "FREE";
+  // NO LOGIN MODE — default to ENTERPRISE so no watermark, optimized for Soundwave Agent
+  const plan: Plan = (user?.plan as Plan) ?? "ENTERPRISE";
   const planDef = PLANS[plan];
 
   const [videoUrl, setVideoUrl] = useState<string | null>(studio.video.url);
   const [videoName, setVideoName] = useState<string | null>(studio.video.name);
-  const [videoFileKey, setVideoFileKey] = useState<string | null>(null);
+  const [videoFileKey, setVideoFileKey] = useState<string | null>(studio.video.fileKey);
   const [uploading, setUploading] = useState(false);
+  const [ytUrl, setYtUrl] = useState("");
+  const [ytImporting, setYtImporting] = useState(false);
   const [bgColor, setBgColor] = useState("#0A0F1C");
 
   const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
@@ -50,22 +74,148 @@ export function VideoCompositor() {
   const [fadeOut, setFadeOut] = useState(0);
   const [zoom, setZoom] = useState(1);
 
-  const [resolution, setResolution] = useState<Resolution>(planDef.maxResolution as Resolution);
+  // OPTIMIZED DEFAULTS: Portrait 9:16 720p MP4 Medium 60fps End-with-voice ON TikTok #8B5CF6
+  const [resolution, setResolution] = useState<Resolution>("720p");
+  const [aspect, setAspect] = useState<Aspect>("9:16");
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
-  const [fps, setFps] = useState(30);
+  const [fps, setFps] = useState(60);
 
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState<string>("");
+  const [exportError, setExportError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewW, setPreviewW] = useState(0);
+
+  // ── Preview transport (play/pause with the actual voiceover audible) ──────
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const rafRef = useRef<number>(0);
+  const [playing, setPlaying] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // ── Video length: auto-end at voiceover end (default) or a manual cut ─────
+  const [fitToVoice, setFitToVoice] = useState(true);
+  const [trimEnd, setTrimEnd] = useState(0); // 0 = natural end
 
   const cues: SubtitleCue[] = studio.cues;
   const style = studio.subtitleStyle;
-  const duration = studio.audioBuffer?.duration ?? studio.lastDuration;
+  const audioDuration = studio.audioBuffer?.duration ?? studio.lastDuration;
+  const hasAudio = studio.audioBlob != null;
+  const naturalMax = Math.max(audioDuration, videoDuration, 1);
+  /** How long the composed video runs on the timeline/export. */
+  const timelineEnd = fitToVoice
+    ? Math.max(audioDuration, 0.1)
+    : trimEnd > 0
+      ? Math.min(trimEnd, naturalMax)
+      : naturalMax;
+  // Back-compat alias used by the timeline rendering below.
+  const duration = timelineEnd;
+
+  // Object URL for voiceover playback in the preview.
+  useEffect(() => {
+    if (!studio.audioBlob) {
+      setAudioUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(studio.audioBlob);
+    setAudioUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setAudioUrl(null);
+    };
+  }, [studio.audioBlob]);
+
+  // Preview volume follows the export volume slider.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = Math.min(1, Math.max(0, audioVolume / 100));
+  }, [audioVolume]);
+
+  const stopRaf = () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+  };
+
+  const pausePreview = useCallback(() => {
+    audioRef.current?.pause();
+    const v = videoRef.current;
+    if (v) v.pause();
+    stopRaf();
+    setPlaying(false);
+  }, []);
+
+  const playPreview = useCallback(() => {
+    const a = audioRef.current;
+    const v = videoRef.current;
+    if (!a?.currentSrc && !v?.src) return;
+
+    // If we're at (or past) the end, restart from the beginning.
+    if (timelineEnd > 0 && currentTime >= timelineEnd - 0.05) {
+      setCurrentTime(0);
+      if (a) a.currentTime = 0;
+      if (v) v.currentTime = 0;
+    }
+    if (a?.currentSrc) void a.play().catch(() => undefined);
+    if (v?.src) void v.play().catch(() => undefined);
+    setPlaying(true);
+
+    stopRaf();
+    const tick = () => {
+      // The voiceover is the master clock; fall back to the video element.
+      const t = a?.currentSrc && !a.paused ? a.currentTime : v ? v.currentTime : 0;
+      setCurrentTime(t);
+      if (timelineEnd > 0 && t >= timelineEnd) {
+        pausePreview();
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [currentTime, pausePreview, timelineEnd]);
+
+  // Sync elements when the user seeks (waveform click) or time jumps.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v && Math.abs(v.currentTime - currentTime) > 0.25) v.currentTime = currentTime;
+    const a = audioRef.current;
+    if (a && a.currentSrc && (a.paused || !playing) && Math.abs(a.currentTime - currentTime) > 0.25) {
+      a.currentTime = currentTime;
+    }
+  }, [currentTime, playing]);
+
+  // Stop when the voiceover ends naturally.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) a.onended = () => pausePreview();
+    return stopRaf;
+  }, [pausePreview, audioUrl]);
+
+  // Reset transport when the audio/video source changes.
+  useEffect(() => {
+    pausePreview();
+    setCurrentTime(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioUrl, videoUrl]);
+
+  // Measure the preview box so subtitle px values scale with its real width.
+  // Exports are laid out against a 1280-unit reference, so the rendered text
+  // keeps the same proportions on screen (both 16:9 and 9:16).
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setPreviewW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const k = (previewW > 0 ? previewW : 768) / 1280;
 
   useEffect(() => {
     if (studio.audioBuffer) setDecodedAudio(studio.audioBuffer);
@@ -99,7 +249,7 @@ export function VideoCompositor() {
         const url = URL.createObjectURL(file);
         setVideoUrl(url);
         setVideoName(file.name);
-        studio.setVideo({ blob: file, url, name: file.name });
+        studio.setVideo({ blob: file, url, name: file.name, fileKey: res.fileKey });
         toast.success("Video uploaded", file.name);
       } catch (e) {
         toast.error("Upload failed", (e as Error).message);
@@ -120,7 +270,38 @@ export function VideoCompositor() {
     setVideoUrl(null);
     setVideoName(null);
     setVideoFileKey(null);
-    studio.setVideo({ blob: null, url: null, name: null });
+    studio.setVideo({ blob: null, url: null, name: null, fileKey: null });
+  };
+
+  // A video attached via "Import from YouTube" is streamed back from our API.
+  const videoFromYouTube = videoUrl != null && videoUrl.startsWith("/api/v1/upload/file/");
+
+  const importYouTube = async () => {
+    const url = ytUrl.trim();
+    if (!url) {
+      toast.warning("No link", "Paste a YouTube link first.");
+      return;
+    }
+    setYtImporting(true);
+    try {
+      const res = await http.post<{ fileKey: string; name: string; size: number }>(
+        "/upload/youtube",
+        { url },
+        // Downloads of long videos can take a while — allow up to 5 minutes.
+        { timeout: 300_000 },
+      );
+      const streamUrl = `/api/v1/upload/file/${res.fileKey}`;
+      setVideoFileKey(res.fileKey);
+      setVideoUrl(streamUrl);
+      setVideoName(res.name);
+      studio.setVideo({ blob: null, url: streamUrl, name: res.name, fileKey: res.fileKey });
+      setYtUrl("");
+      toast.success("YouTube video imported", "It is ready to use as your video background.");
+    } catch (e) {
+      toast.error("YouTube import failed", (e as Error).message);
+    } finally {
+      setYtImporting(false);
+    }
   };
 
   const estimatedSize = useMemo(() => {
@@ -142,7 +323,18 @@ export function VideoCompositor() {
     setExporting(true);
     setExportProgress(0);
     setExportStatus("Uploading audio…");
+    setExportError(null);
     setDownloadUrl(null);
+    pausePreview();
+    // A visible background without a server key means the upload reference
+    // was lost (very old session) — exporting now would silently produce the
+    // solid-color fallback instead of the video the user sees.
+    if (videoUrl && !videoFileKey) {
+      setExporting(false);
+      setExportStatus("");
+      setExportError("The background video is missing its upload reference. Remove it and attach the video again, then export.");
+      return;
+    }
     try {
       // 1. Upload client-generated audio for FFmpeg compositing (the only upload).
       const afd = new FormData();
@@ -150,7 +342,7 @@ export function VideoCompositor() {
       const audioRes = await http.upload<{ fileKey: string }>("/upload/audio", afd);
 
       setExportStatus("Starting export…");
-      // 2. Start the export job.
+      // 2. Start the export job. Not sending videoEnd = "end with the voice".
       const start = await http.post<{ jobId: string }>("/export/video", {
         videoFileKey,
         audioFileKey: audioRes.fileKey,
@@ -158,12 +350,14 @@ export function VideoCompositor() {
         subtitleStyle: { ...style, fontFamily: style.fontFamily },
         exportSettings: {
           resolution,
+          aspect,
           format,
           quality,
           fps,
           audioVolume: audioVolume / 100,
           fadeIn,
           fadeOut,
+          ...(!fitToVoice && trimEnd > 0 ? { videoEnd: Math.min(trimEnd, naturalMax) } : {}),
         },
       });
 
@@ -196,6 +390,7 @@ export function VideoCompositor() {
       toast.success("Export complete", "Your video is ready to download.");
     } catch (e) {
       setExportStatus("FAILED");
+      setExportError((e as Error).message);
       toast.error("Export failed", (e as Error).message);
     } finally {
       setExporting(false);
@@ -224,15 +419,46 @@ export function VideoCompositor() {
         <div className="min-w-0 space-y-5">
           {/* Preview */}
           <div className="rounded-card border border-gray-800 bg-panel p-5">
-            <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-lg bg-black" style={{ aspectRatio: "16 / 9" }}>
+            <div
+              ref={previewRef}
+              className={cn(
+                "relative mx-auto w-full overflow-hidden rounded-lg bg-black transition-all duration-300",
+                aspect === "9:16" ? "max-w-[280px] sm:max-w-[330px]" : "max-w-3xl",
+              )}
+              style={{ aspectRatio: aspect === "9:16" ? "9 / 16" : "16 / 9" }}
+            >
               {videoUrl ? (
-                <video ref={videoRef} src={videoUrl} className="h-full w-full object-contain" muted playsInline />
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="h-full w-full object-contain"
+                  muted
+                  playsInline
+                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  onEnded={() => !hasAudio && pausePreview()}
+                />
               ) : (
                 <div className="h-full w-full" style={{ backgroundColor: bgColor }} />
               )}
+              {/* Voiceover playback for the preview — the master clock. */}
+              {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" preload="auto" />}
               {activeCue && (
-                <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition(style) }}>
-                  <div style={subtitleStyleToCss(style)}>{activeCue.text}</div>
+                <div className="pointer-events-none absolute z-10" style={{ ...subtitlePosition({ ...style, margin: style.margin * k }) }}>
+                  <div
+                    style={subtitleStyleToCss({
+                      ...style,
+                      fontSize: style.fontSize * k,
+                      letterSpacing: style.letterSpacing * k,
+                      bgPadding: style.bgPadding * k,
+                      bgRadius: style.bgRadius * k,
+                      strokeWidth: style.strokeWidth * k,
+                      shadowX: style.shadowX * k,
+                      shadowY: style.shadowY * k,
+                      shadowBlur: style.shadowBlur * k,
+                    })}
+                  >
+                    {activeCue.text}
+                  </div>
                 </div>
               )}
               {!videoUrl && (
@@ -240,6 +466,33 @@ export function VideoCompositor() {
                   <span className="flex items-center gap-2 text-sm"><FileVideo className="h-5 w-5" /> No video — solid background</span>
                 </div>
               )}
+            </div>
+
+            {/* Transport controls */}
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => (playing ? pausePreview() : playPreview())}
+                disabled={!audioUrl && !videoUrl}
+                aria-label={playing ? "Pause preview" : "Play preview"}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-glow transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+              >
+                {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-sm tabular-nums text-white">
+                  {formatDuration(Math.min(currentTime, timelineEnd))}
+                  <span className="text-gray-500"> / {formatDuration(timelineEnd)}</span>
+                </p>
+                <p className="text-xs text-gray-500">
+                  {!audioUrl && !videoUrl
+                    ? "Generate a voiceover to preview playback"
+                    : `${playing ? "Previewing" : "Preview"} with voice + subtitles${!fitToVoice && trimEnd > 0 ? ` · ends at ${formatDuration(Math.min(trimEnd, naturalMax))}` : " · ends at voice end"}`}
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => { pausePreview(); setCurrentTime(0); }} disabled={!audioUrl && !videoUrl}>
+                Back to start
+              </Button>
             </div>
 
             {/* Timeline */}
@@ -287,7 +540,11 @@ export function VideoCompositor() {
           <div className="rounded-card border border-gray-800 bg-panel p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-300">Video Background</p>
-              {videoUrl && <Badge tone="green" dot>Uploaded</Badge>}
+              {videoUrl && (
+                <Badge tone={videoFromYouTube ? "violet" : "green"} dot>
+                  {videoFromYouTube ? "YouTube" : "Uploaded"}
+                </Badge>
+              )}
             </div>
 
             {videoUrl ? (
@@ -315,6 +572,42 @@ export function VideoCompositor() {
                   {uploading && <ProgressBar indeterminate className="mt-4 max-w-xs" />}
                   <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi" className="hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
                 </div>
+
+                {/* Import straight from YouTube */}
+                <div className="mt-4 rounded-card border border-gray-800 bg-gray-900/50 p-4">
+                  <p className="flex items-center gap-2 text-sm font-medium text-gray-200">
+                    <Youtube className="h-4 w-4 text-red-400" /> Import from YouTube
+                  </p>
+                  <form
+                    className="mt-2.5 flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void importYouTube();
+                    }}
+                  >
+                    <input
+                      value={ytUrl}
+                      onChange={(e) => setYtUrl(e.target.value)}
+                      disabled={ytImporting}
+                      placeholder="Paste a link — youtube.com/watch?v=…, youtu.be/…, /shorts/…"
+                      aria-label="YouTube video URL"
+                      className="h-10 w-full rounded-input border border-gray-700 bg-gray-900 px-3 text-sm text-white placeholder-gray-500 transition-colors hover:border-gray-600 focus:border-blue-500 disabled:opacity-60"
+                    />
+                    <Button type="submit" size="sm" loading={ytImporting} icon={<Youtube className="h-4 w-4" />} className="h-10 shrink-0 sm:w-auto w-full">
+                      {ytImporting ? "Importing…" : "Import"}
+                    </Button>
+                  </form>
+                  {ytImporting && (
+                    <div className="mt-3">
+                      <ProgressBar indeterminate />
+                      <p className="mt-1.5 text-xs text-gray-500">Downloading from YouTube — long videos can take a minute.</p>
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    The video is downloaded straight to your project. Only import content you own or have permission to use.
+                  </p>
+                </div>
+
                 <div className="mt-4 flex items-center gap-3">
                   <span className="text-sm text-gray-400">Or use a solid background:</span>
                   <ColorPicker value={bgColor} onChange={setBgColor} label="Background color" />
@@ -349,13 +642,76 @@ export function VideoCompositor() {
             <p className="mb-4 text-sm font-semibold text-white">Export Settings</p>
             <div className="space-y-4">
               <div>
+                <label className="mb-1.5 block text-sm text-gray-300">Video style</label>
+                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Video style">
+                  <AspectButton
+                    active={aspect === "16:9"}
+                    onClick={() => setAspect("16:9")}
+                    icon={<Monitor className="h-4 w-4" />}
+                    title="Landscape"
+                    sub="16:9 · YouTube"
+                  />
+                  <AspectButton
+                    active={aspect === "9:16"}
+                    onClick={() => setAspect("9:16")}
+                    icon={<Smartphone className="h-4 w-4" />}
+                    title="Portrait"
+                    sub="9:16 · Shorts · TikTok"
+                  />
+                </div>
+                {aspect === "9:16" && (
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Vertical video for YouTube Shorts, TikTok & Reels. Landscape footage is fitted with black bars.
+                  </p>
+                )}
+              </div>
+
+              {/* Length — how long the finished video runs */}
+              <div className="rounded-card border border-gray-800 bg-gray-900/50 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-gray-200">
+                      <Scissors className="h-4 w-4 text-blue-400" /> End video with the voice
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {hasAudio
+                        ? `Both video and subtitles stop at ${formatDuration(audioDuration)} — right when the voiceover finishes.`
+                        : "Generate a voiceover to enable length options."}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={fitToVoice}
+                    onChange={(v) => setFitToVoice(v)}
+                    disabled={!hasAudio}
+                    label="End video with the voice"
+                  />
+                </div>
+                {!fitToVoice && (
+                  <div className="mt-3 border-t border-gray-800 pt-3">
+                    <Slider
+                      label="End video at"
+                      value={trimEnd > 0 ? trimEnd : naturalMax}
+                      onChange={(v) => setTrimEnd(Math.min(v, naturalMax))}
+                      min={0.5}
+                      max={Math.max(naturalMax, 1)}
+                      step={0.5}
+                      format={(v) => `${formatDuration(v)}${Math.abs(v - naturalMax) < 0.01 ? " (video end)" : ""}`}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Cuts the video early (e.g. let the voice end, then stop). Footage shorter than the voice loops automatically.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="mb-1.5 block text-sm text-gray-300">Resolution</label>
                 <Select
                   value={resolution}
                   onChange={(v) => setResolution(v as Resolution)}
                   options={RES_ORDER.map((r, i) => ({
                     value: r,
-                    label: `${r} ${r === "4K" ? "(3840×2160)" : r === "1440p" ? "(2560×1440)" : r === "1080p" ? "(1920×1080)" : "(1280×720)"}`,
+                    label: `${r} (${dimsLabel(r, aspect)})`,
                     sublabel: i > maxResolutionIdx ? `${planDef.name} plan required` : undefined,
                   }))}
                   ariaLabel="Resolution"
@@ -401,6 +757,12 @@ export function VideoCompositor() {
                 <p className="mt-2 text-center text-sm text-gray-400">{exportStatus} {exportProgress > 0 && `${Math.round(exportProgress)}%`}</p>
               </div>
             )}
+            {exportError && !exporting && (
+              <div className="mt-4 rounded-input border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-relaxed text-red-200">
+                <p className="font-semibold text-red-300">Export failed</p>
+                <p className="mt-0.5 break-words">{exportError}</p>
+              </div>
+            )}
             {downloadUrl && !exporting && (
               <Button fullWidth variant="outline" className="mt-3" icon={<Download className="h-4 w-4" />} onClick={downloadExport}>
                 Download Video
@@ -413,5 +775,40 @@ export function VideoCompositor() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AspectButton({
+  active,
+  onClick,
+  icon,
+  title,
+  sub,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center gap-1 rounded-card border px-3 py-3 text-center transition-all duration-200",
+        active
+          ? "border-blue-500/60 bg-blue-500/10 text-white shadow-glow"
+          : "border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200",
+      )}
+    >
+      <span className={cn("flex items-center gap-1.5 text-sm font-semibold", active ? "text-white" : "text-gray-300")}>
+        {icon}
+        {title}
+      </span>
+      <span className="text-[11px] text-gray-500">{sub}</span>
+    </button>
   );
 }

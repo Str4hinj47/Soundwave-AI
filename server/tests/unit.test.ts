@@ -50,6 +50,51 @@ describe("plans", () => {
   });
 });
 
+describe("voice-clone helpers", () => {
+  it("estimates word timings that cover the duration in order", async () => {
+    const { estimateWordTimings } = await import("../src/lib/voiceclone.js");
+    const t = estimateWordTimings("Hello there brave new world", 2.5);
+    expect(t).toHaveLength(5);
+    expect(t[0]!.start).toBe(0);
+    expect(t[t.length - 1]!.end).toBeGreaterThan(2);
+    for (let i = 1; i < t.length; i++) expect(t[i]!.start).toBeGreaterThanOrEqual(t[i - 1]!.end);
+    expect(estimateWordTimings("", 2)).toEqual([]);
+    expect(estimateWordTimings("hello", 0)).toEqual([]);
+  });
+
+  it("sniffs common audio containers", async () => {
+    const { sniffAudio } = await import("../src/lib/voiceclone.js");
+    const wav = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WAVE"), Buffer.alloc(8)]);
+    const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x04, 0, 0, 0, 0, 0, 0, 0, 0]); // ID3
+    const mpeg = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const ogg = Buffer.from("OggS00000000", "latin1");
+    expect(sniffAudio(wav)).toBe(true);
+    expect(sniffAudio(mp3)).toBe(true);
+    expect(sniffAudio(mpeg)).toBe(true);
+    expect(sniffAudio(ogg)).toBe(true);
+    expect(sniffAudio(Buffer.from("%PDF-1.7.xxx", "latin1"))).toBe(false);
+    expect(sniffAudio(Buffer.alloc(4))).toBe(false);
+  });
+});
+
+describe("config", () => {
+  it("defaults new accounts to FREE unless DEFAULT_SIGNUP_PLAN is set", async () => {
+    // Guard for the local-testing switch: the shipped default must stay FREE
+    // (env is unset in the test environment, mirroring a fresh .env.example).
+    const { config } = await import("../src/config.js");
+    expect(config.defaultSignupPlan).toBe("FREE");
+  });
+});
+
+describe("ffmpeg filter path escaping", () => {
+  it("quotes paths and escapes drive colons (Windows) and backslashes", async () => {
+    const { ffmpegFilterPath } = await import("../src/lib/ffmpeg.js");
+    expect(ffmpegFilterPath(String.raw`C:\Users\A B\tmp\file.ass`)).toBe("'C\\:/Users/A B/tmp/file.ass'");
+    expect(ffmpegFilterPath("/home/user/jobs/x.ass")).toBe("'/home/user/jobs/x.ass'");
+    expect(ffmpegFilterPath(String.raw`D:\we\i'rd\y.ass`)).toBe("'D\\:/we/i\\'rd/y.ass'");
+  });
+});
+
 describe("ASS subtitle generation", () => {
   it("produces a valid ASS document with styles and events", () => {
     const ass = buildAss(

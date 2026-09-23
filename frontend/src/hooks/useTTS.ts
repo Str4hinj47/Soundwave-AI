@@ -29,7 +29,7 @@ export interface TTSResult {
   text: string;
   voiceId: string;
   wordTimings: WordTiming[];
-  engine: "edge" | "offline";
+  engine: "edge" | "offline" | "clone";
 }
 
 export interface UseTTS {
@@ -39,10 +39,15 @@ export interface UseTTS {
   audioBuffer: AudioBuffer | null;
   audioBlob: Blob | null;
   wordTimings: WordTiming[];
-  /** Engine that produced the current result ("edge" or "offline"). */
-  engine: "edge" | "offline" | null;
+  /** Engine that produced the current result ("edge", "clone", or "offline"). */
+  engine: "edge" | "offline" | "clone" | null;
   error: string | null;
 }
+
+/** Cloned-voice ids are `clone:<profileId>` (see /api/v1/tts/clone). */
+const CLONE_PREFIX = "clone:";
+export const isCloneVoiceId = (id: string): boolean => id.startsWith(CLONE_PREFIX);
+export const cloneProfileIdOf = (voiceId: string): string => voiceId.slice(CLONE_PREFIX.length);
 
 /** Studio inserts <break time="500ms"/> tags; the edge-tts API escapes all
  *  markup, so convert pauses to punctuation and drop any other tags. */
@@ -68,7 +73,7 @@ export function useTTS(onComplete?: (r: TTSResult) => void): UseTTS {
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [wordTimings, setWordTimings] = useState<WordTiming[]>([]);
-  const [engine, setEngine] = useState<"edge" | "offline" | null>(null);
+  const [engine, setEngine] = useState<"edge" | "offline" | "clone" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const requestId = useRef<string | null>(null);
@@ -123,18 +128,24 @@ export function useTTS(onComplete?: (r: TTSResult) => void): UseTTS {
       setStatus("generating");
       setError(null);
 
+      const clonedVoice = isCloneVoiceId(voiceId);
+
       (async () => {
         try {
+          // Cloned voices go through the OmniVoice sidecar proxy; CPU
+          // generation is slow, so allow a much longer timeout.
           const res = await http.post<SynthesizeResponse>(
-            "/tts/synthesize",
-            {
-              text: clean,
-              voice: voiceId,
-              speed: settings.speed,
-              pitch: settings.pitch,
-              volume: settings.volume,
-            },
-            { signal: controller.signal, timeout: 60_000 },
+            clonedVoice ? "/tts/clone" : "/tts/synthesize",
+            clonedVoice
+              ? { text: clean, profileId: cloneProfileIdOf(voiceId), speed: settings.speed }
+              : {
+                  text: clean,
+                  voice: voiceId,
+                  speed: settings.speed,
+                  pitch: settings.pitch,
+                  volume: settings.volume,
+                },
+            { signal: controller.signal, timeout: clonedVoice ? 600_000 : 60_000 },
           );
           if (requestId.current !== id) return;
 
@@ -157,12 +168,18 @@ export function useTTS(onComplete?: (r: TTSResult) => void): UseTTS {
             text: clean,
             voiceId,
             wordTimings: timings,
-            engine: "edge",
+            engine: clonedVoice ? "clone" : "edge",
           });
         } catch (e) {
           if (requestId.current !== id) return;
           if ((e as Error).name === "AbortError") {
             setStatus("cancelled");
+            return;
+          }
+          if (clonedVoice) {
+            // Don't silently swap a cloned voice for the robot demo voice.
+            setStatus("error");
+            setError((e as Error).message || "Voice-clone generation failed. Is the voice-clone service running?");
             return;
           }
           // API unreachable or failed → offline demo voice.

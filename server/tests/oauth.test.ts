@@ -5,13 +5,12 @@ import { createApp } from "../src/app.js";
 import { JsonStore, setStoreForTests } from "../src/lib/store.js";
 
 // Stub out the real provider HTTP calls — we test the callback logic, not
-// Google/GitHub's servers.
+// Google's servers.
 vi.mock("../src/lib/oauth.js", async (importOriginal) => {
   const orig = await importOriginal<typeof import("../src/lib/oauth.js")>();
   return {
     ...orig,
     exchangeGoogleCode: vi.fn(async () => ({ email: "oauth@example.com", name: "OAuth User", avatarUrl: "https://x.test/a.png" })),
-    exchangeGithubCode: vi.fn(async () => ({ email: "gh@example.com", name: "GH User", avatarUrl: null })),
   };
 });
 
@@ -26,6 +25,12 @@ beforeAll(async () => {
 });
 
 describe("OAuth flow", () => {
+  it("reports provider availability so the UI can hide unconfigured buttons", async () => {
+    const res = await request(app).get("/api/v1/auth/providers");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ providers: { google: false } }); // no creds in the test env
+  });
+
   it("redirects to not_configured when no credentials are set", async () => {
     const res = await request(app).get("/api/v1/auth/oauth/google");
     expect(res.status).toBe(302);
@@ -68,10 +73,13 @@ describe("OAuth flow", () => {
     // Sign up the same email via password first.
     await request(app)
       .post("/api/v1/auth/signup")
-      .send({ name: "Existing", email: "gh@example.com", password: "Str0ng!Pass1" });
+      .send({ name: "Existing", email: "linked@example.com", password: "Str0ng!Pass1" });
+
+    const { exchangeGoogleCode } = await import("../src/lib/oauth.js");
+    vi.mocked(exchangeGoogleCode).mockResolvedValueOnce({ email: "linked@example.com", name: "OAuth User", avatarUrl: null });
 
     const res = await request(app)
-      .get("/api/v1/auth/oauth/github/callback?code=fake&state=ST2")
+      .get("/api/v1/auth/oauth/google/callback?code=fake&state=ST2")
       .set("Cookie", "oauth_state=ST2");
     expect(res.status).toBe(302);
 
@@ -79,7 +87,14 @@ describe("OAuth flow", () => {
     const cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
     const session = await request(app).get("/api/v1/auth/session").set("Cookie", cookie);
     expect(session.status).toBe(200);
-    expect(session.body.email).toBe("gh@example.com");
+    expect(session.body.email).toBe("linked@example.com");
     expect(session.body.name).toBe("Existing"); // existing user is preserved
+  });
+
+  it("rejects unknown OAuth providers", async () => {
+    const res = await request(app).get("/api/v1/auth/oauth/github");
+    expect(res.status).toBe(400);
+    const cb = await request(app).get("/api/v1/auth/oauth/github/callback?code=fake&state=ST3");
+    expect(cb.status).toBe(400);
   });
 });

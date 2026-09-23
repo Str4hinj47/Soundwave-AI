@@ -3,41 +3,35 @@ import multer from "multer";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { requireAuth } from "../middleware/auth.js";
+import { z } from "zod";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
 import { ApiError } from "../middleware/error.js";
 import { uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
 import { PLANS } from "../lib/plans.js";
+import { parseYouTubeUrl, fetchMetadata, downloadVideo } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 
 const router = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2GB hard cap; per-plan caps below
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
-// ── Magic-byte (file signature) validation ──────────────────────────────────
 type Category = "video" | "audio" | "image";
 
 function sniff(buf: Buffer): Category | null {
   if (buf.length < 12) return null;
   const hex = (off: number, len: number) => buf.subarray(off, off + len).toString("hex");
-  // MP4 / MOV
   if (hex(4, 4) === "66747970") return "video";
-  // WEBM / MKV (EBML)
   if (hex(0, 4) === "1a45dfa3") return "video";
-  // AVI
   if (buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "AVI ") return "video";
-  // WAV
   if (buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "WAVE") return "audio";
-  // OGG
   if (buf.toString("latin1", 0, 4) === "OggS") return "audio";
-  // MP3 (ID3 tag or frame sync)
   if (hex(0, 3) === "494433" || (buf[0] === 0xff && (buf[1]! & 0xe0) === 0xe0)) return "audio";
-  // JPEG
   if (hex(0, 3) === "ffd8ff") return "image";
-  // PNG
   if (hex(0, 8) === "89504e470d0a1a0a") return "image";
   return null;
 }
@@ -51,20 +45,19 @@ function saveFile(buf: Buffer, ext: string): { key: string; dir: string } {
 }
 
 function filePath(key: string): string {
-  // Keys are always server-generated UUIDs — safe against path traversal.
   if (!/^[0-9a-f-]{36}\.[a-z0-9]+$/.test(key)) throw new ApiError(400, "INVALID_FILE", "Invalid file reference.");
   return path.join(config.uploadsDir, key);
 }
 
-// ── Video upload ────────────────────────────────────────────────────────────
-router.post("/video", requireAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
+// NO LIMITS MODE — optionalAuth, no plan checks, Enterprise unlimited
+router.post("/video", optionalAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) throw new ApiError(400, "NO_FILE", "No file provided.");
     const cat = sniff(req.file.buffer);
     if (cat !== "video") throw new ApiError(400, "INVALID_FILE", "The uploaded file is not a supported video format.");
-    const maxMb = PLANS[req.user!.plan].maxVideoMb;
+    const maxMb = 2048;
     if (req.file.size > maxMb * 1024 * 1024) {
-      throw new ApiError(413, "FILE_TOO_LARGE", `Video exceeds the ${maxMb}MB limit for your plan.`);
+      throw new ApiError(413, "FILE_TOO_LARGE", `Video exceeds the ${maxMb}MB limit.`);
     }
     const { key } = saveFile(req.file.buffer, ".video");
     res.status(201).json({ fileKey: key, name: req.file.originalname, size: req.file.size });
@@ -73,8 +66,7 @@ router.post("/video", requireAuth, uploadLimiter, upload.single("file"), async (
   }
 });
 
-// ── Audio upload (client-generated TTS blob for export compositing) ─────────
-router.post("/audio", requireAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
+router.post("/audio", optionalAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) throw new ApiError(400, "NO_FILE", "No file provided.");
     const cat = sniff(req.file.buffer);
@@ -87,17 +79,76 @@ router.post("/audio", requireAuth, uploadLimiter, upload.single("file"), async (
   }
 });
 
-// ── Avatar upload ───────────────────────────────────────────────────────────
-router.post("/avatar", requireAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
+router.post("/avatar", optionalAuth, uploadLimiter, upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) throw new ApiError(400, "NO_FILE", "No file provided.");
     const cat = sniff(req.file.buffer);
     if (cat !== "image") throw new ApiError(400, "INVALID_FILE", "Avatar must be a JPG or PNG image.");
     if (req.file.size > 5 * 1024 * 1024) throw new ApiError(413, "FILE_TOO_LARGE", "Avatar must be under 5MB.");
     const { key } = saveFile(req.file.buffer, cat === "image" ? ".png" : ".img");
-    const store = await getStore();
-    await store.updateUser(req.user!.id, { avatarUrl: `/api/v1/user/avatar/${key}` });
+    if (req.user) {
+      const store = await getStore();
+      await store.updateUser(req.user.id, { avatarUrl: `/api/v1/user/avatar/${key}` });
+    }
     res.status(201).json({ avatarUrl: `/api/v1/user/avatar/${key}` });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const youtubeSchema = z.object({
+  url: z.string().min(10).max(2048),
+});
+
+router.post("/youtube", optionalAuth, uploadLimiter, validate({ body: youtubeSchema }), async (req, res, next) => {
+  try {
+    const { url } = req.body as z.infer<typeof youtubeSchema>;
+    const parsed = parseYouTubeUrl(url);
+    if (!parsed) {
+      throw new ApiError(400, "INVALID_YOUTUBE_URL", "Paste a valid YouTube link (youtube.com/watch, youtu.be, or /shorts).");
+    }
+    const target = parsed.toString();
+    const meta = await fetchMetadata(target).catch((e: Error) => {
+      throw new ApiError(502, "YOUTUBE_METADATA_FAILED", e.message);
+    });
+    // NO LIMITS — ignore duration limit for local agent automation
+    const maxBytes = 2048 * 1024 * 1024;
+    const uuid = crypto.randomUUID();
+    const result = await downloadVideo(target, uuid, maxBytes).catch((e: Error & { status?: number; code?: string }) => {
+      if (e.message.includes("yt-dlp is not installed")) {
+        throw new ApiError(503, "YOUTUBE_IMPORT_UNAVAILABLE", e.message);
+      }
+      throw new ApiError(502, "YOUTUBE_DOWNLOAD_FAILED", e.message);
+    });
+    const name = `${meta.title}.${result.ext}`.replace(/[\\/:*?"<>|]/g, "_").slice(0, 180);
+    res.status(201).json({ fileKey: result.fileKey, name, size: result.size, duration: meta.duration });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const VIDEO_MIME: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mkv: "video/x-matroska",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+  video: "video/mp4",
+};
+
+router.get("/file/:key", optionalAuth, async (req, res, next) => {
+  try {
+    const key = req.params.key ?? "";
+    const ext = key.split(".").pop() ?? "";
+    const mime = VIDEO_MIME[ext];
+    if (!mime) throw new ApiError(400, "INVALID_FILE", "Not a streamable video file.");
+    const p = filePath(key);
+    if (!fs.existsSync(p)) throw new ApiError(404, "NOT_FOUND", "The file no longer exists. Please import it again.");
+    res.setHeader("Content-Type", mime);
+    res.sendFile(p, (err) => {
+      if (err && !res.headersSent) next(err);
+    });
   } catch (e) {
     next(e);
   }

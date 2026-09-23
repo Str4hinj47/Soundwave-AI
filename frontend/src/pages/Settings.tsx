@@ -4,8 +4,6 @@ import {
   CreditCard,
   Database,
   Download,
-  KeyRound,
-  Loader2,
   Palette,
   ShieldCheck,
   SlidersHorizontal,
@@ -16,30 +14,27 @@ import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
 import { cn } from "../lib/cn";
-import { formatBytes, formatDate, formatNumber } from "../lib/format";
+import { formatBytes, formatNumber } from "../lib/format";
 import { PLANS, type Plan } from "../lib/plans";
 import { Button } from "../components/ui/Button";
 import { TextField } from "../components/ui/TextField";
 import { Select } from "../components/ui/Select";
-import { Toggle } from "../components/ui/Toggle";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
-import { idbClear, idbUsage } from "../lib/idb";
+import { idbUsage } from "../lib/idb";
 import { DEFAULT_VOICES } from "../lib/voices";
-import type { ApiKey } from "../lib/types";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "preferences", label: "Preferences", icon: <SlidersHorizontal className="h-4 w-4" /> },
-  { id: "api-keys", label: "API Keys", icon: <KeyRound className="h-4 w-4" /> },
 ];
 
 export function Settings() {
   const location = useLocation();
   const navigate = useNavigate();
   const { refreshQuota } = useAuth();
-  const active = location.pathname.includes("/billing") ? "billing" : location.pathname.includes("/api-keys") ? "api-keys" : location.pathname.includes("/preferences") ? "preferences" : "profile";
+  const active = location.pathname.includes("/billing") ? "billing" : location.pathname.includes("/preferences") ? "preferences" : "profile";
 
   useEffect(() => {
     void refreshQuota();
@@ -72,7 +67,6 @@ export function Settings() {
         {active === "profile" && <ProfileTab />}
         {active === "billing" && <BillingTab />}
         {active === "preferences" && <PreferencesTab />}
-        {active === "api-keys" && <ApiKeysTab />}
       </div>
     </div>
   );
@@ -267,12 +261,10 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 
 // ── Preferences ─────────────────────────────────────────────────────────────
 function PreferencesTab() {
-  const [defaultVoice, setDefaultVoice] = useState(() => localStorage.getItem("sw.default_voice") ?? "en-US-JennyNeural");
+  const [defaultVoice, setDefaultVoice] = useState(() => localStorage.getItem("sw.default_voice") ?? "en-US-ChristopherNeural");
   const [exportQuality, setExportQuality] = useState(() => localStorage.getItem("sw.export_quality") ?? "medium");
-  const [productUpdates, setProductUpdates] = useState(true);
-  const [usageAlerts, setUsageAlerts] = useState(true);
+  const [orbMode, setOrbMode] = useState(() => localStorage.getItem("soundwave_orb_mode") ?? "auto");
   const [storageUsage, setStorageUsage] = useState(0);
-  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     void idbUsage().then(setStorageUsage);
@@ -281,21 +273,9 @@ function PreferencesTab() {
   const savePrefs = () => {
     localStorage.setItem("sw.default_voice", defaultVoice);
     localStorage.setItem("sw.export_quality", exportQuality);
+    localStorage.setItem("soundwave_orb_mode", orbMode);
     toast.success("Preferences saved");
   };
-
-  const clearLocalCache = async () => {
-    setClearing(true);
-    try {
-      await idbClear();
-      setStorageUsage(await idbUsage());
-      toast.success("Local cache cleared");
-    } finally {
-      setClearing(false);
-    }
-  };
-
-
 
   const downloadData = async () => {
     try {
@@ -315,15 +295,35 @@ function PreferencesTab() {
 
   return (
     <>
-      <Card title="Defaults" icon={<Palette className="h-4 w-4" />}>
+      <Card title="Defaults & Agent Appearance" icon={<Palette className="h-4 w-4" />}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default voice</label>
+            <label className="mb-1.5 block text-sm text-gray-300">Default voice (Male default)</label>
             <Select
               value={defaultVoice}
               onChange={setDefaultVoice}
               options={DEFAULT_VOICES.map((v) => ({ value: v.id, label: `${v.displayName} (${v.gender}, ${v.accent})` }))}
               ariaLabel="Default voice"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-gray-300">Thinking Orb Visualizer Mode</label>
+            <Select
+              value={orbMode}
+              onChange={setOrbMode}
+              options={[
+                { value: "auto", label: "Auto Sync (Default — dynamic reactive states)" },
+                { value: "breathing", label: "Breathing (Morphing gentle standby ring)" },
+                { value: "listening", label: "Listening (Rolling rings waveform)" },
+                { value: "solving", label: "Solving (Scrambled concentric bands)" },
+                { value: "searching", label: "Searching (Sweeping scan meridian)" },
+                { value: "connecting", label: "Connecting (Constellation network)" },
+                { value: "weaving", label: "Weaving (Luminous triple plait)" },
+                { value: "composing", label: "Composing (Harmonic multi-band sash)" },
+                { value: "working", label: "Working (High-speed particle orbits)" },
+                { value: "shaping", label: "Shaping (Geometric metamorphosis)" },
+              ]}
+              ariaLabel="Orb mode"
             />
           </div>
           <div>
@@ -339,13 +339,6 @@ function PreferencesTab() {
         </div>
       </Card>
 
-      <Card title="Email notifications" icon={<Palette className="h-4 w-4" />}>
-        <div className="space-y-4">
-          <PrefToggle label="Product updates" desc="New features and voices." checked={productUpdates} onChange={setProductUpdates} />
-          <PrefToggle label="Usage alerts" desc="Get notified at 80% and 100% of your character quota." checked={usageAlerts} onChange={setUsageAlerts} />
-        </div>
-      </Card>
-
       <Card title="Data & privacy" icon={<Database className="h-4 w-4" />}>
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -355,124 +348,12 @@ function PreferencesTab() {
             </div>
             <Button size="sm" variant="outline" icon={<Download className="h-4 w-4" />} onClick={downloadData}>Export</Button>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-white">Browser storage</p>
-              <p className="text-xs text-gray-500">
-                Local audio and projects use <span className="text-white">{formatBytes(storageUsage)}</span>.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={clearLocalCache} loading={clearing}>Clear local cache</Button>
-            </div>
-          </div>
+          <p className="text-xs text-gray-500">
+            This browser is using <span className="text-white">{formatBytes(storageUsage)}</span> for local audio and projects.
+          </p>
         </div>
       </Card>
     </>
-  );
-}
-
-function PrefToggle({ label, desc, checked, onChange }: { label: string; desc: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{label}</p>
-        <p className="text-xs text-gray-500">{desc}</p>
-      </div>
-      <Toggle checked={checked} onChange={onChange} label={label} />
-    </div>
-  );
-}
-
-// ── API keys (Enterprise) ───────────────────────────────────────────────────
-function ApiKeysTab() {
-  const { user } = useAuth();
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [revealed, setRevealed] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await http.get<{ apiKeys: ApiKey[] }>("/api-keys");
-        setKeys(res.apiKeys);
-      } catch {
-        /* enterprise only */
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  if (user?.plan !== "ENTERPRISE") {
-    return (
-      <Card title="API Keys" icon={<KeyRound className="h-4 w-4" />}>
-        <p className="text-sm text-gray-400">API keys are available on the Enterprise plan. Note: API keys grant access to video-export endpoints only — TTS generation is always client-side.</p>
-      </Card>
-    );
-  }
-
-  const createKey = async () => {
-    if (!name.trim()) return;
-    setCreating(true);
-    try {
-      const res = await http.post<{ apiKey: ApiKey }>("/api-keys", { name: name.trim() });
-      setKeys((k) => [res.apiKey, ...k]);
-      setName("");
-      setRevealed(res.apiKey.key ?? null);
-    } catch (e) {
-      toast.error("Failed", (e as Error).message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const revoke = async (id: string) => {
-    try {
-      await http.del(`/api-keys/${id}`);
-      setKeys((k) => k.filter((x) => x.id !== id));
-      toast.success("API key revoked");
-    } catch (e) {
-      toast.error("Failed", (e as Error).message);
-    }
-  };
-
-  return (
-    <Card title="API Keys" icon={<KeyRound className="h-4 w-4" />}>
-      <p className="mb-4 text-sm text-gray-400">API keys grant access to video-export endpoints only. TTS generation is always client-side.</p>
-      <div className="flex gap-2">
-        <TextField label="Key name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Production key" className="flex-1" />
-        <Button onClick={createKey} loading={creating} className="mt-6">Create key</Button>
-      </div>
-      {revealed && (
-        <div className="mt-4 rounded-card border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-xs text-amber-200">Copy this key now — it won't be shown again:</p>
-          <p className="mt-1 break-all font-mono text-sm text-white">{revealed}</p>
-        </div>
-      )}
-      <div className="mt-5">
-        {loading ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" /> : keys.length === 0 ? (
-          <p className="text-sm text-gray-500">No API keys yet.</p>
-        ) : (
-          <ul className="divide-y divide-gray-800">
-            {keys.map((k) => (
-              <li key={k.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-white">{k.name}</p>
-                  <p className="font-mono text-xs text-gray-500">{k.prefix}…</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone="gray">{k.createdAt ? formatDate(k.createdAt) : ""}</Badge>
-                  <Button size="sm" variant="danger" onClick={() => revoke(k.id)}>Revoke</Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
   );
 }
 

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Github } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { AuthLayout } from "../components/layout/AuthLayout";
 import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
@@ -12,6 +12,7 @@ import { http } from "../lib/api";
 import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { GoogleIcon } from "../components/GoogleIcon";
+import { useOAuthProviders } from "../hooks/useOAuthProviders";
 import type { UserProfile } from "../lib/types";
 
 const schema = z.object({
@@ -28,6 +29,7 @@ export function SignIn() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const oauth = useOAuthProviders();
 
   const {
     register,
@@ -55,8 +57,8 @@ export function SignIn() {
     }
   };
 
-  const startOAuth = (provider: "google" | "github") => {
-    window.location.assign(`/api/v1/auth/oauth/${provider}`);
+  const startOAuth = () => {
+    window.location.assign("/api/v1/auth/oauth/google");
   };
 
   return (
@@ -76,20 +78,23 @@ export function SignIn() {
       <h1 className="text-2xl font-bold text-white">Welcome back</h1>
       <p className="mt-1 text-sm text-gray-400">Sign in to continue to your studio.</p>
 
-      <div className="mt-6 grid grid-cols-1 gap-3">
-        <Button variant="outline" type="button" onClick={() => startOAuth("google")}>
-          <GoogleIcon className="h-5 w-5" /> Continue with Google
-        </Button>
-        <Button variant="outline" type="button" onClick={() => startOAuth("github")}>
-          <Github className="h-5 w-5" /> Continue with GitHub
-        </Button>
-      </div>
+      {/* OAuth button only renders when the server has Google configured —
+          otherwise it would dead-end at a "not available" page. */}
+      {oauth?.google && (
+        <>
+          <div className="mt-6">
+            <Button variant="outline" type="button" fullWidth onClick={startOAuth}>
+              <GoogleIcon className="h-5 w-5" /> Continue with Google
+            </Button>
+          </div>
 
-      <div className="my-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-gray-800" />
-        <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-        <span className="h-px flex-1 bg-gray-800" />
-      </div>
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-gray-800" />
+            <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
+            <span className="h-px flex-1 bg-gray-800" />
+          </div>
+        </>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         <TextField label="Email" type="email" autoComplete="email" placeholder="you@example.com" error={errors.email?.message} {...register("email")} />

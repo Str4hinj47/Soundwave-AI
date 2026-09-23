@@ -1,7 +1,12 @@
 # ── Soundwave AI — Docker Compose ─────────────────────────────────────────
-# Production topology: Postgres + Redis + API + Nginx (static + reverse proxy).
+# Production topology: Postgres + API + Caddy (frontend static files, automatic
+# free HTTPS, and reverse proxy — all same-origin, so auth cookies just work).
 #
-#   docker compose up --build
+# Deploy:
+#   1. Build the frontend:   cd frontend && npm ci && npm run build && cd ..
+#   2. Create .env in THIS directory with the values referenced below
+#      (compose reads root .env — different from server/.env used in dev)
+#   3. docker compose up -d --build
 #
 # The API auto-selects the Prisma store when DATABASE_URL is a postgres URL;
 # without it, it falls back to the JSON file store (useful for smoke tests).
@@ -12,7 +17,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: soundwave
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soundwave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: soundwave
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -22,13 +27,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redisdata:/data
-
   api:
     build:
       context: .
@@ -37,51 +35,65 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_started
     environment:
       NODE_ENV: production
       PORT: "4000"
-      APP_URL: ${APP_URL:-https://app.soundwave.ai}
-      DATABASE_URL: postgresql://soundwave:${POSTGRES_PASSWORD:-soundwave}@db:5432/soundwave
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-noreply@soundwave.ai}
+      # Public origin of the site (https). Cookies are Secure + SameSite=Strict
+      # in production, so the site must be reachable over HTTPS at this URL.
+      APP_URL: ${APP_URL:?set APP_URL in .env, e.g. https://1.2.3.4.sslip.io}
+      # Extra comma-separated origins allowed to call the API cross-site.
+      # Not needed in the default same-origin setup.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      DATABASE_URL: postgresql://soundwave:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/soundwave
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      # Plan given to new signups. MUST stay FREE in production.
+      DEFAULT_SIGNUP_PLAN: ${DEFAULT_SIGNUP_PLAN:-FREE}
+      # Email (Resend — free tier is enough for verification/reset mails).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Soundwave AI <no-reply@soundwave.ai>}
+      # Payments (optional — billing returns a clear error until set).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
-      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      STRIPE_PRICE_PRO_MONTHLY: ${STRIPE_PRICE_PRO_MONTHLY:-}
+      STRIPE_PRICE_PRO_ANNUAL: ${STRIPE_PRICE_PRO_ANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_MONTHLY: ${STRIPE_PRICE_ENTERPRISE_MONTHLY:-}
+      STRIPE_PRICE_ENTERPRISE_ANNUAL: ${STRIPE_PRICE_ENTERPRISE_ANNUAL:-}
+      # Google OAuth (optional — sign-in button hides when unset).
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Voice cloning sidecar (optional — feature hides when unset).
+      VOICECLONE_URL: ${VOICECLONE_URL:-}
+      VOICECLONE_TOKEN: ${VOICECLONE_TOKEN:-}
+      VOICECLONE_MIN_PLAN: ${VOICECLONE_MIN_PLAN:-FREE}
+      # The container image installs ffmpeg/yt-dlp from apk (multi-arch).
       FFMPEG_PATH: /usr/bin/ffmpeg
-      HF_TOKEN: ${HF_TOKEN:-}
       DATA_DIR: /app/data
+      UPLOADS_DIR: /app/data/uploads
     volumes:
-      - uploads:/app/data/uploads
-      - generated:/app/data/generated
+      - appdata:/app/data
 
   web:
-    image: nginx:1.27-alpine
+    image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       - api
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # Set to your public hostname (e.g. 1.2.3.4.sslip.io or soundwave.ai).
+      # Caddy obtains and renews a free Let's Encrypt certificate for it
+      # automatically. Must match the host in APP_URL.
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env, e.g. 1.2.3.4.sslip.io}
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - webcerts:/etc/nginx/certs
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   pgdata:
-  redisdata:
-  uploads:
-  generated:
-  webcerts:
+  appdata:
+  caddy_data:
+  caddy_config:

@@ -16,6 +16,8 @@ server/dist/
 server/data/
 server/uploads/
 server/generated/
+soundwave_live_progress.html
+background_cache/
 
 # logs
 *.log
@@ -28,3 +30,18 @@ npm-debug.log*
 
 # test artifacts
 coverage/
+
+# python artifacts
+*.pyc
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+.venv/
+
+
+# voice-clone sidecar runtime artifacts
+voiceclone/profiles/
+voiceclone/.venv/
+voiceclone/__pycache__/
+__pycache__/
