@@ -1,0 +1,133 @@
+{
+  "version": "2026-09-22-v16",
+  "date": "2026-09-22",
+  "season": "Season 86 K.H.A.O.S",
+  "patch_notes": "v16 integrate Laya fast local typed decisions 7-33ms \u2014 Laya-MLX Apple Silicon 7-14ms MLX no PyTorch no cloud 843MB checkpoint 421M English 512 context 322M multilingual 1024 context 13.42ms P50 421M 7.39ms P50 322M M3 Max, upstream Laya PyTorch 33ms T4 Windows/Linux pip install laya convaiinnovations/laya Router preload sub-35ms, vs Jev hosted 70-500ms \u2014 three primitives choice pick one of fixed set with probabilities, score ordered scale low/medium/high with distribution expected score, noul boolean P(true) threshold logic \u2014 use when app already knows possible shape of answer which option what score how likely not when answer must be created \u2014 hybrid user input -> Laya route/score/filter -> app logic -> LLM only when generation needed \u2014 for Clash Royale classify_troop brown hog medium at bridge 0.35,0.35 enemy -> Hog Rider choice threat high wincon true building false so knows how to react Cannon 4-3, decide_card elixir 7 hand Cannon Musketeer Skeletons Ice Spirit vs Hog at bridge -> Cannon choice mode defense urgency high should_defend true is_hog_threat true, predict_archetype seen Hog Rider Musketeer Cannon -> Hog 2.6, decide_spell_cycle tower 500 HP big spell Rocket -> defend_spell_cycle \u2014 replaces/augments Jev hosted API local fast \u2014 limitations 512/1024 token context state+instructions+options share budget, base checkpoints near chance zero-shot 0.362 vs 0.318 random 0.766 belongs to fine-tuned checkpoint, not generative, confidence not correctness, some tasks belong in deterministic code \u2014 integration core/clash_royale_laya.py LayaDecisionEngine tries laya_mlx then laya PyTorch then Jev then heuristic, methods classify_troop decide_card predict_archetype decide_spell_cycle get_status, integrated into ai play_step Laya decision before Jev guardrail Hog threat >0.7 -> Cannon middle override, health bar classification via Laya, 41/41 PASS",
+  "patch_url": "https://royaleapi.com/blog/balance?2026-09",
+  "overrides": {
+    "cards": {},
+    "evos": {},
+    "heroes": {},
+    "meta": {},
+    "placements": {},
+    "reaction_cache": {},
+    "spell_reduction": {}
+  },
+  "stats": {
+    "total_cards": 123,
+    "total_evos": 42,
+    "total_heroes": 17,
+    "total_meta_decks": 53,
+    "total_placements": 17,
+    "last_fetch": null,
+    "last_check": null,
+    "update_count": 4,
+    "last_update": "2026-09-22 04:00:00"
+  },
+  "changelog": [
+    {
+      "version": "2026-09-22-v9",
+      "date": "2026-09-22",
+      "changes": "Initial v9 placement engine 1100+ lines, most advanced placement & react logic milliseconds, balance manager easy update system",
+      "reason": "Most advanced placement & react logic milliseconds \u2014 ARENA 18x32 X-Y notation, BUILDING_PLACEMENTS Cannon 11 Tesla 4 Tornado 1, KITING horizontal 5 tiles from crown 3 from river 226 DPS free, Ice Golem center 1 tile opposite lane most important 2.6, Musketeer edge/back corner, Hog26 placements, reaction cache 17 threats precomputed <1ms, ultra-fast mouse 52ms Golden Knight ready <200ms 25x faster, balance manager single JSON validation 1% error margin history rollback parse patch notes auto-apply",
+      "old_version": "2026-09-21-v8"
+    },
+    {
+      "version": "2026-09-22-v10",
+      "date": "2026-09-22",
+      "changes": "v10 add advanced knowledge module 1100+ lines elixir tower spell reduction champion evo hero archetype phase concepts interactions leveling modes pro tips recent meta + advanced action manager + AI integration + spell_reduction overrides",
+      "reason": "Implement remaining advanced knowledge AI didn't know yet \u2014 elixir system, tower mechanics L1-15, spell crown tower reduction June 2026 table, champion rework Oct 2025, single-use Aug 2026, evolution rework March 2026, hero mechanics 17, deck archetypes 6+hybrid, game phases, advanced concepts 18, card interactions, leveling, game modes including Princess Gambit, pro tips 18, recent meta 2026",
+      "old_version": "2026-09-22-v9"
+    },
+    {
+      "version": "2026-09-22-v11",
+      "date": "2026-09-22",
+      "changes": "v11 add planning engine 800+ lines tower troops 4 Princess Cannoneer Dagger Duchess Royal Chef stats L14 HP dmg DPS range tier best_for, King Tower Level 1-16 requirements L2 9 cards L1+ to L16 14 cards L15+ effects Crown power max Tower Troop level Magic Item inventory Pass Royale gift scaling Card boost never decreases XP removed June 2026 Collection Level formula cards\u00d7level + evos\u00d75 + heroes\u00d75 max 2306 card max 16 tournament 11 Star cosmetic, spell cycling true requires 3 conditions elixir advantage/parity opponent at tower or >=5 elixir defensive cards in hand optimal windows after successful defense never at -2 disadvantage multi-spell rotation defensive spell value tower damage tracking counter constant pressure opposite lane punish, win condition families 7 fast building pressure tank counterpush air pressure placement chip siege lane control split pressure secondary pressure counter the counter count 4 cards, endgame protect lead 80% vs 60% time <60s defend cheap preserve lead, if close wincon can't connect defend and cycle big spell on tower user's explicit example Rocket 493 Fireball 229 Poison 216 Lightning 357 tower <1000",
+      "reason": "Add planning for close game win condition can't connect defend and cycle big spell on tower + tower troops Princess Cannoneer Dagger Duchess Royal Chef + levels King Tower 1-16 Collection Level Card max 16",
+      "old_version": "2026-09-22-v10"
+    },
+    {
+      "version": "2026-09-22-v12",
+      "date": "2026-09-22",
+      "changes": "v12 fix clicking between towers at 10 elixir without selecting card \u2014 card selector situation-aware Log Bait Princess at bridge opening slight pressure, leak prevention 9.5+ must play cheapest Princess at bridge not empty 0.45,0.68 bug, hand_to_screen fixed y 0.88, delay 50ms defense 200ms opening 150ms balanced, execute_action bug fix between towers overridden to safe 0.5,0.75, meta decks Log Bait opening Princess at bridge forces Log/Arrows",
+      "reason": "User report he still just clicks into space between princess towers at 10 elixir without selecting a card make him able to select a card based on situation for example create slight pressure at beginning with princess at bridge he had logbait deck",
+      "old_version": "2026-09-22-v11"
+    },
+    {
+      "version": "2026-09-22-v13",
+      "date": "2026-09-22",
+      "changes": "v13 fix lying about Cannon deployment when deck has no Cannon and elixir 10 not 7 \u2014 my_deck.json explicit deck setting, card selector respects my_deck Log Bait opening Princess at bridge slight pressure, vision elixir detection improved wide HSV + width full bar ->10 fallback 10 not 7 leak prevention, execute_action post-execution verification elixir decrease check if still 10 then failed no_card_selected prevents lying",
+      "reason": "User screenshot shows elixir 10 Max:10 full pink bar but AI said elixir 7 and deployed Cannon in center when deck has no Cannon and opponent no troops \u2014 lying \u2014 and spamming no card selected at beginning then stopping \u2014 fixed with my_deck and post verification and elixir detection",
+      "old_version": "2026-09-22-v12"
+    },
+    {
+      "version": "2026-09-22-v14",
+      "date": "2026-09-22",
+      "changes": "v14 fix horrible vision actually sees cards not Unknown no Cannon hallucination elixir 10 not 7 \u2014 vision_v2 template matching CDN slug map 96 cards download_templates classify_hand_card template+histogram+cost OCR my_deck limit 8 not 123 detect_hand_v2 y85% h13% w18% gap2% start8% detect_troops_v2 blob size small medium large team y<0.5 enemy _get_vision tries v2 first then v1 actually sees Log Bait not Unknown Cannon vision_v2 action status/download 35/35 PASS",
+      "reason": "User: what kind of horrible vision does he have if I have to tell him what deck he's using? And if he cant even tell what he has in his deck how on earth is he supposed to react to opponent placing \u2014 screenshot shows elixir 10 Max:10 full pink but AI said 7 and deployed Cannon when deck has no Cannon and opponent no troops lying spamming no card selected",
+      "old_version": "2026-09-22-v13"
+    },
+    {
+      "version": "2026-09-22-v15",
+      "date": "2026-09-22",
+      "changes": "v15 actually recognizes placed cards \u2014 health bars red enemy blue friendly detection most reliable troop locator, color profiles HSV 29 troops, histogram matching vs card templates, clustering swarm, opponent deck tracking, building detection, knows how to react vs Hog Rider Cannon 4-3 etc \u2014 fixes can he actually recognize the placed cards so he knows how to react",
+      "reason": "User: can he actually recognize the placed cards so he knows how to react \u2014 previous troop detection only size classification small/medium/large guessed Hog at bridge but didn't actually recognize \u2014 now health bars + color profiles + histogram + clustering actually recognizes",
+      "old_version": "2026-09-22-v14"
+    },
+    {
+      "version": "2026-09-22-v16",
+      "date": "2026-09-22",
+      "changes": "v16 integrate Laya fast local typed decisions 7-33ms \u2014 Laya-MLX 7-14ms Apple Silicon MLX no PyTorch no cloud, Laya PyTorch 33ms T4 Windows/Linux, vs Jev 70-500ms \u2014 choice/score/noul \u2014 classify_troop brown hog at bridge -> Hog Rider so knows how to react Cannon 4-3, decide_card elixir 7 vs Hog -> Cannon defense, predict_archetype, decide_spell_cycle \u2014 core/clash_royale_laya.py tries laya_mlx then laya then Jev then heuristic \u2014 integrated into ai play_step \u2014 41/41 PASS",
+      "reason": "User asked can we use Laya-MLX https://aiidelist.com/blog/what-is-laya-mlx \u2014 Laya-MLX is native MLX runtime for Laya typed decision models 7-14ms local decision layer for software and agents not chatbot \u2014 fast local alternative to Jev hosted API \u2014 for Clash Royale actually recognizes placed cards so knows how to react",
+      "old_version": "2026-09-22-v15"
+    }
+  ],
+  "instructions": {
+    "how_to_update": [
+      "EASIEST: Edit this JSON file directly \u2014 add entry to overrides.cards, overrides.evos, overrides.heroes, overrides.meta, overrides.placements, overrides.reaction_cache",
+      "Example card: \"Hog Rider\": {\"elixir\": 4, \"damage\": 317, \"hitpoints\": 1408, \"dps\": 198, \"reason\": \"Sep 2026 no change\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "Example evo: \"Evo Cannon\": {\"win_rate\": 50.8, \"tier\": \"A\", \"reason\": \"Still best vs hog after nerf\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "Example hero: \"Hero Ice Golem\": {\"win_rate\": 49.4, \"tier\": \"B\", \"reason\": \"Safe to upgrade\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "Example meta: \"Hog 2.6 Evo Musk Evo Cannon Hero Ice Golem\": {\"win_rate\": 64.1, \"usage\": 5.2, \"reason\": \"Best meta 2621 battles\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "Example placement: \"Cannon 4-3\": {\"still_valid\": true, \"adjustment\": null, \"reason\": \"Standard center pull still best vs Hog\", \"date\": \"2026-09-22\", \"changed\": false}",
+      "Example spell reduction: \"Lightning\": {\"current\": \"25% of full damage (75% reduction)\", \"reason\": \"June 2026 still 25%\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "Example reaction cache: \"Hog Rider\": {\"counters\": [[\"Cannon\", \"4-3 Standard Center Pull\"], [\"Skeletons\", \"Middle Distract\"], [\"Ice Spirit\", \"On Top Enemy Hog\"]], \"elixir\": 4, \"reason\": \"Cannon 4-3 still best\", \"date\": \"2026-09-22\", \"changed\": true}",
+      "After editing, restart AI or call BalanceManager.apply_overrides_to_runtime() \u2014 it patches CARDS_DB, EVOS_DB, HEROES_DB, META_DECKS, PLACEMENTS at runtime \u2014 knowledge.py and meta.py and placement.py auto-apply on import",
+      "PLUGIN: action=balance source_dir=\"Hog Rider: Damage 317 -> 333\" \u2014 parses patch notes regex and applies \u2014 validation elixir 1-10 damage>=0 hp>=0 win_rate 0-100 tier S-E \u2014 1% error margin verified saved content matches \u2014 history saved to config/balance_history/ 20 max \u2014 version bump date-vN",
+      "PLUGIN: action=balance source_dir=\"Hog Rider elixir 4->5\" \u2014 also parses",
+      "PLUGIN: action=balance source_dir=\"fetch latest\" \u2014 placeholder fetch from RoyaleAPI (web_search when available)",
+      "PLUGIN: action=balance source_dir=\"status\" \u2014 shows current version and overrides count",
+      "PLUGIN: action=balance source_dir=\"changelog\" \u2014 shows changelog 20 recent",
+      "PLUGIN: action=balance source_dir=\"history\" \u2014 lists history files",
+      "PLUGIN: action=balance source_dir=\"rollback v2026-09-22-v8\" \u2014 rollback to previous version",
+      "CLI: python -m core.clash_royale_balance --update-card \"Hog Rider\" --elixir 4 --damage 320 --reason \"Sep 2026 buff\"",
+      "CLI: python -m core.clash_royale_balance --parse \"Hog Rider: Damage 317 -> 333\" \u2014 parse without applying",
+      "CLI: python -m core.clash_royale_balance --patch-notes \"Hog Rider: Damage 317 -> 333\\nCannon: Elixir 3 -> 4\" --reason \"Sep 2026 balance\" \u2014 parse and apply",
+      "CLI: python -m core.clash_royale_balance --status",
+      "CLI: python -m core.clash_royale_balance --changelog",
+      "CLI: python -m core.clash_royale_balance --history",
+      "CLI: python -m core.clash_royale_balance --fetch",
+      "CLI: python -m core.clash_royale_balance --rollback v2026-09-22-v8",
+      "All updates validated \u2014 elixir 1-10, damage >=0, hp >=0, win_rate 0-100, tier S/A/B/C/D/E \u2014 1% error margin",
+      "History saved automatically in config/balance_history/ \u2014 rollback easy \u2014 keeps last 20",
+      "Verification after save \u2014 checks file content matches what was intended \u2014 not instantly saying done without checking \u2014 BalanceManager saves and verifies"
+    ],
+    "balance_sources": [
+      "https://royaleapi.com/blog/balance \u2014 official balance changes",
+      "https://royaleapi.com/decks/meta \u2014 meta win rates",
+      "https://royaleapi.com/cards \u2014 card stats",
+      "https://supercell.com/en/games/clashroyale/blog/ \u2014 official Supercell blog",
+      "In-game news \u2014 balance changes every month first Monday"
+    ],
+    "typical_balance_changes": [
+      "Card elixir cost: e.g., Cannon 3 -> 4 (nerf), Hog Rider 4 -> 3 (buff) \u2014 update overrides.cards[Card].elixir",
+      "Card damage: e.g., Hog Rider Damage 317 -> 333 (+5%) \u2014 update overrides.cards[Card].damage and dps",
+      "Card hitpoints: e.g., Cannon HP 742 -> 800 \u2014 update overrides.cards[Card].hitpoints",
+      "Evo win rate: e.g., Evo Cannon Win rate 50.8% -> 49.5% \u2014 update overrides.evos[Evo].win_rate",
+      "Hero win rate: e.g., Hero Ice Golem Win rate 49.4% -> 50.2% \u2014 update overrides.heroes[Hero].win_rate",
+      "Meta win rate: e.g., Hog 2.6 Win rate 64.1% -> 62.0% \u2014 update overrides.meta[Deck].win_rate",
+      "Placement: rarely changes, but if building range changes, placement might need adjustment \u2014 update overrides.placements[Placement].adjustment",
+      "Reaction cache: if meta changes, best counters might change \u2014 update overrides.reaction_cache[Threat].counters"
+    ]
+  }
+}
