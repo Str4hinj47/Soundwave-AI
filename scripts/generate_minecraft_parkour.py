@@ -21,11 +21,22 @@ OUTPUT_FILE = CACHE_DIR / "parkour_master_80s.mp4"
 DATA_OUTPUT_FILE = DATA_CACHE_DIR / "parkour_master_80s.mp4"
 SERVER_OUTPUT_FILE = SERVER_CACHE_DIR / "parkour_master_80s.mp4"
 
+# Orbital - No Copyright Gameplay (https://www.youtube.com/@OrbitalNCG/videos)
 CURATED_URLS = [
+    "https://www.youtube.com/watch?v=fw_eWpb7uCE",
+    "https://www.youtube.com/watch?v=zeyy5Yj-A4I",
+    "https://www.youtube.com/watch?v=-qK8scH4UC8",
+    "https://www.youtube.com/watch?v=85z7jqGAGcc",
+    "https://www.youtube.com/watch?v=z84bmLDzIIk",
     "https://www.youtube.com/watch?v=tiOl_mcAsF4",
-    "https://www.youtube.com/watch?v=BXUA2FncVPI",
-    "https://www.youtube.com/watch?v=71YeZAUS9NQ",
+    "https://www.youtube.com/watch?v=xU29hjgAg2w",
+    "https://www.youtube.com/watch?v=_GxTLyLyIbs",
     "https://www.youtube.com/watch?v=s600FYgI5-s",
+    "https://www.youtube.com/watch?v=yve_DhR1F8s",
+    "https://www.youtube.com/watch?v=VwZO7Im_tAc",
+    "https://www.youtube.com/watch?v=FOX3lBXVeck",
+    "https://www.youtube.com/watch?v=BXUA2FncVPI",
+    "https://www.youtube.com/watch?v=zdVQSm8bYu8",
 ]
 
 def find_ffmpeg() -> str:

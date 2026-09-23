@@ -19,7 +19,7 @@ import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPo
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
 
-// ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
+// ── Curated sources — Orbital - No Copyright Gameplay (@OrbitalNCG) ONLY ──
 export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
 
 export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];

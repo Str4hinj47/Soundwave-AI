@@ -24,10 +24,29 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
     expect(updated.customUrls).toContain(testUrl);
   });
 
-  it("contains curated copyright-free long Minecraft parkour video sources", () => {
+  it("sources every curated video from the Orbital NCG channel", () => {
     expect(CURATED_LONG_PARKOUR_VIDEOS.length).toBeGreaterThanOrEqual(5);
+    // Orbital NCG catalog video ids (https://www.youtube.com/@OrbitalNCG/videos)
+    const orbitalIds = new Set([
+      "fw_eWpb7uCE",
+      "zeyy5Yj-A4I",
+      "-qK8scH4UC8",
+      "85z7jqGAGcc",
+      "z84bmLDzIIk",
+      "tiOl_mcAsF4",
+      "xU29hjgAg2w",
+      "_GxTLyLyIbs",
+      "s600FYgI5-s",
+      "yve_DhR1F8s",
+      "VwZO7Im_tAc",
+      "FOX3lBXVeck",
+      "BXUA2FncVPI",
+      "zdVQSm8bYu8",
+    ]);
     for (const url of CURATED_LONG_PARKOUR_VIDEOS) {
       expect(url).toContain("youtube.com/watch?v=");
+      const id = url.split("watch?v=")[1];
+      expect(orbitalIds.has(id)).toBe(true);
     }
   });
 

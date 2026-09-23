@@ -5,19 +5,25 @@ import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
 import { downloadVideo } from "./ytdlp.js";
 
+// Orbital - No Copyright Gameplay (https://www.youtube.com/@OrbitalNCG/videos)
+// All background sources come from this channel only.
+export const ORBITAL_NCG_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG/videos";
+
 export const CURATED_LONG_PARKOUR_VIDEOS = [
-  "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 Hour 2026 4K 60fps Parkour
-  "https://www.youtube.com/watch?v=BXUA2FncVPI", // 4K 2025 Background for Shorts
-  "https://www.youtube.com/watch?v=71YeZAUS9NQ", // 4K 60FPS FREE great for Shorts
-  "https://www.youtube.com/watch?v=FOX3lBXVeck", // Free2Use long gameplay
-  "https://www.youtube.com/watch?v=85z7jqGAGcc", // 2 Hours gameplay
-  "https://www.youtube.com/watch?v=Geuaf2Nj_zE", // Smooth spiral parkour
-  "https://www.youtube.com/watch?v=s600FYgI5-s", // 1 Hour Minecraft parkour run
-  "https://www.youtube.com/watch?v=yve_DhR1F8s", // Free to use parkour
-  "https://www.youtube.com/watch?v=0w1u8k5eH3s", // Long parkour run
-  "https://www.youtube.com/watch?v=n5QZf6v3V7Y", // Minecraft parkour 60fps
-  "https://www.youtube.com/watch?v=7_r4mN4u1tQ", // Spiral tower parkour
-  "https://www.youtube.com/watch?v=2r1T2j3e4a5", // Speedrun parkour
+  "https://www.youtube.com/watch?v=fw_eWpb7uCE", // Orbital NCG — Vertical 4 HOURS
+  "https://www.youtube.com/watch?v=zeyy5Yj-A4I", // Orbital NCG — 4 HOURS
+  "https://www.youtube.com/watch?v=-qK8scH4UC8", // Orbital NCG — Vertical 2 Hours
+  "https://www.youtube.com/watch?v=85z7jqGAGcc", // Orbital NCG — 2 Hours
+  "https://www.youtube.com/watch?v=z84bmLDzIIk", // Orbital NCG — 4K (2 Hours)
+  "https://www.youtube.com/watch?v=tiOl_mcAsF4", // Orbital NCG — 1 HOUR
+  "https://www.youtube.com/watch?v=xU29hjgAg2w", // Orbital NCG — Vertical 1 HOUR
+  "https://www.youtube.com/watch?v=_GxTLyLyIbs", // Orbital NCG — 4K (1 HOUR)
+  "https://www.youtube.com/watch?v=s600FYgI5-s", // Orbital NCG — Vertical
+  "https://www.youtube.com/watch?v=yve_DhR1F8s", // Orbital NCG — Vertical
+  "https://www.youtube.com/watch?v=VwZO7Im_tAc", // Orbital NCG — 4K Horror Map
+  "https://www.youtube.com/watch?v=FOX3lBXVeck", // Orbital NCG — Free2Use
+  "https://www.youtube.com/watch?v=BXUA2FncVPI", // Orbital NCG — 4K
+  "https://www.youtube.com/watch?v=zdVQSm8bYu8", // Orbital NCG — Minecraft Parkour
 ];
 
 export const BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll"];

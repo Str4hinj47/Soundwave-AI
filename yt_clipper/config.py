@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional
 
 from . import __version__
 
+# Discovery is scoped to this channel: downloads only come from here.
+DEFAULT_CHANNEL_URL: str = "https://www.youtube.com/@OrbitalNCG/videos"
+
 DEFAULT_QUERIES: List[str] = [
     "minecraft parkour",
     "minecraft parkour challenge",
@@ -26,6 +29,9 @@ DEFAULT_QUERIES: List[str] = [
 @dataclass
 class ClippingConfig:
     # --- Discovery ---------------------------------------------------------
+    channel_url: Optional[str] = DEFAULT_CHANNEL_URL
+    """Preferred source channel (Orbital NCG). Videos are listed from here first;
+    open search is only a fallback and is filtered to the same channel."""
     search_queries: List[str] = field(default_factory=lambda: list(DEFAULT_QUERIES))
     """YouTube search queries to use. Keep at least the core terms you care about."""
     max_results_per_query: int = 25
@@ -37,10 +43,10 @@ class ClippingConfig:
     # --- "Long" + "high quality" gates --------------------------------------
     min_duration: float = 600.0
     """Minimum source video length in seconds (default 10 min)."""
-    max_duration: float = 3600.0
-    """Maximum source video length in seconds (default 1 h)."""
-    min_views: int = 100_000
-    """Minimum view count. 0 disables the gate."""
+    max_duration: float = 14400.0
+    """Maximum source video length in seconds (default 4 h — Orbital has multi-hour uploads)."""
+    min_views: int = 0
+    """Minimum view count. 0 disables the gate (Orbital NCG is a small trusted channel)."""
     min_like_ratio: float = 0.04
     """Minimum likes/views ratio. 0 disables the gate. Parkour videos that
     genuinely land usually sit between 0.04 and 0.10."""

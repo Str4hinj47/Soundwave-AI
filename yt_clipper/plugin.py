@@ -54,10 +54,10 @@ class ParkourClippingPlugin:
     name = PLUGIN_NAME
     version = __version__
     description = (
-        "Searches YouTube for long, high-quality Minecraft parkour videos "
-        "(duration, views, like ratio, recency, resolution filters + quality "
-        "score), downloads the best one(s), and cuts them into ~60-second "
-        "clips with ffmpeg. Returns JSON."
+        "Lists long Minecraft parkour uploads from the Orbital NCG channel "
+        "(https://www.youtube.com/@OrbitalNCG/videos), scores them, downloads "
+        "the best one(s), and cuts them into ~60-second clips with ffmpeg. "
+        "Open-search fallback stays filtered to that channel. Returns JSON."
     )
 
     def __init__(
@@ -79,8 +79,8 @@ class ParkourClippingPlugin:
     # -- tools ------------------------------------------------------------------
 
     def find_videos(self, limit: int = 5, query: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Search YouTube and return the best `limit` long parkour videos
-        with their quality score breakdown. Does not download anything."""
+        """List the best `limit` long parkour videos from the source channel
+        (Orbital NCG) with their quality score breakdown. Does not download."""
         queries = [query] if query else self.cfg.search_queries
         searcher = VideoSearcher(self.cfg)
         candidates = searcher.gather(queries)
@@ -165,9 +165,9 @@ class ParkourClippingPlugin:
                 "function": {
                     "name": "find_videos",
                     "description": (
-                        "Search YouTube for long, high-quality Minecraft parkour "
-                        "videos and return the top candidates with quality scores. "
-                        "Read-only; nothing is downloaded."
+                        "List long, high-quality Minecraft parkour videos from the "
+                        "Orbital NCG source channel and return the top candidates "
+                        "with quality scores. Read-only; nothing is downloaded."
                     ),
                     "parameters": {
                         "type": "object",

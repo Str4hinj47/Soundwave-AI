@@ -28,19 +28,25 @@ try:
 except Exception:
     HAS_YT_CLIPPER = False
 
+# Orbital - No Copyright Gameplay (https://www.youtube.com/@OrbitalNCG/videos)
+# All background sources come from this channel only.
+ORBITAL_NCG_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG/videos"
+
 CURATED_LONG_PARKOUR_VIDEOS = [
-    "https://www.youtube.com/watch?v=tiOl_mcAsF4", # 1 Hour 2026 4K 60fps Parkour
-    "https://www.youtube.com/watch?v=BXUA2FncVPI", # 4K 2025 Background for Shorts
-    "https://www.youtube.com/watch?v=71YeZAUS9NQ", # 4K 60FPS Clean Gameplay
-    "https://www.youtube.com/watch?v=FOX3lBXVeck", # Free2Use long gameplay
-    "https://www.youtube.com/watch?v=85z7jqGAGcc", # 2 Hours gameplay
-    "https://www.youtube.com/watch?v=Geuaf2Nj_zE", # Smooth spiral parkour
-    "https://www.youtube.com/watch?v=s600FYgI5-s", # 1 Hour Minecraft parkour run
-    "https://www.youtube.com/watch?v=yve_DhR1F8s", # Free to use parkour
-    "https://www.youtube.com/watch?v=0w1u8k5eH3s", # Long parkour run
-    "https://www.youtube.com/watch?v=n5QZf6v3V7Y", # Minecraft parkour 60fps
-    "https://www.youtube.com/watch?v=7_r4mN4u1tQ", # Spiral tower parkour
-    "https://www.youtube.com/watch?v=2r1T2j3e4a5", # Speedrun parkour
+    "https://www.youtube.com/watch?v=fw_eWpb7uCE", # Orbital NCG — Vertical 4 HOURS
+    "https://www.youtube.com/watch?v=zeyy5Yj-A4I", # Orbital NCG — 4 HOURS
+    "https://www.youtube.com/watch?v=-qK8scH4UC8", # Orbital NCG — Vertical 2 Hours
+    "https://www.youtube.com/watch?v=85z7jqGAGcc", # Orbital NCG — 2 Hours
+    "https://www.youtube.com/watch?v=z84bmLDzIIk", # Orbital NCG — 4K (2 Hours)
+    "https://www.youtube.com/watch?v=tiOl_mcAsF4", # Orbital NCG — 1 HOUR
+    "https://www.youtube.com/watch?v=xU29hjgAg2w", # Orbital NCG — Vertical 1 HOUR
+    "https://www.youtube.com/watch?v=_GxTLyLyIbs", # Orbital NCG — 4K (1 HOUR)
+    "https://www.youtube.com/watch?v=s600FYgI5-s", # Orbital NCG — Vertical
+    "https://www.youtube.com/watch?v=yve_DhR1F8s", # Orbital NCG — Vertical
+    "https://www.youtube.com/watch?v=VwZO7Im_tAc", # Orbital NCG — 4K Horror Map
+    "https://www.youtube.com/watch?v=FOX3lBXVeck", # Orbital NCG — Free2Use
+    "https://www.youtube.com/watch?v=BXUA2FncVPI", # Orbital NCG — 4K
+    "https://www.youtube.com/watch?v=zdVQSm8bYu8", # Orbital NCG — Minecraft Parkour
 ]
 
 BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll", "rick roll"]
@@ -212,7 +218,7 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
             if u not in used:
                 target_url = u
                 break
-        # Then discover with yt_clipper or use curated URLs
+        # Then discover with yt_clipper (Orbital NCG channel) or use curated URLs
         if not target_url and HAS_YT_CLIPPER:
             try:
                 ffmpeg_bin, _ = find_tools()
@@ -220,9 +226,13 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
                 top_vids = plugin.find_videos(limit=5)
                 for tv in top_vids:
                     u = tv.get("url") or f"https://www.youtube.com/watch?v={tv.get('video_id')}"
+                    channel = (tv.get("channel") or "").lower()
+                    # Only accept uploads from Orbital - No Copyright Gameplay
+                    if "orbital" not in channel:
+                        continue
                     if u and u not in used and not is_blacklisted(u):
                         target_url = u
-                        print(f"[CacheManager] yt_clipper discovered top video: {tv.get('title')} (score: {tv.get('score')})")
+                        print(f"[CacheManager] Orbital NCG source: {tv.get('title')} (score: {tv.get('score')})")
                         break
             except Exception as e:
                 print(f"[CacheManager] yt_clipper discovery fallback: {e}")
