@@ -252,60 +252,80 @@ export class MinecraftBackgroundPool {
     fs.mkdirSync(path.dirname(targetMaster), { recursive: true });
     console.log("[BackgroundPool] Local parkour master missing. Generating 60fps Minecraft parkour video...");
 
-    // 1. Try python generator
-    const scriptCandidates = [
-      path.resolve(process.cwd(), "scripts", "generate_minecraft_parkour.py"),
-      path.resolve(process.cwd(), "..", "scripts", "generate_minecraft_parkour.py"),
-    ];
-    const script = scriptCandidates.find((s) => fs.existsSync(s));
-    if (script) {
-      const pythonBin = process.platform === "win32" ? (process.env.PYTHON || "python") : "python3";
-      await new Promise<void>((resolve) => {
-        const p = spawn(pythonBin, [script], { stdio: "ignore" });
-        p.on("close", () => resolve());
-        p.on("error", () => resolve());
-      });
-      for (const m of masterCandidates) {
-        if (fs.existsSync(m) && fs.statSync(m).size > 500_000) {
-          return m;
-        }
-      }
-    }
-
     const ffmpeg = resolveFfmpegPath();
     const hudCandidates = [
       path.resolve(process.cwd(), "scripts", "assets", "hud", "hud_overlay.png"),
       path.resolve(process.cwd(), "..", "scripts", "assets", "hud", "hud_overlay.png"),
+      path.resolve(this.repoRoot, "scripts", "assets", "hud", "hud_overlay.png"),
     ];
     const hud = hudCandidates.find((h) => fs.existsSync(h));
+    // Bundled vertical parkour still — offline stand-in when YouTube is unreachable.
+    // Never fall back to testsrc2/color bars (SMPTE pattern looks broken in previews).
+    const stillCandidates = [
+      path.resolve(process.cwd(), "scripts", "assets", "parkour_master_still.png"),
+      path.resolve(process.cwd(), "..", "scripts", "assets", "parkour_master_still.png"),
+      path.resolve(this.repoRoot, "scripts", "assets", "parkour_master_still.png"),
+    ];
+    const still = stillCandidates.find((s) => fs.existsSync(s) && fs.statSync(s).size > 10_000);
 
-    // Fallback: Generate a clean dynamic vertical motion canvas with authentic HUD
-    console.log("[BackgroundPool] Generating dynamic vertical 60fps game canvas fallback...");
+    console.log("[BackgroundPool] Generating dynamic vertical 60fps parkour canvas fallback...");
     await new Promise<void>((resolve) => {
-      const filterStr = hud
-        ? `[0:v]fps=60,scale=1080:1920[bg];[bg][1:v]overlay=0:0[v]`
-        : `fps=60,scale=1080:1920`;
+      let filterStr: string;
+      let args: string[];
 
-      const args = hud
-        ? [
-            "-y",
-            "-f", "lavfi",
-            "-i", "testsrc2=size=1080x1920:rate=60",
-            "-loop", "1", "-i", hud,
-            "-filter_complex", filterStr,
-            "-map", "[v]",
-            "-t", "80",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-            targetMaster,
-          ]
-        : [
-            "-y",
-            "-f", "lavfi",
-            "-i", "testsrc2=size=1080x1920:rate=60",
-            "-t", "80",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-            targetMaster,
-          ];
+      if (still && hud) {
+        // Slow Ken Burns push-in on the parkour still + authentic HUD
+        filterStr =
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+          `zoompan=z='min(zoom+0.00035,1.18)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=4800:s=1080x1920:fps=60[bg];` +
+          `[bg][1:v]overlay=0:0[v]`;
+        args = [
+          "-y",
+          "-loop", "1", "-i", still,
+          "-loop", "1", "-i", hud,
+          "-filter_complex", filterStr,
+          "-map", "[v]",
+          "-t", "80",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+          targetMaster,
+        ];
+      } else if (still) {
+        filterStr =
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+          `zoompan=z='min(zoom+0.00035,1.18)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=4800:s=1080x1920:fps=60`;
+        args = [
+          "-y",
+          "-loop", "1", "-i", still,
+          "-filter_complex", filterStr,
+          "-t", "80",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+          targetMaster,
+        ];
+      } else if (hud) {
+        // Procedural motion + HUD (still better than bare color bars)
+        filterStr = `[0:v]fps=60,scale=1080:1920[bg];[bg][1:v]overlay=0:0[v]`;
+        args = [
+          "-y",
+          "-f", "lavfi",
+          "-i", "cellauto=size=1080x1920:rate=60:rule=110:random_fill_ratio=0.02:scroll=1",
+          "-loop", "1", "-i", hud,
+          "-filter_complex", filterStr,
+          "-map", "[v]",
+          "-t", "80",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+          targetMaster,
+        ];
+      } else {
+        // Last resort procedural motion — never testsrc2/color bars
+        args = [
+          "-y",
+          "-f", "lavfi",
+          "-i", "cellauto=size=1080x1920:rate=60:rule=110:random_fill_ratio=0.02:scroll=1",
+          "-t", "80",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+          targetMaster,
+        ];
+      }
 
       const proc = spawn(ffmpeg, args, { stdio: "ignore" });
       proc.on("close", () => resolve());
@@ -466,28 +486,33 @@ export class MinecraftBackgroundPool {
 
       console.log(`[BackgroundPool] Selected new long video: ${targetUrl}`);
       let longVideoPath: string | null = null;
+      let downloadOk = false;
 
       if (targetUrl) {
         try {
           console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
           // Download a fast 3-minute section (e.g. 00:30 to 03:30) with 45s max timeout
           const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 45_000);
-          if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath)) {
+          if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath) && dlResult.size > 200_000) {
             longVideoPath = dlResult.filePath;
+            downloadOk = true;
           }
         } catch (ytErr) {
           console.warn(`[BackgroundPool] YouTube download skipped (${(ytErr as Error).message}); using high-definition local Minecraft master.`);
         }
       }
 
-      const isFromDownload = !!longVideoPath;
-
-      // If online download failed or is offline sandbox, use high-res local master video
+      // If online download failed or is offline sandbox, use high-res local master video.
+      // Do NOT treat this as consuming the source URL — it stays eligible for retry.
       if (!longVideoPath) {
         longVideoPath = await this.ensureLocalMasterVideo();
+        console.warn(
+          `[BackgroundPool] Download did not produce footage for ${targetUrl ?? "pool"}. ` +
+            `Slicing local master instead; source URL was NOT marked used.`,
+        );
       }
 
-      const activeLabel = isFromDownload && targetUrl ? targetUrl : `Local Master: ${path.basename(longVideoPath)}`;
+      const activeLabel = downloadOk && targetUrl ? targetUrl : `Local Master: ${path.basename(longVideoPath)}`;
 
       // Slice the long video into 60s clips
       let clipsCreated = await this.sliceLongVideoIntoPool(longVideoPath, activeLabel);
@@ -510,15 +535,18 @@ export class MinecraftBackgroundPool {
         clipsCreated = this.getClipsInPool().length;
       }
 
-      // Record the used URL to ensure it is never downloaded again
-      if (targetUrl && !hist.usedUrls.includes(targetUrl)) {
+      // Only burn the source URL into history when we actually downloaded it.
+      // Failed downloads must stay retryable (offline sandbox, TLS blocks, etc.).
+      if (downloadOk && targetUrl && !hist.usedUrls.includes(targetUrl)) {
         hist.usedUrls.push(targetUrl);
         this.saveHistory(hist);
         console.log(`[BackgroundPool] Recorded URL to persistent history. Total unique used URLs: ${hist.usedUrls.length}`);
+      } else if (targetUrl && !downloadOk) {
+        console.warn(`[BackgroundPool] Leaving ${targetUrl} unused so the next replenish can retry it.`);
       }
 
       // Clean up temporary long download file to save disk space
-      if (longVideoPath && longVideoPath.startsWith(this.downloadsDir)) {
+      if (downloadOk && longVideoPath && longVideoPath.startsWith(this.downloadsDir)) {
         try {
           fs.unlinkSync(longVideoPath);
         } catch {}

@@ -50,6 +50,25 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
     }
   });
 
+  it("does not mark a source URL used when the download fails", async () => {
+    const hist0 = backgroundPool.getHistory();
+    const before = hist0.usedUrls.length;
+    // TEST_PARKOUR_UNIQUE_123 is already in customUrls from the earlier test;
+    // force a fresh unused custom URL so replenish will attempt (and fail) it.
+    const failUrl = "https://www.youtube.com/watch?v=ORBITAL_FAIL_RETRY_1";
+    backgroundPool.addCustomUrl(failUrl);
+
+    // Mock network is blocked in CI/sandbox — download must fail and leave URL unused.
+    await backgroundPool.replenishPool(failUrl);
+
+    const hist1 = backgroundPool.getHistory();
+    expect(hist1.usedUrls).not.toContain(failUrl);
+    // Either it wasn't recorded, or if somehow present the count shouldn't grow on pure failure
+    if (!hist1.usedUrls.includes(failUrl)) {
+      expect(hist1.usedUrls.length).toBe(before);
+    }
+  }, 180_000);
+
   it("consumes a 60s clip, deletes it from the pool, and moves to the next sequentially", async () => {
     // Ensure at least one test clip exists in pool to test consumption & rotation
     const poolDir = (backgroundPool as any).poolDir;

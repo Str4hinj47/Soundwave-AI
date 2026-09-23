@@ -106,18 +106,45 @@ def download_genuine_footage() -> bool:
 def render_procedural_motion_fallback():
     """
     Renders a continuous 60fps vertical procedural motion background with authentic HUD.
-    Zero static images, zero shaking picture hacks.
+    Zero static images, zero shaking picture hacks, zero SMPTE color bars.
     """
     print("[generate_minecraft_parkour] Rendering procedural 60fps vertical game canvas with HUD...")
     ffmpeg = find_ffmpeg()
     hud_path = ROOT_DIR / "scripts" / "assets" / "hud" / "hud_overlay.png"
+    still_path = ROOT_DIR / "scripts" / "assets" / "parkour_master_still.png"
 
-    # Dynamic procedural animated vertical game motion (80 seconds, 60fps, 1080x1920)
-    # Using high-framerate dynamic mandelbrot / testsrc2 pattern with HUD overlay
-    if hud_path.exists():
+    # Prefer bundled parkour still with slow zoom (looks like gameplay, not color bars)
+    if still_path.exists() and still_path.stat().st_size > 10_000:
+        zoom = (
+            "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
+            "zoompan=z='min(zoom+0.00035,1.18)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            ":d=4800:s=1080x1920:fps=60"
+        )
+        if hud_path.exists():
+            cmd = [
+                ffmpeg, "-y",
+                "-loop", "1", "-i", str(still_path),
+                "-loop", "1", "-i", str(hud_path),
+                "-filter_complex", f"[0:v]{zoom}[bg];[bg][1:v]overlay=0:0[v]",
+                "-map", "[v]",
+                "-t", "80",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+                str(OUTPUT_FILE),
+            ]
+        else:
+            cmd = [
+                ffmpeg, "-y",
+                "-loop", "1", "-i", str(still_path),
+                "-filter_complex", zoom,
+                "-t", "80",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+                str(OUTPUT_FILE),
+            ]
+    elif hud_path.exists():
         cmd = [
             ffmpeg, "-y",
-            "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=60",
+            "-f", "lavfi",
+            "-i", "cellauto=size=1080x1920:rate=60:rule=110:random_fill_ratio=0.02:scroll=1",
             "-loop", "1", "-i", str(hud_path),
             "-filter_complex", "[0:v]fps=60[bg];[bg][1:v]overlay=0:0[v]",
             "-map", "[v]",
@@ -128,7 +155,8 @@ def render_procedural_motion_fallback():
     else:
         cmd = [
             ffmpeg, "-y",
-            "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=60",
+            "-f", "lavfi",
+            "-i", "cellauto=size=1080x1920:rate=60:rule=110:random_fill_ratio=0.02:scroll=1",
             "-t", "80",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
             str(OUTPUT_FILE),

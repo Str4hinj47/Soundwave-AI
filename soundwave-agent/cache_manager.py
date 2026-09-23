@@ -253,6 +253,7 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
 
     ffmpeg_bin, ytdlp_bin = find_tools()
     long_video = None
+    download_ok = False
     downloads_dir = get_base_dir() / "downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
 
@@ -271,10 +272,12 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
             p = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
             if p.returncode == 0 and dl_target.exists() and dl_target.stat().st_size > 1_000_000:
                 long_video = dl_target
+                download_ok = True
         except Exception as e:
             print(f"[CacheManager] yt-dlp download skipped: {e}")
 
     # Fallback to local master file if offline or download failed
+    # (download_ok stays True only when yt-dlp produced a real file above)
     if not long_video:
         master = get_base_dir() / "80s" / "parkour_master_80s.mp4"
         if master.exists() and master.stat().st_size > 1_000_000:
@@ -284,13 +287,16 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
         print("[CacheManager] No source long video available.")
         return False
 
+    # Only mark the URL used when yt-dlp actually produced a file.
+    # Failed downloads stay eligible for retry.
     count = slice_video_into_pool(long_video, target_url or "master_parkour")
 
-    # Record persistent URL so it is never reused
-    if target_url and target_url not in hist.get("usedUrls", []):
+    if download_ok and target_url and target_url not in hist.get("usedUrls", []):
         hist.setdefault("usedUrls", []).append(target_url)
         save_history(hist)
         print(f"[CacheManager] Recorded video URL to persistent history. Total unique used: {len(hist['usedUrls'])}")
+    elif target_url and not download_ok:
+        print(f"[CacheManager] Download failed for {target_url}; leaving it unused for retry.")
 
     # Clean up temp downloaded long file
     if long_video and long_video != get_base_dir() / "80s" / "parkour_master_80s.mp4":
