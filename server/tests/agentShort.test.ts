@@ -15,6 +15,11 @@ import { createApp } from "../src/app.js";
 import { JsonStore, setStoreForTests } from "../src/lib/store.js";
 import { config, resolveFfmpegPath } from "../src/config.js";
 
+// This suite SIMULATES a download by seeding a synthetic testsrc source, so
+// the real-footage gate (which exists precisely to reject such footage) is
+// disabled here. The gate itself is covered by backgroundClips.test.ts.
+process.env.BACKGROUND_FOOTAGE_CHECK = "false";
+
 const FAKE_AUDIO = "/tmp/soundwave-fake-vo.wav";
 const SOURCE_ID = "E2ESRC0002";
 

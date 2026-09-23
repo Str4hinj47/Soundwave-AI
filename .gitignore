@@ -19,6 +19,10 @@ server/generated/
 soundwave_live_progress.html
 background_cache/
 
+# real background master footage (fetched by scripts/fetch_background_master.py —
+# hundreds of MB, stays out of git)
+vendor/minecraft-backgrounds/
+
 # logs
 *.log
 npm-debug.log*

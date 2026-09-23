@@ -7,8 +7,8 @@ import { optionalAuth } from "../middleware/auth.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { getStore } from "../lib/store.js";
-import { config } from "../config.js";
-import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR } from "./agentShort.js";
+import agentShortRouter, { VIRAL_SCRIPTS, generateScript } from "./agentShort.js";
+import { getBackgroundStatus } from "../lib/backgroundClips.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 
@@ -279,41 +279,50 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
   }
 });
 
-// GET /status — check health, tool binaries, and cache state
+// GET /status — check health, tool binaries, and the REAL background library
 router.get("/status", async (_req, res) => {
   const ffmpeg = resolveFfmpegPath();
   const ytdlp = resolveYtDlpPath();
 
-  const cacheDirs = [
-    path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s"),
-    path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s"),
-    path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s"),
-  ];
-
-  let cachedClipsCount = 0;
   let totalSizeBytes = 0;
-  for (const dir of cacheDirs) {
-    try {
-      if (fs.existsSync(dir)) {
-        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".mp4"));
-        cachedClipsCount += files.length;
-        for (const file of files) {
-          totalSizeBytes += fs.statSync(path.join(dir, file)).size;
-        }
-      }
-    } catch {}
+  try {
+    const bg = getBackgroundStatus();
+    for (const name of bg.clipFiles) {
+      try {
+        totalSizeBytes += fs.statSync(path.join(bg.dirs.clips, name)).size;
+      } catch {}
+    }
+    res.json({
+      status: "online",
+      system: "Soundwave AI Autonomous Agent Engine",
+      version: "2.0.0",
+      ffmpegAvailable: Boolean(ffmpeg),
+      ytdlpAvailable: Boolean(ytdlp),
+      cachedBackgroundClips: bg.clipsReady,
+      cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
+      backgroundSource: bg.source
+        ? {
+            url: bg.source.url,
+            title: bg.source.title,
+            remainingSec: bg.source.remainingSec,
+            local: bg.source.local,
+          }
+        : null,
+      backgroundCheckEnabled: bg.footageCheckEnabled,
+      supportedNiches: Object.keys(VIRAL_SCRIPTS),
+    });
+  } catch {
+    res.json({
+      status: "online",
+      system: "Soundwave AI Autonomous Agent Engine",
+      version: "2.0.0",
+      ffmpegAvailable: Boolean(ffmpeg),
+      ytdlpAvailable: Boolean(ytdlp),
+      cachedBackgroundClips: 0,
+      cachedBackgroundSizeMb: 0,
+      supportedNiches: Object.keys(VIRAL_SCRIPTS),
+    });
   }
-
-  res.json({
-    status: "online",
-    system: "Soundwave AI Autonomous Agent Engine",
-    version: "2.0.0",
-    ffmpegAvailable: Boolean(ffmpeg),
-    ytdlpAvailable: Boolean(ytdlp),
-    cachedBackgroundClips: cachedClipsCount,
-    cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
-    supportedNiches: Object.keys(VIRAL_SCRIPTS),
-  });
 });
 
 // GET /niches — retrieve all 7 niches and sample viral hooks

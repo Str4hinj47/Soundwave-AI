@@ -187,6 +187,44 @@ State-changing requests require the `X-CSRF-Token` header matching the
 
 ---
 
+## Minecraft background footage (shorts)
+
+Every generated short uses **real** Minecraft parkour gameplay as its 9:16
+background — never a synthetic placeholder. Footage comes from exactly one
+place: the **Orbital – No Copyright Gameplay** channel
+([youtube.com/@OrbitalNCG](https://www.youtube.com/@OrbitalNCG)), whose videos
+are public, no-copyright / free-to-use gameplay (usable with attribution).
+
+How a source is chosen when the 60s clip library runs dry:
+
+1. **Bundled masters** — any `*.mp4` in `vendor/minecraft-backgrounds/`
+   (fetched once by `scripts/fetch_background_master.py`; consumed but never
+   deleted, so the pipeline works offline too).
+2. **Curated Orbital highlights** — a verified list of long uploads (a
+   4h53m vertical 9:16 build, 2h29m, 1h16m, 1h10m, …).
+3. **The rest of the Orbital channel**, walked newest-first.
+
+Two gates make sure nothing fake ever reaches a short:
+
+- **Metadata gate** (before any download): the video must be from the Orbital
+  channel, titled Minecraft, and within the 2m–6h duration range.
+- **Frame gate** (after slicing): frames are sampled and the source is
+  rejected when they look like a test pattern (SMPTE / ffmpeg `testsrc`
+  color bars) or solid/blank footage — the exact failure mode this gate was
+  built to prevent.
+
+Credits required by the channel: mention **Orbital – No Copyright Gameplay**
+in the video description and don't re-upload the footage as
+"No Copyright Gameplay" (`CREDITS.txt` is written next to any fetched master).
+
+```bash
+# Optional one-time offline master (runs where YouTube is reachable):
+python3 scripts/fetch_background_master.py            # 2h29m landscape
+python3 scripts/fetch_background_master.py fw_eWpb7uCE  # 4h53m VERTICAL 9:16
+```
+
+---
+
 ## Production deployment
 
 ```bash

@@ -9,12 +9,17 @@
 
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { config, resolveFfmpegPath } from "../src/config.js";
 
 // Small batches so a short synthetic source still proves multi-batch slicing.
 process.env.BACKGROUND_CLIP_BATCH = "2";
+// The lifecycle below SIMULATES a download with a synthetic testsrc source,
+// so the real-footage gate (which exists precisely to reject such footage)
+// is disabled here and covered by its own dedicated test below.
+process.env.BACKGROUND_FOOTAGE_CHECK = "false";
 
 const {
   acquireClip,
@@ -25,6 +30,7 @@ const {
   discoverSources,
   extractVideoId,
   probeDuration,
+  verifyFootage,
   libraryDir,
   clipsDir,
   clipPath,
@@ -195,3 +201,58 @@ describe("minecraft parkour clip library", () => {
     expect(clipsDir()).toBe(path.join(libraryDir(), "60s"));
   });
 });
+
+describe("real-footage gate (verifyFootage)", () => {
+  // The gate exists precisely to stop synthetic placeholders — the SMPTE /
+  // testsrc color bars that were served as "minecraft parkour" — from ever
+  // reaching a generated short. verifyFootage() runs unconditionally.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sw-footage-"));
+  const patternFile = path.join(tmp, "pattern.mp4");
+  const groundFile = path.join(tmp, "ground.mp4");
+  const realFile = path.join(tmp, "real.mp4");
+
+  beforeAll(() => {
+    // A synthetic test pattern: ffmpeg's own color-bar test source.
+    let r = spawnSync(resolveFfmpegPath(), [
+      "-y", "-f", "lavfi",
+      "-i", "testsrc=size=320x180:rate=10:duration=6",
+      "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", patternFile,
+    ]);
+    expect(r.status, r.stderr?.toString().slice(-400)).toBe(0);
+
+    // A real-footage stand-in: flat sky + blocky textured terrain + solid
+    // blocks (a moving-camera 3D scene has no long flat colour profile).
+    r = spawnSync(resolveFfmpegPath(), [
+      "-y", "-t", "6", "-f", "lavfi",
+      "-i", "mandelbrot=s=40x30:rate=10",
+      "-vf", "scale=320x80:flags=neighbor",
+      "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", groundFile,
+    ]);
+    expect(r.status, r.stderr?.toString().slice(-400)).toBe(0);
+
+    r = spawnSync(resolveFfmpegPath(), [
+      "-y",
+      "-f", "lavfi", "-i", "color=c=0x79A6FF:s=320x180:d=6:r=10",
+      "-i", groundFile,
+      "-filter_complex",
+      "[0][1]overlay=0:100,drawbox=x=50:y=120:w=40:h=40:color=0x8B5A2B:t=fill,drawbox=x=200:y=140:w=48:h=32:color=0x6E6E6E:t=fill",
+      "-t", "6", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", realFile,
+    ]);
+    expect(r.status, r.stderr?.toString().slice(-400)).toBe(0);
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("rejects a synthetic color-bar test pattern", async () => {
+    const v = await verifyFootage(patternFile);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/test pattern/i);
+  });
+
+  it("accepts real (non-band) gameplay footage", async () => {
+    const v = await verifyFootage(realFile);
+    expect(v.ok).toBe(true);
+  });
+}, 300_000);

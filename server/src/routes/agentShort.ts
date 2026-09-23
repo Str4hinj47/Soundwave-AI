@@ -445,12 +445,14 @@ router.get("/defaults", (_req, res) => {
     },
     background: {
       type: "minecraft_parkour",
-      only: "minecraft_parkour high quality 1080p 4K",
+      source:
+        "Real gameplay only — sourced exclusively from the Orbital No-Copyright Gameplay channel (youtube.com/@OrbitalNCG). No other channel is ever downloaded.",
+      only: "Orbital NCG minecraft parkour high quality",
       blacklist: BLACKLIST,
       clipDuration: CLIP_SECS,
       curated: CURATED_MINECRAFT_PARKOUR,
       lifecycle:
-        "One long parkour video is downloaded, sliced into 60s clips, and each short consumes one clip which is then deleted. When the library is empty a NEW video is found online; already-clipped URLs are remembered and never reused.",
+        "One long Orbital parkour video is downloaded, sliced into 60s clips, and each short consumes one clip which is then deleted. When the library is empty a NEW video from the same channel is found (curated list, then the channel's newest uploads); already-clipped URLs are remembered and never reused. Every source must pass a channel+title check before download and a frame check that rejects test patterns / blank footage.",
     },
     script: {
       source: "custom script (body.script) when supplied, else generated from body.topic",

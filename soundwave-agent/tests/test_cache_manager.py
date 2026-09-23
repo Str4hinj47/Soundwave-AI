@@ -25,6 +25,10 @@ FFMPEG = REPO_ROOT / "vendor" / "ffmpeg" / "ffmpeg"
 WORKDIR = Path(tempfile.mkdtemp(prefix="sw-clips-py-"))
 os.environ["DATA_DIR"] = str(WORKDIR / "data")
 os.environ["BACKGROUND_CLIP_BATCH"] = "2"
+# The lifecycle below SIMULATES a download with a synthetic testsrc source,
+# so the real-footage gate (which exists precisely to reject such footage)
+# is disabled here and covered by its own dedicated test below.
+os.environ["BACKGROUND_FOOTAGE_CHECK"] = "false"
 
 _spec = importlib.util.spec_from_file_location("cache_manager", AGENT_DIR / "cache_manager.py")
 cm = importlib.util.module_from_spec(_spec)
@@ -143,6 +147,75 @@ class TestClipLibrary(unittest.TestCase):
         """The agent and the server must agree on 60s clips to share a library."""
         self.assertEqual(cm.CLIP_DURATION, 60)
         self.assertEqual(cm.get_cache_dir().name, "60s")
+
+
+class TestFootageGate(unittest.TestCase):
+    """The gate that stopped the SMPTE test pattern from being served as
+    'minecraft parkour' — verify_footage() runs unconditionally."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="sw-footage-py-"))
+        cls.pattern_file = cls.tmp / "pattern.mp4"
+        cls.solid_file = cls.tmp / "solid.mp4"
+        cls.real_file = cls.tmp / "real.mp4"
+        r = subprocess.run(
+            [str(FFMPEG), "-y", "-f", "lavfi",
+             "-i", "testsrc=size=320x180:rate=10:duration=6",
+             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+             str(cls.pattern_file)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert r.returncode == 0, r.stderr.decode()[-400:]
+        r = subprocess.run(
+            [str(FFMPEG), "-y", "-f", "lavfi",
+             "-i", "color=c=0x070d18:s=320x180:d=6:r=10",
+             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+             str(cls.solid_file)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert r.returncode == 0, r.stderr.decode()[-400:]
+        # Real-footage stand-in: flat sky + blocky textured terrain (a 3D
+        # scene has no long flat colour profile with sharp boundaries).
+        cls.ground_file = cls.tmp / "ground.mp4"
+        r = subprocess.run(
+            [str(FFMPEG), "-y", "-t", "6", "-f", "lavfi",
+             "-i", "mandelbrot=s=40x30:rate=10",
+             "-vf", "scale=320x80:flags=neighbor",
+             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+             str(cls.ground_file)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert r.returncode == 0, r.stderr.decode()[-400:]
+        r = subprocess.run(
+            [str(FFMPEG), "-y",
+             "-f", "lavfi", "-i", "color=c=0x79A6FF:s=320x180:d=6:r=10",
+             "-i", str(cls.ground_file),
+             "-filter_complex",
+             "[0][1]overlay=0:100,drawbox=x=50:y=120:w=40:h=40:color=0x8B5A2B:t=fill,drawbox=x=200:y=140:w=48:h=32:color=0x6E6E6E:t=fill",
+             "-t", "6", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+             str(cls.real_file)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert r.returncode == 0, r.stderr.decode()[-400:]
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_rejects_color_bar_test_pattern(self):
+        ok, reason = cm.verify_footage(str(FFMPEG), self.pattern_file)
+        self.assertFalse(ok)
+        self.assertRegex(reason, r"test pattern")
+
+    def test_rejects_solid_blank_footage(self):
+        ok, reason = cm.verify_footage(str(FFMPEG), self.solid_file)
+        self.assertFalse(ok)
+        self.assertRegex(reason, r"solid|blank")
+
+    def test_accepts_real_footage(self):
+        ok, reason = cm.verify_footage(str(FFMPEG), self.real_file)
+        self.assertTrue(ok, reason)
 
 
 if __name__ == "__main__":
