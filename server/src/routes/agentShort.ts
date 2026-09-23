@@ -787,6 +787,68 @@ router.get("/background-pool", (_req, res) => {
   }
 });
 
+// Full inspection data for media viewer modal
+router.get("/background-pool/inspect", (_req, res) => {
+  try {
+    const poolClips = backgroundPool.getPoolClipsDetails();
+    const masterVideos = backgroundPool.getMasterVideosDetails();
+    const customVideos = backgroundPool.getCustomVideosDetails();
+    const status = backgroundPool.getStatus();
+
+    res.json({
+      ok: true,
+      poolClips,
+      masterVideos,
+      customVideos,
+      status,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stream video preview with native HTTP 206 Partial Content support
+router.get("/background-pool/preview/:type/:filename", (req, res) => {
+  try {
+    const { type, filename } = req.params;
+    if (!type || !filename) {
+      return res.status(400).json({ error: "Invalid parameters" });
+    }
+    const resolvedPath = backgroundPool.resolveClipPath(type, filename);
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+      return res.status(404).json({ error: "Clip not found" });
+    }
+    res.setHeader("Content-Type", "video/mp4");
+    res.sendFile(resolvedPath);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a clip or video file from inspector
+router.delete("/background-pool/clip/:type/:filename", (req, res) => {
+  try {
+    const { type, filename } = req.params;
+    if (!type || !filename) {
+      return res.status(400).json({ error: "Invalid parameters" });
+    }
+    const deleted = backgroundPool.deleteClip(type, filename);
+    res.json({ ok: deleted, status: backgroundPool.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Re-slice master parkour video into 60s clips on-demand
+router.post("/background-pool/slice-master", async (_req, res) => {
+  try {
+    const clipsAdded = await backgroundPool.sliceMasterVideo();
+    res.json({ ok: clipsAdded > 0, clipsAdded, status: backgroundPool.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/background-pool/purge", (_req, res) => {
   try {
     const purged = backgroundPool.purgeOldClips();

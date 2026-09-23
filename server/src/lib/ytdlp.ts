@@ -194,6 +194,8 @@ export async function downloadVideo(
   uuid: string,
   maxBytes: number,
   onProgress?: (pct: number) => void,
+  downloadSections?: string,
+  timeoutMs?: number,
 ): Promise<YtDownloadResult> {
   const dir = config.uploadsDir;
   fs.mkdirSync(dir, { recursive: true });
@@ -204,6 +206,9 @@ export async function downloadVideo(
     "-f",
     "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
   ];
+  if (downloadSections) {
+    args.push("--download-sections", downloadSections);
+  }
   // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());
@@ -223,7 +228,7 @@ export async function downloadVideo(
   };
 
   try {
-    await run(args, config.ytDlpTimeoutMs, (chunk) => {
+    await run(args, timeoutMs ?? config.ytDlpTimeoutMs, (chunk) => {
       const m = chunk.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
       if (m) onProgress?.(Math.min(99, parseFloat(m[1]!)));
     });

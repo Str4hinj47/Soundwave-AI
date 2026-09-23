@@ -37,22 +37,11 @@ export class MinecraftBackgroundPool {
   private downloadsDir: string;
   private historyFile: string;
   private isProcessing: boolean = false;
+  private repoRoot: string;
 
   constructor() {
-    // Resolve primary directory
-    const candidates = [
-      path.resolve(process.cwd(), "background_cache", "minecraft_parkour"),
-      path.resolve(process.cwd(), "..", "background_cache", "minecraft_parkour"),
-      path.resolve(config.dataDir, "background_cache", "minecraft_parkour"),
-    ];
-
-    let base = candidates[0]!;
-    for (const c of candidates) {
-      if (fs.existsSync(c)) {
-        base = c;
-        break;
-      }
-    }
+    this.repoRoot = process.cwd().endsWith("server") ? path.resolve(process.cwd(), "..") : process.cwd();
+    const base = path.resolve(this.repoRoot, "background_cache", "minecraft_parkour");
 
     this.poolDir = path.join(base, "pool");
     this.downloadsDir = path.join(base, "downloads");
@@ -270,8 +259,10 @@ export class MinecraftBackgroundPool {
         p.on("close", () => resolve());
         p.on("error", () => resolve());
       });
-      if (fs.existsSync(targetMaster) && fs.statSync(targetMaster).size > 500_000) {
-        return targetMaster;
+      for (const m of masterCandidates) {
+        if (fs.existsSync(m) && fs.statSync(m).size > 500_000) {
+          return m;
+        }
       }
     }
 
@@ -334,7 +325,10 @@ export class MinecraftBackgroundPool {
       const pythonBin = process.platform === "win32" ? (process.env.PYTHON || "python") : "python3";
       const tempOut = path.join(path.dirname(this.poolDir), "temp_clipper");
       fs.mkdirSync(tempOut, { recursive: true });
-      const p = spawnSync(pythonBin, ["-m", "yt_clipper", "clip", sourceVideoPath, "-o", tempOut, "--ffmpeg-path", ffmpeg], { timeout: 35000 });
+      const p = spawnSync(pythonBin, ["-m", "yt_clipper", "clip", sourceVideoPath, "-o", tempOut, "--ffmpeg-path", ffmpeg], {
+        cwd: this.repoRoot,
+        timeout: 35000,
+      });
       if (p.status === 0) {
         const clipsDir = path.join(tempOut, "clips");
         if (fs.existsSync(clipsDir)) {
@@ -369,8 +363,7 @@ export class MinecraftBackgroundPool {
       const args = [
         "-y",
         "-i", sourceVideoPath,
-        "-c:v", "copy",
-        "-c:a", "copy",
+        "-c", "copy",
         "-f", "segment",
         "-segment_time", "60",
         "-reset_timestamps", "1",
@@ -471,7 +464,8 @@ export class MinecraftBackgroundPool {
       if (targetUrl) {
         try {
           console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
-          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000);
+          // Download a fast 3-minute section (e.g. 00:30 to 03:30) with 45s max timeout
+          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 45_000);
           if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath)) {
             longVideoPath = dlResult.filePath;
           }
@@ -535,49 +529,163 @@ export class MinecraftBackgroundPool {
 
   /**
    * Consume the next 60s clip in the pool, DELETE it upon use,
-   * and move to the next. If the pool is empty, automatically finds
-   * a new unused long video and replenishes the pool.
+   * and move to the next. If the pool is empty, immediately serves
+   * the local 60fps master video and schedules background replenishment
+   * without blocking or timing out the user request.
    */
   public async consumeNextClip(): Promise<string> {
-    let clips = this.getClipsInPool();
+    const clips = this.getClipsInPool();
 
-    // If pool is empty, replenish automatically
-    if (clips.length === 0) {
-      console.log("[BackgroundPool] Pool is empty! Automatically finding and downloading new unused video...");
-      await this.replenishPool();
-      clips = this.getClipsInPool();
+    if (clips.length > 0) {
+      // Pick the first clip in order
+      const clipToConsume = clips[0]!;
+      const clipName = path.basename(clipToConsume);
+
+      // Make an execution copy for the short render
+      const workDir = path.join(config.uploadsDir, "active_bg");
+      fs.mkdirSync(workDir, { recursive: true });
+      const targetExecutionPath = path.join(workDir, `used_${Date.now()}_${clipName}`);
+
+      fs.copyFileSync(clipToConsume, targetExecutionPath);
+
+      // DELETE the consumed clip from the pool as requested!
+      try {
+        fs.unlinkSync(clipToConsume);
+        console.log(`[BackgroundPool] Consumed and DELETED: ${clipName}. Remaining in pool: ${clips.length - 1}`);
+        
+        const hist = this.getHistory();
+        hist.totalClipsConsumed += 1;
+        this.saveHistory(hist);
+      } catch (err) {
+        console.warn(`[BackgroundPool] Could not delete consumed clip ${clipName}:`, err);
+      }
+
+      // If pool is running low (<= 2 clips left), trigger background replenishment asynchronously
+      if (clips.length <= 2 && !this.isProcessing) {
+        console.log("[BackgroundPool] Pool running low. Replenishing in background...");
+        this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background replenishment error:", e.message));
+      }
+
+      return targetExecutionPath;
     }
 
-    if (clips.length === 0) {
-      // Guarantee master background exists
-      const masterPath = await this.ensureLocalMasterVideo();
-      return masterPath;
+    // Pool is currently empty: Immediately start background replenishment,
+    // and serve the guaranteed 60fps master video so this short finishes immediately!
+    console.log("[BackgroundPool] Pool is empty! Starting background replenishment and serving guaranteed 60fps master video...");
+    this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background replenishment error:", e.message));
+
+    return await this.ensureLocalMasterVideo();
+  }
+
+  /**
+   * Returns inspection details for all ready clips currently in the rotation pool.
+   */
+  public getPoolClipsDetails() {
+    const clips = this.getClipsInPool();
+    return clips.map((p, idx) => {
+      const stat = fs.statSync(p);
+      const filename = path.basename(p);
+      return {
+        id: filename,
+        filename,
+        index: idx + 1,
+        size: stat.size,
+        sizeFormatted: (stat.size / 1024 / 1024).toFixed(2) + " MB",
+        mtime: stat.mtime.toISOString(),
+        previewUrl: `/api/v1/agent/background-pool/preview/pool/${filename}`,
+        type: "pool_clip",
+      };
+    });
+  }
+
+  /**
+   * Returns inspection details for master videos.
+   */
+  public getMasterVideosDetails() {
+    const masterCandidates = [
+      path.resolve(this.repoRoot, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
+      path.resolve(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
+    ];
+    const results = [];
+    for (const m of masterCandidates) {
+      if (fs.existsSync(m)) {
+        const stat = fs.statSync(m);
+        const filename = path.basename(m);
+        results.push({
+          id: filename,
+          filename,
+          size: stat.size,
+          sizeFormatted: (stat.size / 1024 / 1024).toFixed(2) + " MB",
+          mtime: stat.mtime.toISOString(),
+          previewUrl: `/api/v1/agent/background-pool/preview/master/${filename}`,
+          type: "master_video",
+        });
+        break;
+      }
     }
+    return results;
+  }
 
-    // Pick the first clip in order
-    const clipToConsume = clips[0]!;
-    const clipName = path.basename(clipToConsume);
-
-    // Make an execution copy for the short render
-    const workDir = path.join(config.uploadsDir, "active_bg");
-    fs.mkdirSync(workDir, { recursive: true });
-    const targetExecutionPath = path.join(workDir, `used_${Date.now()}_${clipName}`);
-
-    fs.copyFileSync(clipToConsume, targetExecutionPath);
-
-    // DELETE the consumed clip from the pool as requested!
+  /**
+   * Returns inspection details for user-uploaded custom videos.
+   */
+  public getCustomVideosDetails() {
+    const customDir = path.join(path.dirname(this.poolDir), "custom_videos");
+    if (!fs.existsSync(customDir)) return [];
     try {
-      fs.unlinkSync(clipToConsume);
-      console.log(`[BackgroundPool] Consumed and DELETED: ${clipName}. Remaining in pool: ${clips.length - 1}`);
-      
-      const hist = this.getHistory();
-      hist.totalClipsConsumed += 1;
-      this.saveHistory(hist);
-    } catch (err) {
-      console.warn(`[BackgroundPool] Could not delete consumed clip ${clipName}:`, err);
+      const files = fs.readdirSync(customDir).filter((f) => [".mp4", ".mov", ".mkv", ".webm"].includes(path.extname(f).toLowerCase()));
+      return files.map((f) => {
+        const full = path.join(customDir, f);
+        const stat = fs.statSync(full);
+        return {
+          id: f,
+          filename: f,
+          size: stat.size,
+          sizeFormatted: (stat.size / 1024 / 1024).toFixed(2) + " MB",
+          mtime: stat.mtime.toISOString(),
+          previewUrl: `/api/v1/agent/background-pool/preview/custom/${f}`,
+          type: "custom_video",
+        };
+      });
+    } catch {
+      return [];
     }
+  }
 
-    return targetExecutionPath;
+  /**
+   * Resolves absolute path to a clip for streaming/previewing.
+   */
+  public resolveClipPath(type: string, filename: string): string | null {
+    const safeName = path.basename(filename);
+    let targetDir = this.poolDir;
+    if (type === "master") targetDir = path.join(path.dirname(this.poolDir), "80s");
+    else if (type === "custom") targetDir = path.join(path.dirname(this.poolDir), "custom_videos");
+    else if (type === "downloads") targetDir = this.downloadsDir;
+
+    const full = path.join(targetDir, safeName);
+    return fs.existsSync(full) ? full : null;
+  }
+
+  /**
+   * Deletes a specific clip or video file from disk.
+   */
+  public deleteClip(type: string, filename: string): boolean {
+    const full = this.resolveClipPath(type, filename);
+    if (full && fs.existsSync(full)) {
+      try {
+        fs.unlinkSync(full);
+        return true;
+      } catch {}
+    }
+    return false;
+  }
+
+  /**
+   * Re-slices the master video into fresh 60s clips.
+   */
+  public async sliceMasterVideo(): Promise<number> {
+    const master = await this.ensureLocalMasterVideo();
+    return await this.sliceLongVideoIntoPool(master, "Master Parkour Slicing");
   }
 }
 

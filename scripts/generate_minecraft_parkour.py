@@ -16,8 +16,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT_DIR / "background_cache" / "minecraft_parkour" / "80s"
 DATA_CACHE_DIR = ROOT_DIR / "data" / "background_cache" / "minecraft_parkour" / "80s"
+SERVER_CACHE_DIR = ROOT_DIR / "server" / "background_cache" / "minecraft_parkour" / "80s"
 OUTPUT_FILE = CACHE_DIR / "parkour_master_80s.mp4"
 DATA_OUTPUT_FILE = DATA_CACHE_DIR / "parkour_master_80s.mp4"
+SERVER_OUTPUT_FILE = SERVER_CACHE_DIR / "parkour_master_80s.mp4"
 
 CURATED_URLS = [
     "https://www.youtube.com/watch?v=tiOl_mcAsF4",
@@ -59,7 +61,7 @@ def download_genuine_footage() -> bool:
     except Exception:
         return False
 
-    for url in CURATED_URLS:
+    for url in CURATED_URLS[:2]:
         print(f"[generate_minecraft_parkour] Attempting yt-dlp download: {url}...")
         cmd = [
             ytdlp_bin,
@@ -76,15 +78,17 @@ def download_genuine_footage() -> bool:
             cmd.extend(["--ffmpeg-location", ffmpeg_dir])
             
         try:
-            r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60)
+            r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20)
             if r.returncode == 0 and OUTPUT_FILE.exists() and OUTPUT_FILE.stat().st_size > 1_000_000:
                 print(f"✓ Downloaded genuine Minecraft parkour video: {OUTPUT_FILE}")
                 DATA_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+                SERVER_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(OUTPUT_FILE, DATA_OUTPUT_FILE)
+                shutil.copyfile(OUTPUT_FILE, SERVER_OUTPUT_FILE)
                 return True
         except Exception as e:
             print(f"[generate_minecraft_parkour] Download attempt failed: {e}")
-            continue
+            break
 
     return False
 
@@ -123,7 +127,9 @@ def render_procedural_motion_fallback():
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         if OUTPUT_FILE.exists():
             DATA_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            SERVER_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(OUTPUT_FILE, DATA_OUTPUT_FILE)
+            shutil.copyfile(OUTPUT_FILE, SERVER_OUTPUT_FILE)
             print(f"✓ Created procedural motion background: {OUTPUT_FILE}")
             return True
     except Exception as e:

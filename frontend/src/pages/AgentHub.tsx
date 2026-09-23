@@ -60,6 +60,18 @@ function getNicheIcon(iconName: string) {
   }
 }
 
+export interface PoolStatus {
+  clipsRemaining: number;
+  clipNames: string[];
+  usedUrlsCount: number;
+  usedUrls: string[];
+  customUrlsCount: number;
+  totalClipsConsumed: number;
+  totalClipsGenerated: number;
+  lastReplenishedAt: string | null;
+  isProcessing: boolean;
+}
+
 interface ChatMessage {
   id: string;
   sender: "user" | "assistant" | "system";
@@ -218,6 +230,58 @@ export function AgentHub() {
   const [isUploadingGameplay, setIsUploadingGameplay] = useState(false);
   const gameplayFileRef = useRef<HTMLInputElement | null>(null);
   const generatorGameplayFileRef = useRef<HTMLInputElement | null>(null);
+
+  // Background Pool Inspector State
+  const [showPoolInspector, setShowPoolInspector] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"clips" | "masters" | "history">("clips");
+  const [isInspectorLoading, setIsInspectorLoading] = useState(false);
+  const [isSlicingMaster, setIsSlicingMaster] = useState(false);
+  const [inspectorData, setInspectorData] = useState<{
+    poolClips: Array<{
+      id: string;
+      filename: string;
+      index: number;
+      size: number;
+      sizeFormatted: string;
+      mtime: string;
+      previewUrl: string;
+      type: string;
+    }>;
+    masterVideos: Array<{
+      id: string;
+      filename: string;
+      size: number;
+      sizeFormatted: string;
+      mtime?: string;
+      previewUrl: string;
+      type: string;
+    }>;
+    customVideos: Array<{
+      id: string;
+      filename: string;
+      size: number;
+      sizeFormatted: string;
+      mtime?: string;
+      previewUrl: string;
+      type: string;
+    }>;
+    status: PoolStatus;
+  }>({
+    poolClips: [],
+    masterVideos: [],
+    customVideos: [],
+    status: {
+      clipsRemaining: 0,
+      clipNames: [],
+      usedUrlsCount: 0,
+      usedUrls: [],
+      customUrlsCount: 0,
+      totalClipsConsumed: 0,
+      totalClipsGenerated: 0,
+      lastReplenishedAt: null,
+      isProcessing: false,
+    },
+  });
 
   // Ghost Operator Macros State
   const [macrosList, setMacrosList] = useState<MacroWorkflow[]>([]);
@@ -677,6 +741,7 @@ export function AgentHub() {
       if (res.ok && data.ok) {
         toast.success("Gameplay Sliced", `Added ${data.clipsAdded || "new"} 60s clips to rotation pool!`);
         if (data.status) setPoolStatus(data.status);
+        fetchInspectorData();
       } else {
         throw new Error(data.error || "Upload failed");
       }
@@ -686,6 +751,65 @@ export function AgentHub() {
       setIsUploadingGameplay(false);
       if (gameplayFileRef.current) gameplayFileRef.current.value = "";
       if (generatorGameplayFileRef.current) generatorGameplayFileRef.current.value = "";
+    }
+  };
+
+  // ── Media Inspector Handlers ──────────────────────────────────────────
+  const fetchInspectorData = async () => {
+    setIsInspectorLoading(true);
+    try {
+      const res = await fetch("/api/v1/agent/background-pool/inspect");
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setInspectorData({
+          poolClips: data.poolClips || [],
+          masterVideos: data.masterVideos || [],
+          customVideos: data.customVideos || [],
+          status: data.status || poolStatus,
+        });
+      }
+    } catch {
+      toast.error("Inspector Error", "Could not fetch background pool inspector details");
+    } finally {
+      setIsInspectorLoading(false);
+    }
+  };
+
+  const handleDeleteClip = async (type: string, filename: string) => {
+    try {
+      const res = await fetch(`/api/v1/agent/background-pool/clip/${type}/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast.success("Deleted", `Removed ${filename}`);
+        fetchInspectorData();
+        fetchPoolStatus();
+      } else {
+        toast.error("Delete Failed", data.error || "Could not delete file");
+      }
+    } catch (err: any) {
+      toast.error("Delete Failed", err.message);
+    }
+  };
+
+  const handleSliceMaster = async () => {
+    setIsSlicingMaster(true);
+    toast.info("Slicing Master", "Generating fresh 60s clips from local parkour master...");
+    try {
+      const res = await fetch("/api/v1/agent/background-pool/slice-master", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast.success("Master Sliced", `Added ${data.clipsAdded || 0} fresh 60s clips to rotation pool!`);
+        fetchInspectorData();
+        fetchPoolStatus();
+      } else {
+        toast.error("Slicing Failed", data.error || "Could not slice master video");
+      }
+    } catch (err: any) {
+      toast.error("Slicing Failed", err.message);
+    } finally {
+      setIsSlicingMaster(false);
     }
   };
 
@@ -1029,6 +1153,17 @@ export function AgentHub() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    setShowPoolInspector(true);
+                    fetchInspectorData();
+                  }}
+                  className="text-gray-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                  title="Inspect downloaded clips & videos"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={handlePurgePool}
                   className="text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
                   title="Purge legacy/cached clips from disk"
@@ -1073,6 +1208,19 @@ export function AgentHub() {
 
             {/* Quick URL Adder & Replenish */}
             <div className="pt-1 space-y-2">
+              {/* Media Inspector Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPoolInspector(true);
+                  fetchInspectorData();
+                }}
+                className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-cyan-950/40"
+              >
+                <Eye className="h-3.5 w-3.5 text-cyan-400" />
+                Inspect Downloaded Videos & Clips
+              </button>
+
               <div className="flex gap-1.5">
                 <input
                   type="text"
@@ -1662,7 +1810,19 @@ export function AgentHub() {
                   className="flex-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Upload className="h-3 w-3 text-cyan-400" />
-                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Custom Gameplay Footage"}
+                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Gameplay"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPoolInspector(true);
+                    fetchInspectorData();
+                  }}
+                  className="rounded-lg border border-[#172A4A] bg-[#070D18] hover:border-cyan-400/50 hover:bg-cyan-500/10 text-gray-300 hover:text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="Inspect downloaded pool clips"
+                >
+                  <Eye className="h-3 w-3 text-cyan-400" />
+                  Inspect Pool
                 </button>
               </div>
             </div>
@@ -2167,6 +2327,349 @@ export function AgentHub() {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ── 6. MODAL: GAMEPLAY MEDIA INSPECTOR ────────────────────────── */}
+      {showPoolInspector && (
+        <Modal
+          open={showPoolInspector}
+          onClose={() => setShowPoolInspector(false)}
+          title="Background Gameplay & Media Inspector"
+          size="2xl"
+          footer={
+            <div className="flex w-full items-center justify-between font-mono text-xs">
+              <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{inspectorData.poolClips.length} ready clips</span>
+                <span>·</span>
+                <span>{inspectorData.status.totalClipsConsumed} consumed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSliceMaster}
+                  disabled={isSlicingMaster}
+                >
+                  <Film className="h-3 w-3 mr-1 text-cyan-400" />
+                  {isSlicingMaster ? "Slicing..." : "Slice Master Video"}
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setShowPoolInspector(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-4 font-mono text-xs">
+            {/* Top Bar: Tabs & Quick Refresh */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#14233D] pb-3">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab("clips")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inspectorTab === "clips"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
+                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
+                  }`}
+                >
+                  Ready 60s Clips ({inspectorData.poolClips.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab("masters")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inspectorTab === "masters"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
+                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
+                  }`}
+                >
+                  Master & Custom Videos ({inspectorData.masterVideos.length + inspectorData.customVideos.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab("history")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inspectorTab === "history"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
+                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
+                  }`}
+                >
+                  Source URL Rotation ({inspectorData.status.usedUrlsCount})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchInspectorData}
+                  disabled={isInspectorLoading}
+                  className="rounded-lg border border-[#14233D] bg-[#070D18] hover:border-cyan-400/50 text-gray-300 hover:text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Refresh pool clips"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isInspectorLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePurgePool}
+                  className="rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Purge all cached clips from disk"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Purge Pool
+                </button>
+              </div>
+            </div>
+
+            {/* TAB 1: 60s Ready Clips */}
+            {inspectorTab === "clips" && (
+              <div className="space-y-3">
+                {inspectorData.poolClips.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl border border-dashed border-[#172A4A] bg-[#070D18]/60 space-y-3">
+                    <Film className="h-10 w-10 text-cyan-400/50 mx-auto" />
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Rotation Pool is Empty</h4>
+                      <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+                        No 60-second sliced clips are currently in the queue. Soundwave will automatically download and slice new YouTube footage, or use the 60fps Minecraft parkour master.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSliceMaster}
+                        disabled={isSlicingMaster}
+                        className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-[#070B14] px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Film className="h-3.5 w-3.5" />
+                        {isSlicingMaster ? "Slicing..." : "Slice Master Video into 60s Clips"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReplenishPool()}
+                        disabled={isReplenishingPool}
+                        className="rounded-lg border border-[#172A4A] bg-[#0A1224] text-gray-300 hover:border-cyan-400 hover:text-cyan-300 px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${isReplenishingPool ? "animate-spin" : ""}`} />
+                        {isReplenishingPool ? "Fetching..." : "Fetch New YouTube Gameplay"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[55vh] overflow-y-auto pr-1">
+                    {inspectorData.poolClips.map((clip) => (
+                      <div
+                        key={clip.id}
+                        className="rounded-xl border border-[#14233D] bg-[#070D18] p-3 space-y-2 flex flex-col justify-between hover:border-cyan-500/40 transition-colors"
+                      >
+                        {/* Card Header */}
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold">
+                              CLIP #{clip.index}
+                            </span>
+                            {clip.index === 1 && (
+                              <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] font-bold">
+                                NEXT UP
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 font-mono">{clip.sizeFormatted}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteClip("pool", clip.filename)}
+                              className="text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete clip from pool"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Video Player */}
+                        <div className="relative rounded-lg overflow-hidden bg-black aspect-[9/16] max-h-64 flex items-center justify-center border border-[#14233D]">
+                          <video
+                            src={clip.previewUrl}
+                            controls
+                            preload="metadata"
+                            playsInline
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+
+                        {/* Card Footer */}
+                        <div className="flex items-center justify-between pt-1 border-t border-[#14233D] text-[10px] text-gray-400">
+                          <span className="truncate max-w-[180px]" title={clip.filename}>
+                            {clip.filename}
+                          </span>
+                          <a
+                            href={clip.previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-cyan-400 hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            Open
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: Master & Custom Footage */}
+            {inspectorTab === "masters" && (
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+                {/* Section A: Master 60fps Gameplay */}
+                <div className="rounded-xl border border-[#14233D] bg-[#070D18] p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#14233D] pb-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                        Guaranteed 60fps Minecraft Parkour Master
+                      </h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Master video used as fallback and source for slicing fresh 60s clips.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSliceMaster}
+                      disabled={isSlicingMaster}
+                      className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-[#070B14] px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Film className="h-3 w-3" />
+                      {isSlicingMaster ? "Slicing..." : "Slice into 60s Clips"}
+                    </button>
+                  </div>
+
+                  {inspectorData.masterVideos.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                      <div className="relative rounded-lg overflow-hidden bg-black aspect-[9/16] max-h-72 flex items-center justify-center border border-[#14233D]">
+                        <video
+                          src={inspectorData.masterVideos[0]?.previewUrl}
+                          controls
+                          preload="metadata"
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="space-y-2 text-xs">
+                        <div className="rounded-lg border border-[#14233D] bg-[#0A1224] p-3 space-y-1.5">
+                          <span className="text-[10px] text-gray-500 block">FILE</span>
+                          <span className="text-white font-mono text-[11px] block">{inspectorData.masterVideos[0]?.filename}</span>
+                          <span className="text-[10px] text-gray-500 block pt-1">SIZE</span>
+                          <span className="text-cyan-400 font-bold block">{inspectorData.masterVideos[0]?.sizeFormatted}</span>
+                          <span className="text-[10px] text-gray-500 block pt-1">PROPERTIES</span>
+                          <span className="text-emerald-400 block text-[11px]">1080x1920 · 60 FPS · Vertical 9:16</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-gray-500 text-xs">
+                      Master video not yet generated on disk. Generating a short will produce it automatically.
+                    </div>
+                  )}
+                </div>
+
+                {/* Section B: User Custom Videos */}
+                <div className="rounded-xl border border-[#14233D] bg-[#070D18] p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#14233D] pb-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                        Custom Dropped Gameplay Footage ({inspectorData.customVideos.length})
+                      </h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Videos dropped into <code className="text-cyan-300">background_cache/minecraft_parkour/custom_videos/</code>
+                      </p>
+                    </div>
+                  </div>
+
+                  {inspectorData.customVideos.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 text-xs">
+                      No custom videos uploaded yet. Use "Upload Custom Gameplay" to import your own gameplay files.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {inspectorData.customVideos.map((c) => (
+                        <div key={c.id} className="rounded-lg border border-[#14233D] bg-[#0A1224] p-2.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white font-bold text-[11px] truncate max-w-[180px]">{c.filename}</span>
+                            <span className="text-cyan-400 text-[10px]">{c.sizeFormatted}</span>
+                          </div>
+                          <div className="relative rounded overflow-hidden bg-black aspect-[9/16] max-h-48 border border-[#14233D]">
+                            <video src={c.previewUrl} controls preload="metadata" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteClip("custom", c.filename)}
+                              className="text-gray-500 hover:text-rose-400 text-[10px] flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Delete File
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: Used YouTube URL History */}
+            {inspectorTab === "history" && (
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg border border-[#172A4A] bg-[#070D18] flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Zero Duplicate Protection</h4>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      Soundwave tracks processed URLs permanently so your shorts always use fresh gameplay.
+                    </p>
+                  </div>
+                  <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold">
+                    {inspectorData.status.usedUrlsCount} Processed Videos
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
+                  {inspectorData.status.usedUrls.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500 text-xs">
+                      No YouTube URLs recorded in history yet.
+                    </div>
+                  ) : (
+                    inspectorData.status.usedUrls.map((u: string, idx: number) => (
+                      <div
+                        key={u + idx}
+                        className="rounded-lg border border-[#14233D] bg-[#070D18] p-2.5 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="text-[10px] text-gray-500 font-mono">#{idx + 1}</span>
+                          <span className="text-xs text-gray-200 truncate font-mono">{u}</span>
+                        </div>
+                        <a
+                          href={u}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[11px] shrink-0 ml-2"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View on YouTube
+                        </a>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
