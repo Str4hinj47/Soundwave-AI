@@ -16,6 +16,7 @@ import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
 import { emitJob } from "./export.js";
+import { youtubePublisher } from "../lib/youtubePublisher.js";
 
 // ── Curated high-quality ONLY minecraft_parkour — no watermark, clean gameplay
 export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
@@ -404,6 +405,7 @@ export interface BuildShortResult {
   script: string;
   duration: number;
   cuesCount: number;
+  youtube?: any;
 }
 
 export async function buildShortVideo(params: BuildShortOptions): Promise<BuildShortResult> {
@@ -556,6 +558,42 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     completedAt: new Date().toISOString(),
   });
 
+  // 7. Auto-Post to YouTube if enabled
+  let youtubeResult: any = null;
+  try {
+    const ytConfig = youtubePublisher.getConfig();
+    if (ytConfig.connected && ytConfig.autoPostEnabled) {
+      await reportProgress(98, "Publishing short directly to YouTube Shorts...");
+      const titleTopic = (params.topic || "Daily Wisdom")
+        .split(" ")
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      const ytTitle = `${titleTopic} #shorts #facts #motivation`.slice(0, 100);
+      
+      const pubRes = await youtubePublisher.uploadShort({
+        videoPath: outPath,
+        title: ytTitle,
+        description: `${script}\n\nGenerated automatically with Soundwave AI.\n\n#shorts #minecraftparkour #facts #viral`,
+        privacy: ytConfig.defaultPrivacy || "public",
+        tags: ["shorts", "minecraft", "parkour", "ai", "soundwave", "facts", "motivation"],
+      });
+
+      youtubeResult = {
+        videoId: pubRes.videoId,
+        videoUrl: pubRes.videoUrl,
+        title: pubRes.title,
+        status: "PUBLISHED",
+      };
+      console.log(`[agentShort] Short auto-published to YouTube: ${pubRes.videoUrl}`);
+    }
+  } catch (ytErr: any) {
+    console.warn(`[agentShort] YouTube auto-post failed: ${ytErr?.message || ytErr}`);
+    youtubeResult = {
+      status: "FAILED",
+      error: ytErr?.message || "YouTube auto-post failed",
+    };
+  }
+
   emitJob(job.id, {
     status: "COMPLETED",
     progress: 100,
@@ -565,6 +603,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     downloadUrl: finalUrl,
     script,
     duration: ttsResult.duration,
+    youtube: youtubeResult,
   });
 
   return {
@@ -574,6 +613,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     script,
     duration: ttsResult.duration,
     cuesCount: finalCues.length,
+    youtube: youtubeResult,
   };
 }
 

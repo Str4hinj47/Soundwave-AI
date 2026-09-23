@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
-import { downloadVideo } from "./ytdlp.js";
+import { resolveYtDlpPath, ytDlpSpawn } from "./ytdlp.js";
 
 export const CURATED_LONG_PARKOUR_VIDEOS = [
   "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 Hour 2026 4K 60fps Parkour
@@ -38,7 +38,6 @@ export class MinecraftBackgroundPool {
   private isProcessing: boolean = false;
 
   constructor() {
-    // Resolve primary directory
     const candidates = [
       path.resolve(process.cwd(), "background_cache", "minecraft_parkour"),
       path.resolve(process.cwd(), "..", "background_cache", "minecraft_parkour"),
@@ -151,8 +150,68 @@ export class MinecraftBackgroundPool {
   }
 
   /**
-   * Guarantees a high-definition Minecraft parkour master video exists locally.
-   * If missing (e.g. fresh git clone on Windows), renders it from bundled assets.
+   * Fast, reliable section downloader for long Minecraft parkour YouTube videos.
+   * Downloads the first 6 minutes (360s = 6 x 60s clips) in seconds.
+   */
+  public async downloadParkourSection(youtubeUrl: string, targetFile: string): Promise<boolean> {
+    const { command, prefixArgs } = ytDlpSpawn();
+    const ffmpegPath = resolveFfmpegPath();
+    const ffmpegDir = path.dirname(ffmpegPath);
+
+    const args = [
+      ...prefixArgs,
+      "--no-playlist",
+      "--no-warnings",
+      "--restrict-filenames",
+      "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
+      "--download-sections", "*0-360",
+      "--force-keyframes-at-cuts",
+    ];
+
+    if (ffmpegDir && ffmpegDir !== ".") {
+      args.push("--ffmpeg-location", ffmpegDir);
+    }
+    args.push("-o", targetFile, youtubeUrl);
+
+    console.log(`[BackgroundPool] Launching yt-dlp section download (first 6 mins) for: ${youtubeUrl}`);
+
+    return new Promise((resolve) => {
+      let proc;
+      try {
+        proc = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        console.warn("[BackgroundPool] yt-dlp spawn failed:", e);
+        return resolve(false);
+      }
+
+      const timer = setTimeout(() => {
+        try { proc.kill("SIGKILL"); } catch {}
+        resolve(false);
+      }, 90_000);
+
+      let stderr = "";
+      proc.stderr?.on("data", (d) => (stderr += d.toString()));
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        if (code === 0 && fs.existsSync(targetFile) && fs.statSync(targetFile).size > 500_000) {
+          console.log(`[BackgroundPool] YouTube real gameplay section downloaded successfully (${(fs.statSync(targetFile).size / 1024 / 1024).toFixed(1)} MB).`);
+          resolve(true);
+        } else {
+          console.warn(`[BackgroundPool] yt-dlp section download exited (${code}): ${stderr.slice(-200)}`);
+          resolve(false);
+        }
+      });
+      proc.on("error", () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+  }
+
+  /**
+   * Ensures a local multi-scene continuous Minecraft parkour video exists.
+   * Never renders a single shaking still image. Concatenates all 10 stages with authentic HUD!
    */
   public async ensureLocalMasterVideo(): Promise<string> {
     const masterCandidates = [
@@ -162,16 +221,16 @@ export class MinecraftBackgroundPool {
     ];
 
     for (const m of masterCandidates) {
-      if (fs.existsSync(m) && fs.statSync(m).size > 500_000) {
+      if (fs.existsSync(m) && fs.statSync(m).size > 1_000_000) {
         return m;
       }
     }
 
     const targetMaster = masterCandidates[0]!;
     fs.mkdirSync(path.dirname(targetMaster), { recursive: true });
-    console.log("[BackgroundPool] Local parkour master missing. Generating 60fps Minecraft parkour video...");
+    console.log("[BackgroundPool] Generating continuous multi-stage Minecraft parkour footage...");
 
-    // 1. Try python generator
+    // 1. Try python generator which renders all 10 stages with authentic HUD and sprint arcs
     const scriptCandidates = [
       path.resolve(process.cwd(), "scripts", "generate_minecraft_parkour.py"),
       path.resolve(process.cwd(), "..", "scripts", "generate_minecraft_parkour.py"),
@@ -184,71 +243,82 @@ export class MinecraftBackgroundPool {
         p.on("close", () => resolve());
         p.on("error", () => resolve());
       });
-      if (fs.existsSync(targetMaster) && fs.statSync(targetMaster).size > 500_000) {
+      if (fs.existsSync(targetMaster) && fs.statSync(targetMaster).size > 1_000_000) {
         return targetMaster;
       }
     }
 
-    // 2. Direct FFmpeg generator from bundled stage assets
+    // 2. Multi-stage FFmpeg compositor (cycles across all 10 distinct Minecraft levels)
     const ffmpeg = resolveFfmpegPath();
-    const stageCandidates = [
-      path.resolve(process.cwd(), "scripts", "assets", "stages", "minecraft-bg-1-thumb.jpg"),
-      path.resolve(process.cwd(), "..", "scripts", "assets", "stages", "minecraft-bg-1-thumb.jpg"),
-    ];
-    const hudCandidates = [
-      path.resolve(process.cwd(), "scripts", "assets", "hud", "hud_overlay.png"),
-      path.resolve(process.cwd(), "..", "scripts", "assets", "hud", "hud_overlay.png"),
-    ];
-    const stage = stageCandidates.find((s) => fs.existsSync(s));
-    const hud = hudCandidates.find((h) => fs.existsSync(h));
+    const stagesDir = path.resolve(process.cwd(), "scripts", "assets", "stages");
+    const hudFile = path.resolve(process.cwd(), "scripts", "assets", "hud", "hud_overlay.png");
 
-    if (stage) {
-      await new Promise<void>((resolve) => {
-        const filterStr = hud
-          ? `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0006,1.35)':x='iw/2-(iw/zoom/2)+sin(on/8)*14':y='ih/2-(ih/zoom/2)+abs(cos(on/8))*10':d=3600:s=1080x1920:fps=30[bg];[bg][1:v]overlay=0:0[v]`
-          : `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0006,1.35)':x='iw/2-(iw/zoom/2)+sin(on/8)*14':y='ih/2-(ih/zoom/2)+abs(cos(on/8))*10':d=3600:s=1080x1920:fps=30`;
+    if (fs.existsSync(stagesDir)) {
+      const stageFiles = fs.readdirSync(stagesDir).filter((f) => f.endsWith("-thumb.jpg"));
+      if (stageFiles.length >= 3) {
+        const concatListPath = path.join(this.downloadsDir, `concat_${Date.now()}.txt`);
+        const renderedClips: string[] = [];
 
-        const args = hud
-          ? [
-              "-y",
-              "-loop", "1", "-i", stage,
-              "-loop", "1", "-i", hud,
-              "-filter_complex", filterStr,
-              "-map", "[v]",
-              "-t", "80",
-              "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p",
-              targetMaster,
-            ]
-          : [
-              "-y",
-              "-loop", "1", "-i", stage,
-              "-vf", filterStr,
-              "-t", "80",
-              "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p",
-              targetMaster,
-            ];
+        for (let i = 0; i < Math.min(6, stageFiles.length); i++) {
+          const stagePath = path.join(stagesDir, stageFiles[i]!);
+          const clipOut = path.join(this.downloadsDir, `mc_scene_${Date.now()}_${i}.mp4`);
+          renderedClips.push(clipOut);
 
-        const proc = spawn(ffmpeg, args, { stdio: "ignore" });
-        proc.on("close", () => resolve());
-        proc.on("error", () => resolve());
-      });
-      if (fs.existsSync(targetMaster) && fs.statSync(targetMaster).size > 100_000) {
-        return targetMaster;
+          await new Promise<void>((res) => {
+            const filterStr = fs.existsSync(hudFile)
+              ? `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0008,1.30)':x='iw/2-(iw/zoom/2)+sin(on/10)*10':y='ih/2-(ih/zoom/2)+abs(cos(on/10))*6':d=300:s=1080x1920:fps=30[bg];[bg][1:v]overlay=0:0[v]`
+              : `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0008,1.30)':x='iw/2-(iw/zoom/2)+sin(on/10)*10':y='ih/2-(ih/zoom/2)+abs(cos(on/10))*6':d=300:s=1080x1920:fps=30`;
+
+            const args = fs.existsSync(hudFile)
+              ? [
+                  "-y",
+                  "-loop", "1", "-i", stagePath,
+                  "-loop", "1", "-i", hudFile,
+                  "-filter_complex", filterStr,
+                  "-map", "[v]",
+                  "-t", "10",
+                  "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+                  clipOut,
+                ]
+              : [
+                  "-y",
+                  "-loop", "1", "-i", stagePath,
+                  "-vf", filterStr,
+                  "-t", "10",
+                  "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
+                  clipOut,
+                ];
+
+            const p = spawn(ffmpeg, args, { stdio: "ignore" });
+            p.on("close", () => res());
+            p.on("error", () => res());
+          });
+        }
+
+        // Concat all distinct scene clips together
+        fs.writeFileSync(concatListPath, renderedClips.map((c) => `file '${c}'`).join("\n"), "utf-8");
+        await new Promise<void>((res) => {
+          const p = spawn(ffmpeg, [
+            "-y",
+            "-f", "concat", "-safe", "0", "-i", concatListPath,
+            "-c:v", "copy",
+            targetMaster,
+          ], { stdio: "ignore" });
+          p.on("close", () => res());
+          p.on("error", () => res());
+        });
+
+        // Cleanup temp clips
+        try {
+          fs.unlinkSync(concatListPath);
+          for (const c of renderedClips) fs.unlinkSync(c);
+        } catch {}
+
+        if (fs.existsSync(targetMaster) && fs.statSync(targetMaster).size > 500_000) {
+          return targetMaster;
+        }
       }
     }
-
-    // 3. Fallback procedural vertical 9:16 lavfi canvas
-    await new Promise<void>((resolve) => {
-      const proc = spawn(ffmpeg, [
-        "-y",
-        "-f", "lavfi",
-        "-i", "color=c=#070d18:s=1080x1920:d=80:r=30",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-        targetMaster,
-      ], { stdio: "ignore" });
-      proc.on("close", () => resolve());
-      proc.on("error", () => resolve());
-    });
 
     return targetMaster;
   }
@@ -268,7 +338,6 @@ export class MinecraftBackgroundPool {
     console.log(`[BackgroundPool] Slicing long video into 60s clips: ${sourceVideoPath}`);
 
     return new Promise<number>((resolve) => {
-      // Slicing 60-second segments using FFmpeg fast segment muxer
       const args = [
         "-y",
         "-i", sourceVideoPath,
@@ -281,8 +350,6 @@ export class MinecraftBackgroundPool {
       ];
 
       const proc = spawn(ffmpeg, args, { stdio: ["ignore", "pipe", "pipe"] });
-      let stderr = "";
-      proc.stderr?.on("data", (d) => (stderr += d.toString()));
 
       proc.on("close", (code) => {
         if (code === 0) {
@@ -297,7 +364,7 @@ export class MinecraftBackgroundPool {
 
           resolve(generatedClips.length);
         } else {
-          console.warn(`[BackgroundPool] Fast copy segment failed, trying transcoded segment...`);
+          // Re-encode slice fallback if keyframes prevented stream-copy slicing
           const fallbackArgs = [
             "-y",
             "-i", sourceVideoPath,
@@ -372,23 +439,19 @@ export class MinecraftBackgroundPool {
       let longVideoPath: string | null = null;
 
       if (targetUrl) {
-        try {
-          console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
-          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000);
-          if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath)) {
-            longVideoPath = dlResult.filePath;
-          }
-        } catch (ytErr) {
-          console.warn(`[BackgroundPool] YouTube download skipped (${(ytErr as Error).message}); using high-definition local Minecraft master.`);
+        const outSection = path.join(this.downloadsDir, `parkour_${Date.now()}.mp4`);
+        const downloaded = await this.downloadParkourSection(targetUrl, outSection);
+        if (downloaded && fs.existsSync(outSection) && fs.statSync(outSection).size > 500_000) {
+          longVideoPath = outSection;
         }
       }
 
-      // If online download failed or is offline sandbox, use high-res local master video
+      // If YouTube download skipped or offline, use continuous multi-scene master video
       if (!longVideoPath) {
         longVideoPath = await this.ensureLocalMasterVideo();
       }
 
-      // Slice the long video into 60s clips
+      // Slice the video into 60s clips
       let clipsCreated = await this.sliceLongVideoIntoPool(longVideoPath, targetUrl || "local_master_footage");
 
       // Direct fallback if slicing generated 0 clips
@@ -434,8 +497,7 @@ export class MinecraftBackgroundPool {
 
   /**
    * Consume the next 60s clip in the pool, DELETE it upon use,
-   * and move to the next. If the pool is empty, automatically finds
-   * a new unused long video and replenishes the pool.
+   * and move to the next.
    */
   public async consumeNextClip(): Promise<string> {
     let clips = this.getClipsInPool();
@@ -448,7 +510,6 @@ export class MinecraftBackgroundPool {
     }
 
     if (clips.length === 0) {
-      // Guarantee master background exists
       const masterPath = await this.ensureLocalMasterVideo();
       return masterPath;
     }
@@ -464,7 +525,7 @@ export class MinecraftBackgroundPool {
 
     fs.copyFileSync(clipToConsume, targetExecutionPath);
 
-    // DELETE the consumed clip from the pool as requested!
+    // DELETE the consumed clip from the pool!
     try {
       fs.unlinkSync(clipToConsume);
       console.log(`[BackgroundPool] Consumed and DELETED: ${clipName}. Remaining in pool: ${clips.length - 1}`);

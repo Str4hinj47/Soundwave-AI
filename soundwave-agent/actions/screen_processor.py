@@ -32,7 +32,7 @@ def handler(parameters: Dict[str, Any], context: Any = None) -> str:
             webbrowser.open("http://localhost:5173/creator")
         except Exception:
             pass
-        return "Opened Creator Studio Screen Recorder & Auto-Editor in your browser."
+        return "Opened Soundwave Studio Screen Recorder & Auto-Editor in your browser."
 
     out_dir = Path.home() / ".soundwave" / "captures"
     out_dir.mkdir(parents=True, exist_ok=True)

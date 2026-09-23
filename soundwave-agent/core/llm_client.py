@@ -202,9 +202,9 @@ class LLMClient:
             return "Here are your current system vitals.", res
 
         # 5. Screen Capture / Vision / Screen Recording
-        if any(w in q for w in ["record screen", "screen recorder", "record my screen", "creator studio"]):
+        if any(w in q for w in ["record screen", "screen recorder", "record my screen"]):
             res = action_registry.execute("screen_processor", {"action": "record"})
-            return "Launching Creator Studio Smart Screen Recorder.", res
+            return "Launching Soundwave Studio Smart Screen Recorder.", res
 
         if any(w in q for w in ["screenshot", "screen", "see", "look"]):
             res = action_registry.execute("screen_processor", {"action": "capture"})

@@ -71,6 +71,21 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
+:: Ensure yt-dlp is available for background video downloads
+where yt-dlp >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    if not exist vendor\yt-dlp\yt-dlp.exe (
+        if exist scripts\download_ytdlp.ps1 (
+            powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
+        )
+    )
+)
+if exist vendor\yt-dlp\yt-dlp.exe (
+    set "PATH=%CD%\vendor\yt-dlp;%PATH%"
+    set "YTDLP_PATH=%CD%\vendor\yt-dlp\yt-dlp.exe"
+    echo [INFO] Using vendored yt-dlp at vendor\yt-dlp\yt-dlp.exe.
+)
+
 :continue_boot
 :: Prepare server .env if missing
 if not exist server\.env (
