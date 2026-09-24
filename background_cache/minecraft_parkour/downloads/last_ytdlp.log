@@ -171,8 +171,8 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
 [youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
 [youtube] tiOl_mcAsF4: Downloading webpage
 [youtube] tiOl_mcAsF4: Downloading web safari client config
-[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
-        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
+[debug] [youtube] Forcing "main" player JS variant for player e20e4fb7
+        original url = /s/player/e20e4fb7/player_es6.vflset/en_US/base.js
 [debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_safari client
 [youtube] tiOl_mcAsF4: Downloading web safari player API JSON
 [debug] [youtube] tiOl_mcAsF4: web_safari player response playability status: LOGIN_REQUIRED
@@ -316,6 +316,7 @@ attempt mobile rc=1
 attempt default-nosdkless rc=1
 === ATTEMPT plain clients= ===
 attempt plain rc=1
+cobalt list bytes=0
 === COBALT https://api.cobalt.tools/ ===
 {"status":"error","error":{"code":"error.api.auth.jwt.missing"}}
 
@@ -366,9 +367,9 @@ url=[]
     <title>Verifying your browser…</title>
     <!-- No-JS visitors are sent to the image captcha 
 === IV https://invidious.f5.si ===
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f4d71493dc0>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f9e10205b40>): Connection reset by peer"}
 
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f9e25dc5a00>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fa73ec0d140>): Connection reset by peer"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
@@ -421,7 +422,13 @@ url=[]
 
 
 
-
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.22.1</center>
+</body>
+</html>
 
 <html>
 <head><title>404 Not Found</title></head>
