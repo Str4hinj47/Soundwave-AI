@@ -67,29 +67,36 @@ jobs:
           : > /tmp/ytdlp.log
           : > /tmp/attempts.log
 
+          # Pass player_client as a bare value (no nested quotes) so word-splitting works.
           yt_dl() {
-            EXTRA="$1"
+            CLIENTS="$1"
             LABEL="$2"
-            echo "=== ATTEMPT $LABEL ===" | tee -a /tmp/attempts.log
-            # shellcheck disable=SC2086
-            yt-dlp -v --no-playlist \
-              --js-runtimes deno --js-runtimes node \
-              --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416" \
-              $EXTRA \
+            echo "=== ATTEMPT $LABEL clients=$CLIENTS ===" | tee -a /tmp/attempts.log
+            ARGS=(
+              -v --no-playlist
+              --js-runtimes deno --js-runtimes node
+              --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"
+            )
+            if [ -n "$CLIENTS" ]; then
+              ARGS+=(--extractor-args "youtube:player_client=${CLIENTS}")
+            fi
+            yt-dlp "${ARGS[@]}" \
               -f "bv*[height<=720]+ba/b[height<=720]/b" \
               --ffmpeg-location "$(command -v ffmpeg)" \
               -o "${OUT}.%(ext)s" \
               "https://www.youtube.com/watch?v=${VID}" \
-              2>&1 | tee -a /tmp/ytdlp.log | tail -40
+              2>&1 | tee -a /tmp/ytdlp.log | tail -50
             RC=${PIPESTATUS[0]}
             echo "attempt $LABEL rc=$RC" | tee -a /tmp/attempts.log
             return $RC
           }
 
-          yt_dl '--extractor-args "youtube:player_client=tv,web_safari"' "pot-tv-safari" \
-            || yt_dl '--extractor-args "youtube:player_client=android,ios,web,mweb,tv"' "clients-broad" \
-            || yt_dl '--extractor-args "youtube:player_client=default,-android_sdkless"' "default-nosdkless" \
-            || yt_dl '' "plain-with-pot" \
+          yt_dl "tv,web_safari" "pot-tv-safari" \
+            || yt_dl "tv" "pot-tv" \
+            || yt_dl "web_safari" "pot-safari" \
+            || yt_dl "android,ios,mweb" "pot-mobile" \
+            || yt_dl "default,-android_sdkless" "default-nosdkless" \
+            || yt_dl "" "plain-with-pot" \
             || true
 
           extract_url() {
