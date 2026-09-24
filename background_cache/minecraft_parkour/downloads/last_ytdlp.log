@@ -1,4 +1,4 @@
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv,web_safari', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv,web_safari', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -9,6 +9,7 @@
 [debug] Request Handlers: urllib, requests, websockets
 [debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
 [debug] Loaded 1745 extractors
+[debug] [youtube] Found YouTube account cookies
 [debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
 [debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
 [debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
@@ -19,15 +20,21 @@
 [debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
 [youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
 [youtube] tiOl_mcAsF4: Downloading webpage
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [youtube] tiOl_mcAsF4: Downloading tv client config
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [debug] [youtube] Forcing "main" player JS variant for player 7460dd14
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
 [youtube] tiOl_mcAsF4: Downloading player 7460dd14-main
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [youtube] tiOl_mcAsF4: Downloading tv player API JSON
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [debug] [youtube] tiOl_mcAsF4: tv player response playability status: LOGIN_REQUIRED
 [youtube] tiOl_mcAsF4: Downloading web safari client config
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_safari client
 [youtube] tiOl_mcAsF4: Downloading web safari player API JSON
+WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
 [debug] [youtube] tiOl_mcAsF4: web_safari player response playability status: LOGIN_REQUIRED
 WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
 ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
@@ -39,7 +46,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android_vr', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android_vr', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -74,7 +81,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_embedded', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_embedded', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -112,7 +119,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -149,7 +156,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_safari', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_safari', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -186,7 +193,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android,ios,mweb', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android,ios,mweb', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -227,7 +234,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=default,-android_sdkless', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=default,-android_sdkless', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -263,7 +270,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
@@ -299,7 +306,7 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-no YT_COOKIES secret
+using YT_COOKIES secret
 === ATTEMPT tv-safari clients=tv,web_safari ===
 attempt tv-safari rc=1
 === ATTEMPT android-vr clients=android_vr ===
@@ -367,9 +374,9 @@ url=[]
     <title>Verifying your browser…</title>
     <!-- No-JS visitors are sent to the image captcha 
 === IV https://invidious.f5.si ===
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fdb3924ddc0>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fe3902a7b40>): Connection reset by peer"}
 
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f46dbd22640>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fcc64323500>): Connection reset by peer"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
