@@ -93,34 +93,18 @@ jobs:
             || true
 
           extract_url() {
-            printf '%s' "$1" | python3 -c '
-import sys, json
-raw = sys.stdin.read()
-try:
-    d = json.loads(raw)
-except Exception:
-    sys.exit(0)
-if isinstance(d, str) and d.startswith("http"):
-    print(d); sys.exit(0)
-if not isinstance(d, dict):
-    sys.exit(0)
-u = d.get("url") or d.get("formatUrl") or ""
-if isinstance(u, str) and u.startswith("http"):
-    print(u); sys.exit(0)
-for f in (d.get("picker") or []):
-    u = f.get("url") or ""
-    if u.startswith("http"):
-        print(u); sys.exit(0)
-for f in (d.get("videos") or []):
-    u = f.get("url") or ""
-    if f.get("height") == 720 and u.startswith("http"):
-        print(u); sys.exit(0)
-for f in (d.get("formats") or []) + (d.get("adaptiveFormats") or []):
-    u = f.get("url") or ""
-    blob = str(f.get("type", "")) + str(f.get("mime", ""))
-    if u.startswith("http") and "mp4" in blob:
-        print(u); sys.exit(0)
-'
+            printf '%s' "$1" | jq -r '
+              def http: strings and startswith("http");
+              if type=="string" and startswith("http") then .
+              elif type!="object" then empty
+              elif (.url|http) then .url
+              elif (.formatUrl|http) then .formatUrl
+              elif ((.picker // []) | map(select(.url|http)) | first // empty) then (.picker | map(select(.url|http)) | first | .url)
+              elif ((.videos // []) | map(select(.height==720 and (.url|http))) | first // empty) then (.videos | map(select(.height==720 and (.url|http))) | first | .url)
+              else (((.formats // []) + (.adaptiveFormats // []))
+                    | map(select((http|not) and ((.type // .mime // "") | contains("mp4")) and (.url|http)))
+                    | first // empty | .url)
+              end' 2>/dev/null || true
           }
 
           if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}".* >/dev/null 2>&1; then
