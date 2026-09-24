@@ -39,7 +39,7 @@ jobs:
           else
             VID="$(head -1 .github/fetch-orbital.trigger | tr -d '\r\n')"
           fi
-          echo "vid=$VID" >> "$GITHUB_OUTPUT"
+          echo "id=$VID" >> "$GITHUB_OUTPUT"
           echo "Using video id: $VID"
       - name: Download Orbital section
         run: |
