@@ -132,7 +132,7 @@ jobs:
               end' 2>/dev/null || true
           }
 
-          if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}"."*" >/dev/null 2>&1; then
+          if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}".* >/dev/null 2>&1; then
             # Discover public cobalt APIs that allow unauthenticated YouTube pulls.
             APIS_TMP=$(mktemp)
             curl -sS --max-time 20 \
@@ -170,7 +170,9 @@ jobs:
                 rm -f "${OUT}.mp4" 2>/dev/null || true
               fi
             done < "$APIS_TMP"
-if [ ! -s "${OUT}.mp4" ]; then
+          fi
+
+          if [ ! -s "${OUT}.mp4" ]; then
             for IV in \
               "https://yewtu.be" \
               "https://invidious.f5.si" \
