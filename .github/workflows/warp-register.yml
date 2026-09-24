@@ -34,13 +34,15 @@ jobs:
             echo "ACCOUNT_ALREADY_PERSISTED"
             exit 0
           fi
+          mkdir -p .github/warp
+          # Path 1: warproxy's built-in wgcf registration.
           docker pull ghcr.io/kingcc/warproxy:latest
           docker rm -f warproxy 2>/dev/null || true
           docker run -d --name warproxy -p 1080:1080 \
             --cap-add NET_ADMIN --device /dev/net/tun \
             ghcr.io/kingcc/warproxy:latest
           ok=""
-          for i in $(seq 1 35); do
+          for i in $(seq 1 30); do
             if curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 \
               https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep -q '^warp=on'; then
               ok=1
@@ -48,14 +50,17 @@ jobs:
             fi
             sleep 3
           done
-          docker logs warproxy 2>&1 | tail -30
-          if [ -z "$ok" ]; then
-            echo "REGISTER_FAILED_THIS_IP"
-            exit 1
+          if [ -n "$ok" ]; then
+            echo "REGISTER_OK_VIA_DOCKER"
+            docker cp warproxy:/config/. .github/warp/
+          else
+            docker logs warproxy 2>&1 | tail -25
+            # Path 2: direct API registration, IPv6 first (IPv4 datacenter
+            # ranges are rate-limited; the script prints the API response).
+            echo "=== falling back to scripts/warp_register.py ==="
+            python -m pip install -q pynacl
+            python3 scripts/warp_register.py || { echo "REGISTER_FAILED_ALL_PATHS"; exit 1; }
           fi
-          echo "REGISTER_OK"
-          mkdir -p .github/warp
-          docker cp warproxy:/config/. .github/warp/
           ls -la .github/warp/
           git config user.name "warp-register"
           git config user.email "actions@users.noreply.github.com"
