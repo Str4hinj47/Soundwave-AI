@@ -1,3 +1,652 @@
+[warp] + start_warp
+[warp] + docker rm -f warproxy
+[warp] + docker pull ghcr.io/kingcc/warproxy:latest
+[warp] latest: Pulling from kingcc/warproxy
+[warp] 34bcef1e5f98: Pulling fs layer
+[warp] c0f8eff906b8: Pulling fs layer
+[warp] a284d4c5ddeb: Pulling fs layer
+[warp] 3d4a5b0c51bb: Pulling fs layer
+[warp] 5cc376fd3d90: Pulling fs layer
+[warp] ab31007733df: Pulling fs layer
+[warp] 892c2d9d6aa3: Pulling fs layer
+[warp] d029fb8a838f: Pulling fs layer
+[warp] 4f4fb700ef54: Pulling fs layer
+[warp] ab31007733df: Waiting
+[warp] 892c2d9d6aa3: Waiting
+[warp] d029fb8a838f: Waiting
+[warp] 4f4fb700ef54: Waiting
+[warp] 3d4a5b0c51bb: Waiting
+[warp] 5cc376fd3d90: Waiting
+[warp] c0f8eff906b8: Verifying Checksum
+[warp] c0f8eff906b8: Download complete
+[warp] a284d4c5ddeb: Download complete
+[warp] 34bcef1e5f98: Verifying Checksum
+[warp] 34bcef1e5f98: Download complete
+[warp] 3d4a5b0c51bb: Verifying Checksum
+[warp] 3d4a5b0c51bb: Download complete
+[warp] 34bcef1e5f98: Pull complete
+[warp] 5cc376fd3d90: Verifying Checksum
+[warp] 5cc376fd3d90: Download complete
+[warp] ab31007733df: Download complete
+[warp] 4f4fb700ef54: Verifying Checksum
+[warp] 4f4fb700ef54: Download complete
+[warp] 892c2d9d6aa3: Verifying Checksum
+[warp] 892c2d9d6aa3: Download complete
+[warp] d029fb8a838f: Verifying Checksum
+[warp] d029fb8a838f: Download complete
+[warp] c0f8eff906b8: Pull complete
+[warp] a284d4c5ddeb: Pull complete
+[warp] 3d4a5b0c51bb: Pull complete
+[warp] 5cc376fd3d90: Pull complete
+[warp] ab31007733df: Pull complete
+[warp] 892c2d9d6aa3: Pull complete
+[warp] d029fb8a838f: Pull complete
+[warp] 4f4fb700ef54: Pull complete
+[warp] Digest: sha256:1c00e4aad95976ffac6de9a424e7e5c27f92f2a1141fbfeb931ac8ebb75db2e2
+[warp] Status: Downloaded newer image for ghcr.io/kingcc/warproxy:latest
+[warp] ghcr.io/kingcc/warproxy:latest
+[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun ghcr.io/kingcc/warproxy:latest
+[warp] a4b2323168fb5f5c6bde0397d264cbb52f59b80ab0e51d201da50a8a4806e2ff
+[warp] + for pass in 1 2
+[warp] ++ seq 1 60
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + echo 'pass 1 failed — restarting warproxy'
+[warp] pass 1 failed — restarting warproxy
+[warp] + docker logs warproxy
+[warp] + tail -40
+[warp] *** wgcf: registering a new account...
+[warp] 2026/09/25 06:55:06 Using config file: /config/wgcf-account.toml
+[warp] 2026/09/25 06:55:06 429 Too Many Requests
+[warp] (1) attached stack trace
+[warp]   -- stack trace:
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:62
+[warp]   | [...repeated from below...]
+[warp] Wraps: (2) attached stack trace
+[warp]   -- stack trace:
+[warp]   | github.com/ViRb3/wgcf/v2/cloudflare.Register
+[warp]   | 	github.com/ViRb3/wgcf/v2/cloudflare/api.go:73
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:60
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/shared.RunCommandFatal
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/shared/shared.go:24
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.init.func1
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:28
+[warp]   | github.com/spf13/cobra.(*Command).execute
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1019
+[warp]   | github.com/spf13/cobra.(*Command).ExecuteC
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1148
+[warp]   | github.com/spf13/cobra.(*Command).Execute
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1071
+[warp]   | github.com/ViRb3/wgcf/v2/cmd.Execute
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/root.go:35
+[warp]   | main.main
+[warp]   | 	github.com/ViRb3/wgcf/v2/main.go:12
+[warp]   | runtime.main
+[warp]   | 	runtime/proc.go:285
+[warp]   | runtime.goexit
+[warp]   | 	runtime/asm_amd64.s:1693
+[warp] Wraps: (3) 429 Too Many Requests
+[warp] Error types: (1) *withstack.withStack (2) *withstack.withStack (3) *openapi.GenericOpenAPIError
+[warp] *** wgcf: generating a new wireguard profile...
+[warp] 2026/09/25 06:55:06 Using config file: /config/wgcf-account.toml
+[warp] 2026/09/25 06:55:06 no account detected, register one first
+[warp] cp: cannot stat '/config/wgcf-profile.conf': No such file or directory
+[warp] [custom-init] No custom files found, skipping...
+[warp] 2026/09/25 06:55:06 one and only one [Interface] is expected
+[warp] + start_warp
+[warp] + docker rm -f warproxy
+[warp] warproxy
+[warp] + docker pull ghcr.io/kingcc/warproxy:latest
+[warp] latest: Pulling from kingcc/warproxy
+[warp] Digest: sha256:1c00e4aad95976ffac6de9a424e7e5c27f92f2a1141fbfeb931ac8ebb75db2e2
+[warp] Status: Image is up to date for ghcr.io/kingcc/warproxy:latest
+[warp] ghcr.io/kingcc/warproxy:latest
+[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun ghcr.io/kingcc/warproxy:latest
+[warp] b414ab2c8a702baf08eeb1eb39882a4574990b84b82212325e8884ce6288b025
+[warp] + for pass in 1 2
+[warp] ++ seq 1 60
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 60)
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + echo 'pass 2 failed — restarting warproxy'
+[warp] pass 2 failed — restarting warproxy
+[warp] + docker logs warproxy
+[warp] + tail -40
+[warp] *** wgcf: registering a new account...
+[warp] 2026/09/25 06:58:07 Using config file: /config/wgcf-account.toml
+[warp] 2026/09/25 06:58:07 429 Too Many Requests
+[warp] (1) attached stack trace
+[warp]   -- stack trace:
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:62
+[warp]   | [...repeated from below...]
+[warp] Wraps: (2) attached stack trace
+[warp]   -- stack trace:
+[warp]   | github.com/ViRb3/wgcf/v2/cloudflare.Register
+[warp]   | 	github.com/ViRb3/wgcf/v2/cloudflare/api.go:73
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:60
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/shared.RunCommandFatal
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/shared/shared.go:24
+[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.init.func1
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:28
+[warp]   | github.com/spf13/cobra.(*Command).execute
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1019
+[warp]   | github.com/spf13/cobra.(*Command).ExecuteC
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1148
+[warp]   | github.com/spf13/cobra.(*Command).Execute
+[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1071
+[warp]   | github.com/ViRb3/wgcf/v2/cmd.Execute
+[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/root.go:35
+[warp]   | main.main
+[warp]   | 	github.com/ViRb3/wgcf/v2/main.go:12
+[warp]   | runtime.main
+[warp]   | 	runtime/proc.go:285
+[warp]   | runtime.goexit
+[warp]   | 	runtime/asm_amd64.s:1693
+[warp] Wraps: (3) 429 Too Many Requests
+[warp] Error types: (1) *withstack.withStack (2) *withstack.withStack (3) *openapi.GenericOpenAPIError
+[warp] *** wgcf: generating a new wireguard profile...
+[warp] 2026/09/25 06:58:07 Using config file: /config/wgcf-account.toml
+[warp] 2026/09/25 06:58:07 no account detected, register one first
+[warp] cp: cannot stat '/config/wgcf-profile.conf': No such file or directory
+[warp] [custom-init] No custom files found, skipping...
+[warp] 2026/09/25 06:58:07 one and only one [Interface] is expected
+[warp] + start_warp
+[warp] + docker rm -f warproxy
+[warp] warproxy
+[warp] + docker pull ghcr.io/kingcc/warproxy:latest
+[warp] latest: Pulling from kingcc/warproxy
+[warp] Digest: sha256:1c00e4aad95976ffac6de9a424e7e5c27f92f2a1141fbfeb931ac8ebb75db2e2
+[warp] Status: Image is up to date for ghcr.io/kingcc/warproxy:latest
+[warp] ghcr.io/kingcc/warproxy:latest
+[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun ghcr.io/kingcc/warproxy:latest
+[warp] bcc0d26aa9eefe9f158d31ca8fbca719ad099dda53da6a2432f304c3b5d05805
+[warp] + echo 'WARPROXY_NOT_READY — falling back to direct attempts'
+[warp] WARPROXY_NOT_READY — falling back to direct attempts
+[warp] + docker logs warproxy
+[warp] + tail -60
+[warp] + docker ps -a
+[warp] + grep -i warp
+[warp] bcc0d26aa9ee   ghcr.io/kingcc/warproxy:latest   "/init"   Less than a second ago   Up Less than a second (health: starting)   0.0.0.0:1080->1080/tcp, [::]:1080->1080/tcp   warproxy
+[warp] + echo ready=0
 [debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv,web_safari', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
@@ -377,7 +1026,7 @@ url=[]
 === IV https://invidious.f5.si ===
 {"error":"Error while communicating with Invidious companion: Unexpected end of http response"}
 
-{"error":"Error while communicating with Invidious companion: Unexpected end of http response"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f997d3e9780>): Connection reset by peer"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
