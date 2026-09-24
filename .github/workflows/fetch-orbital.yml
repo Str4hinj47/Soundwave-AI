@@ -97,6 +97,9 @@ jobs:
             fi
             yt-dlp "${ARGS[@]}" \
               -f "bv*[height<=720]+ba/b[height<=720]/b" \
+              --download-sections "*30-120" \
+              --force-keyframes-at-cuts \
+              --max-filesize 80M \
               --ffmpeg-location "$(command -v ffmpeg)" \
               -o "${OUT}.%(ext)s" \
               "https://www.youtube.com/watch?v=${VID}" \
@@ -215,6 +218,15 @@ jobs:
             ffmpeg -y -i "$F" -c copy "${OUT}.mp4" && rm -f "$F"
           fi
           test -s "${OUT}.mp4"
+          SZ=$(stat -c%s "${OUT}.mp4")
+          echo "mp4 bytes=$SZ"
+          if [ "$SZ" -gt 90000000 ]; then
+            echo "mp4 too large for git ($SZ); trimming to 60s" | tee -a /tmp/attempts.log
+            ffmpeg -y -i "${OUT}.mp4" -t 60 -c copy "${OUT}.trim.mp4" && mv "${OUT}.trim.mp4" "${OUT}.mp4"
+            SZ=$(stat -c%s "${OUT}.mp4")
+            echo "trimmed bytes=$SZ"
+          fi
+          test "$SZ" -le 100000000
       - name: Commit download
         if: always()
         run: |
@@ -226,6 +238,15 @@ jobs:
           elif [ -f /tmp/attempts.log ]; then
             cp /tmp/attempts.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
           fi
-          git add -f background_cache/minecraft_parkour/downloads/ || true
-          git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}" || true
+          # Commit log first so diagnostics land even if the video push fails.
+          git add -f background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
+          git commit -m "fetch log: orbital ${{ steps.vid.outputs.id }}" || true
           git push origin main || true
+          # Then the video (must be <100MB for git).
+          git add -f background_cache/minecraft_parkour/downloads/ || true
+          if git diff --cached --quiet; then
+            echo "nothing new to commit"
+          else
+            git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}"
+            git push origin main || echo "PUSH_FAILED — video commit stayed local"
+          fi
