@@ -53,8 +53,8 @@ jobs:
           OUT="background_cache/minecraft_parkour/downloads/orbital_${VID}"
           # deno + node JS runtimes; less bot-gated player clients first
           yt-dlp -v --no-playlist \
-            --js-runtimes deno,node \
-            --extractor-args "youtube:player_client=android,ios,web,mweb,tv" \
+            --js-runtimes deno --js-runtimes node \
+            --extractor-args "youtube:player_client=android_vr,web_embedded,web_safari,web_music,android_music,ios,web,mweb,tv" \
             -f "bv*[height<=720]+ba/b[height<=720]/b" \
             --ffmpeg-location "$(command -v ffmpeg)" \
             -o "${OUT}.%(ext)s" \
