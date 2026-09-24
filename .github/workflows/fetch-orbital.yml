@@ -30,7 +30,8 @@ jobs:
           deno-version: v2.x
       - name: Install tools
         run: |
-          python -m pip install -U yt-dlp bgutil-ytdlp-pot-provider
+          python -m pip install -U --pre "yt-dlp[default]" bgutil-ytdlp-pot-provider || python -m pip install -U yt-dlp bgutil-ytdlp-pot-provider
+          yt-dlp --version
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           yt-dlp --version
@@ -59,6 +60,8 @@ jobs:
           echo "id=$VID" >> "$GITHUB_OUTPUT"
           echo "Using video id: $VID"
       - name: Download Orbital section
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |
           set -x
           mkdir -p background_cache/minecraft_parkour/downloads
@@ -67,7 +70,16 @@ jobs:
           : > /tmp/ytdlp.log
           : > /tmp/attempts.log
 
-          # Pass player_client as a bare value (no nested quotes) so word-splitting works.
+          # Optional cookies from repo secret YT_COOKIES (Netscape cookies.txt body)
+          COOKIE_ARGS=()
+          if [ -n "$YT_COOKIES" ]; then
+            printf '%s\n' "$YT_COOKIES" > /tmp/yt-cookies.txt
+            COOKIE_ARGS=(--cookies /tmp/yt-cookies.txt)
+            echo "using YT_COOKIES secret" | tee -a /tmp/attempts.log
+          else
+            echo "no YT_COOKIES secret" | tee -a /tmp/attempts.log
+          fi
+
           yt_dl() {
             CLIENTS="$1"
             LABEL="$2"
@@ -80,23 +92,29 @@ jobs:
             if [ -n "$CLIENTS" ]; then
               ARGS+=(--extractor-args "youtube:player_client=${CLIENTS}")
             fi
+            if [ ${#COOKIE_ARGS[@]} -gt 0 ]; then
+              ARGS+=("${COOKIE_ARGS[@]}")
+            fi
             yt-dlp "${ARGS[@]}" \
               -f "bv*[height<=720]+ba/b[height<=720]/b" \
               --ffmpeg-location "$(command -v ffmpeg)" \
               -o "${OUT}.%(ext)s" \
               "https://www.youtube.com/watch?v=${VID}" \
-              2>&1 | tee -a /tmp/ytdlp.log | tail -50
+              2>&1 | tee -a /tmp/ytdlp.log | tail -60
             RC=${PIPESTATUS[0]}
             echo "attempt $LABEL rc=$RC" | tee -a /tmp/attempts.log
             return $RC
           }
 
-          yt_dl "tv,web_safari" "pot-tv-safari" \
-            || yt_dl "tv" "pot-tv" \
-            || yt_dl "web_safari" "pot-safari" \
-            || yt_dl "android,ios,mweb" "pot-mobile" \
+          # With cookies: web clients work. Without: try every less-gated client.
+          yt_dl "tv,web_safari" "tv-safari" \
+            || yt_dl "android_vr" "android-vr" \
+            || yt_dl "web_embedded" "web-embedded" \
+            || yt_dl "tv" "tv" \
+            || yt_dl "web_safari" "safari" \
+            || yt_dl "android,ios,mweb" "mobile" \
             || yt_dl "default,-android_sdkless" "default-nosdkless" \
-            || yt_dl "" "plain-with-pot" \
+            || yt_dl "" "plain" \
             || true
 
           extract_url() {
