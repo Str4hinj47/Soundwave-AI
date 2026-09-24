@@ -165,11 +165,14 @@ function baseArgs(): string[] {
     "node",
     "--js-runtimes",
     "deno",
-    // Prefer clients that clear the bot wall without cookies (yt-dlp.net guidance).
-    "--extractor-args",
-    "youtube:player_client=tv,web_safari",
   ];
-  if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
+  const hasCookies = Boolean(config.ytDlpBrowser || config.ytDlpCookies);
+  // Pairing cookies with player_client=tv invalidates the session (yt-dlp.net);
+  // with live browser cookies use web_safari only, otherwise try tv first.
+  args.push("--extractor-args", hasCookies ? "youtube:player_client=web_safari" : "youtube:player_client=tv,web_safari");
+  // Live browser cookies beat an exported file: no export step, no rotation.
+  if (config.ytDlpBrowser) args.push("--cookies-from-browser", config.ytDlpBrowser);
+  else if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
   return args;
 }
 

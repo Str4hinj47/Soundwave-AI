@@ -39,6 +39,9 @@ export const config = {
   // set YTDLP_PATH to override with a system binary.
   ytDlpPath: str("YTDLP_PATH", ""),
   ytDlpCookies: str("YTDLP_COOKIES", ""), // optional cookies.txt for age/bot-gated videos
+  // Live browser profile for --cookies-from-browser (firefox|chrome|...).
+  // Preferred over YTDLP_COOKIES on desktop: no export step, no rotation.
+  ytDlpBrowser: str("YTDLP_BROWSER", ""),
   ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
   // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
