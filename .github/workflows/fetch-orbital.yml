@@ -29,24 +29,50 @@ jobs:
           python -m pip install -U yt-dlp
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
+          yt-dlp --version
+          ffmpeg -version | head -1
       - name: Determine video id
         id: vid
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "id=${{ inputs.video_id }}" >> "$GITHUB_OUTPUT"
+            VID="${{ inputs.video_id }}"
           else
-            echo "id=$(head -1 .github/fetch-orbital.trigger | tr -d '\r\n')" >> "$GITHUB_OUTPUT"
+            VID="$(head -1 .github/fetch-orbital.trigger | tr -d '\r\n')"
           fi
+          echo "vid=$VID" >> "$GITHUB_OUTPUT"
+          echo "Using video id: $VID"
       - name: Download Orbital section
         run: |
+          set -x
           mkdir -p background_cache/minecraft_parkour/downloads
-          yt-dlp --no-playlist --no-warnings             -f 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b'             --download-sections '*00:30-04:30' --force-keyframes-at-cuts             -o "background_cache/minecraft_parkour/downloads/orbital_${{ steps.vid.outputs.id }}.mp4"             "https://www.youtube.com/watch?v=${{ steps.vid.outputs.id }}"
+          VID="${{ steps.vid.outputs.id }}"
+          OUT="background_cache/minecraft_parkour/downloads/orbital_${VID}"
+          # Full file first (sections need re-encode and often empty on CI)
+          yt-dlp -v --no-playlist \
+            -f "bv*[height<=720]+ba/b[height<=720]/b" \
+            --ffmpeg-location "$(command -v ffmpeg)" \
+            -o "${OUT}.%(ext)s" \
+            "https://www.youtube.com/watch?v=${VID}" 2>&1 | tee /tmp/ytdlp.log | tail -80
           ls -lah background_cache/minecraft_parkour/downloads/
-          test -s "background_cache/minecraft_parkour/downloads/orbital_${{ steps.vid.outputs.id }}.mp4"
+          F="$(ls -1 background_cache/minecraft_parkour/downloads/orbital_${VID}.* 2>/dev/null | head -1)"
+          echo "got file: $F"
+          test -n "$F" && test -s "$F"
+          # Normalize name to .mp4 if needed
+          if [ -n "$F" ] && [ "${F##*.}" != "mp4" ]; then
+            ffmpeg -y -i "$F" -c copy "${OUT}.mp4" && rm -f "$F"
+          fi
+          ls -lah background_cache/minecraft_parkour/downloads/
+          test -s "${OUT}.mp4"
       - name: Commit download
+        if: always()
         run: |
           git config user.name "orbital-fetcher"
           git config user.email "actions@users.noreply.github.com"
-          git add -f background_cache/minecraft_parkour/downloads/
+          mkdir -p background_cache/minecraft_parkour/downloads
+          # keep log for debugging failures
+          if [ -f /tmp/ytdlp.log ]; then
+            cp /tmp/ytdlp.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
+          fi
+          git add -f background_cache/minecraft_parkour/downloads/ || true
           git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}" || true
           git push origin main || true
