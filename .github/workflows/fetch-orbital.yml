@@ -6,6 +6,11 @@ on:
         description: YouTube video id
         required: true
         default: fw_eWpb7uCE
+  push:
+    branches: [main]
+    paths:
+      - ".github/fetch-orbital.trigger"
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -14,23 +19,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: arena/01a0d098-soundwave-ai
-      - name: Install yt-dlp
-        run: pipx install yt-dlp || pip install yt-dlp
-      - name: Download section
+          ref: main
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          python -m pip install -U yt-dlp
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Determine video id
+        id: vid
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "id=${{ inputs.video_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "id=$(head -1 .github/fetch-orbital.trigger | tr -d '\r\n')" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download Orbital section
         run: |
           mkdir -p background_cache/minecraft_parkour/downloads
-          yt-dlp --no-playlist --no-warnings \
-            -f 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b' \
-            --download-sections '*00:30-03:30' --force-keyframes-at-cuts \
-            --ffmpeg-location "$(which ffmpeg)" \
-            -o 'background_cache/minecraft_parkour/downloads/orbital_${{ inputs.video_id }}.mp4' \
-            "https://www.youtube.com/watch?v=${{ inputs.video_id }}"
-          ls -la background_cache/minecraft_parkour/downloads/
-      - name: Commit
+          yt-dlp --no-playlist --no-warnings             -f 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b'             --download-sections '*00:30-04:30' --force-keyframes-at-cuts             -o "background_cache/minecraft_parkour/downloads/orbital_${{ steps.vid.outputs.id }}.mp4"             "https://www.youtube.com/watch?v=${{ steps.vid.outputs.id }}"
+          ls -lah background_cache/minecraft_parkour/downloads/
+          test -s "background_cache/minecraft_parkour/downloads/orbital_${{ steps.vid.outputs.id }}.mp4"
+      - name: Commit download
         run: |
           git config user.name "orbital-fetcher"
-          git config user.email "actions@github.com"
+          git config user.email "actions@users.noreply.github.com"
           git add -f background_cache/minecraft_parkour/downloads/
-          git commit -m "fetch: orbital ${{ inputs.video_id }}" || echo "no changes"
-          git push
+          git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}" || true
+          git push origin main || true
