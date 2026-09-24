@@ -132,15 +132,28 @@ jobs:
               end' 2>/dev/null || true
           }
 
-          if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}".* >/dev/null 2>&1; then
-            for API in \
-              "https://api.cobalt.tools/" \
-              "https://cobalt-api.kwiatekmiki.com/" \
-              "https://cobalt-backend.canine.tools/" \
-              "https://capi.oak.li/"
-            do
+          if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}"."*" >/dev/null 2>&1; then
+            # Discover public cobalt APIs that allow unauthenticated YouTube pulls.
+            APIS_TMP=$(mktemp)
+            curl -sS --max-time 20 \
+              -A 'soundwave-orbital-fetch/1.0 (+https://github.com/Str4hinj47/Soundwave-AI)' \
+              'https://instances.cobalt.best/api' > /tmp/cobalt_instances.json || true
+            echo "cobalt list bytes=$(wc -c </tmp/cobalt_instances.json 2>/dev/null || echo 0)" | tee -a /tmp/attempts.log
+            jq -r '.[] | select(.online==true) | select((.info.auth // true)==false) | select(.services.youtube==true) | "https://\(.api)/"' \
+              /tmp/cobalt_instances.json 2>/dev/null > "$APIS_TMP" || true
+            # Always try a few known endpoints too
+            {
+              echo "https://api.cobalt.tools/"
+              echo "https://cobalt-api.kwiatekmiki.com/"
+              echo "https://cobalt-backend.canine.tools/"
+              echo "https://capi.oak.li/"
+            } >> "$APIS_TMP"
+            while IFS= read -r API; do
+              [ -n "$API" ] || continue
+              case "$API" in https://*) ;; *) API="https://$API/" ;; esac
               echo "=== COBALT $API ===" | tee -a /tmp/attempts.log
               RESP=$(curl -sS --max-time 30 -X POST "$API" \
+                -A 'soundwave-orbital-fetch/1.0' \
                 -H 'Accept: application/json' \
                 -H 'Content-Type: application/json' \
                 -d "{\"url\":\"https://www.youtube.com/watch?v=${VID}\",\"videoQuality\":\"720\",\"filenameStyle\":\"basic\"}" \
@@ -150,16 +163,14 @@ jobs:
               URL=$(extract_url "$RESP")
               echo "url=[$URL]" | tee -a /tmp/attempts.log
               if [ -n "$URL" ]; then
-                if curl -sSL --max-time 180 -o "${OUT}.mp4" "$URL" && [ -s "${OUT}.mp4" ]; then
+                if curl -sSL --max-time 180 -A 'soundwave-orbital-fetch/1.0' -o "${OUT}.mp4" "$URL" && [ -s "${OUT}.mp4" ]; then
                   echo "cobalt ok" | tee -a /tmp/attempts.log
                   break
                 fi
                 rm -f "${OUT}.mp4" 2>/dev/null || true
               fi
-            done
-          fi
-
-          if [ ! -s "${OUT}.mp4" ]; then
+            done < "$APIS_TMP"
+if [ ! -s "${OUT}.mp4" ]; then
             for IV in \
               "https://yewtu.be" \
               "https://invidious.f5.si" \
