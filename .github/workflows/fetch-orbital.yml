@@ -48,6 +48,27 @@ jobs:
             sleep 1
           done
           curl -sS http://127.0.0.1:4416/ || echo "pot provider not answering"
+      - name: Start Cloudflare WARP proxy (warproxy)
+        id: warp
+        run: |
+          # YouTube does not blacklist Cloudflare WARP egress IPs (verified by
+          # probe run 36068187416 — download succeeded through this proxy).
+          docker run -d --name warproxy -p 1080:1080 \
+            --cap-add NET_ADMIN --device /dev/net/tun \
+            ghcr.io/kingcc/warproxy:latest
+          for i in $(seq 1 45); do
+            if curl -sf --max-time 3 --proxy socks5h://127.0.0.1:1080 \
+              https://www.cloudflare.com/cdn-cgi/trace > /tmp/warp_trace.txt 2>/dev/null; then
+              echo "WARP proxy ready:"
+              grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt || true
+              echo "ready=1" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "WARPROXY_NOT_READY — falling back to direct attempts"
+          docker logs warproxy 2>&1 | tail -20 || true
+          echo "ready=0" >> "$GITHUB_OUTPUT"
       - name: Determine video id
         id: vid
         run: |
@@ -62,6 +83,7 @@ jobs:
       - name: Download Orbital section
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          WARP_READY: ${{ steps.warp.outputs.ready }}
         run: |
           set -x
           mkdir -p background_cache/minecraft_parkour/downloads
@@ -69,26 +91,31 @@ jobs:
           OUT="background_cache/minecraft_parkour/downloads/orbital_${VID}"
           : > /tmp/ytdlp.log
           : > /tmp/attempts.log
+          echo "warp_ready=$WARP_READY" | tee -a /tmp/attempts.log
 
-          # Optional cookies from repo secret YT_COOKIES (Netscape cookies.txt body)
+          # Cookies only matter on the direct (no-WARP) fallback path; a rotated
+          # cookie set poisons every client, so never send them through WARP.
           COOKIE_ARGS=()
-          if [ -n "$YT_COOKIES" ]; then
+          if [ -n "$YT_COOKIES" ] && [ "$WARP_READY" != "1" ]; then
             printf '%s\n' "$YT_COOKIES" > /tmp/yt-cookies.txt
             COOKIE_ARGS=(--cookies /tmp/yt-cookies.txt)
             echo "using YT_COOKIES secret" | tee -a /tmp/attempts.log
           else
-            echo "no YT_COOKIES secret" | tee -a /tmp/attempts.log
+            echo "no cookies in use" | tee -a /tmp/attempts.log
           fi
 
           yt_dl() {
             CLIENTS="$1"
             LABEL="$2"
-            echo "=== ATTEMPT $LABEL clients=$CLIENTS ===" | tee -a /tmp/attempts.log
+            echo "=== ATTEMPT $LABEL clients=$CLIENTS warp=$WARP_READY ===" | tee -a /tmp/attempts.log
             ARGS=(
               -v --no-playlist
               --js-runtimes deno --js-runtimes node
               --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"
             )
+            if [ "$WARP_READY" = "1" ]; then
+              ARGS+=(--proxy "socks5h://127.0.0.1:1080")
+            fi
             if [ -n "$CLIENTS" ]; then
               ARGS+=(--extractor-args "youtube:player_client=${CLIENTS}")
             fi
@@ -109,16 +136,27 @@ jobs:
             return $RC
           }
 
-          # With cookies: web clients work. Without: try every less-gated client.
-          yt_dl "tv,web_safari" "tv-safari" \
-            || yt_dl "android_vr" "android-vr" \
-            || yt_dl "web_embedded" "web-embedded" \
-            || yt_dl "tv" "tv" \
-            || yt_dl "web_safari" "safari" \
-            || yt_dl "android,ios,mweb" "mobile" \
-            || yt_dl "default,-android_sdkless" "default-nosdkless" \
-            || yt_dl "" "plain" \
-            || true
+          # WARP-first: plain invocation is exactly what the successful probe used
+          # (run 36068187416 — default clients through socks5h://127.0.0.1:1080).
+          # Direct fallback ladder kept for when the proxy is unavailable.
+          if [ "$WARP_READY" = "1" ]; then
+            yt_dl "" "warp-plain" \
+              || yt_dl "web_safari" "warp-safari" \
+              || yt_dl "tv,web_safari" "warp-tv-safari" \
+              || yt_dl "android,ios,mweb" "warp-mobile" \
+              || yt_dl "" "plain" \
+              || true
+          else
+            yt_dl "tv,web_safari" "tv-safari" \
+              || yt_dl "android_vr" "android-vr" \
+              || yt_dl "web_embedded" "web-embedded" \
+              || yt_dl "tv" "tv" \
+              || yt_dl "web_safari" "safari" \
+              || yt_dl "android,ios,mweb" "mobile" \
+              || yt_dl "default,-android_sdkless" "default-nosdkless" \
+              || yt_dl "" "plain" \
+              || true
+          fi
 
           extract_url() {
             printf '%s' "$1" | jq -r '
