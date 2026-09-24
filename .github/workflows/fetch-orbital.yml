@@ -5,7 +5,7 @@ on:
       video_id:
         description: YouTube video id
         required: true
-        default: fw_eWpb7uCE
+        default: tiOl_mcAsF4
   push:
     branches: [main]
     paths:
@@ -30,11 +30,23 @@ jobs:
           deno-version: v2.x
       - name: Install tools
         run: |
-          python -m pip install -U yt-dlp
+          python -m pip install -U yt-dlp bgutil-ytdlp-pot-provider
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           yt-dlp --version
           deno --version | head -1
+      - name: Start PO-token provider
+        run: |
+          docker run -d --name bgutil -p 127.0.0.1:4416:4416 --init \
+            brainicism/bgutil-ytdlp-pot-provider
+          for i in $(seq 1 45); do
+            if curl -sf http://127.0.0.1:4416/ >/dev/null; then
+              echo "pot provider ready"
+              break
+            fi
+            sleep 1
+          done
+          curl -sS http://127.0.0.1:4416/ || echo "pot provider not answering"
       - name: Determine video id
         id: vid
         run: |
@@ -43,6 +55,7 @@ jobs:
           else
             VID="$(head -1 .github/fetch-orbital.trigger | tr -d '\r\n' | head -1)"
           fi
+          VID="${VID%%#*}"
           echo "id=$VID" >> "$GITHUB_OUTPUT"
           echo "Using video id: $VID"
       - name: Download Orbital section
@@ -51,17 +64,130 @@ jobs:
           mkdir -p background_cache/minecraft_parkour/downloads
           VID="${{ steps.vid.outputs.id }}"
           OUT="background_cache/minecraft_parkour/downloads/orbital_${VID}"
-          # deno + node JS runtimes; less bot-gated player clients first
-          yt-dlp -v --no-playlist \
-            --js-runtimes deno --js-runtimes node \
-            --extractor-args "youtube:player_client=android_vr,web_embedded,web_safari,web_music,android_music,ios,web,mweb,tv" \
-            -f "bv*[height<=720]+ba/b[height<=720]/b" \
-            --ffmpeg-location "$(command -v ffmpeg)" \
-            -o "${OUT}.%(ext)s" \
-            "https://www.youtube.com/watch?v=${VID}" 2>&1 | tee /tmp/ytdlp.log | tail -100
-          ls -lah background_cache/minecraft_parkour/downloads/
-          F="$(ls -1 background_cache/minecraft_parkour/downloads/orbital_${VID}.* 2>/dev/null | head -1)"
-          echo "got file: $F"
+          : > /tmp/ytdlp.log
+          : > /tmp/attempts.log
+
+          yt_dl() {
+            EXTRA="$1"
+            LABEL="$2"
+            echo "=== ATTEMPT $LABEL ===" | tee -a /tmp/attempts.log
+            # shellcheck disable=SC2086
+            yt-dlp -v --no-playlist \
+              --js-runtimes deno --js-runtimes node \
+              --extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416" \
+              $EXTRA \
+              -f "bv*[height<=720]+ba/b[height<=720]/b" \
+              --ffmpeg-location "$(command -v ffmpeg)" \
+              -o "${OUT}.%(ext)s" \
+              "https://www.youtube.com/watch?v=${VID}" \
+              2>&1 | tee -a /tmp/ytdlp.log | tail -40
+            RC=${PIPESTATUS[0]}
+            echo "attempt $LABEL rc=$RC" | tee -a /tmp/attempts.log
+            return $RC
+          }
+
+          yt_dl '--extractor-args "youtube:player_client=tv,web_safari"' "pot-tv-safari" \
+            || yt_dl '--extractor-args "youtube:player_client=android,ios,web,mweb,tv"' "clients-broad" \
+            || yt_dl '--extractor-args "youtube:player_client=default,-android_sdkless"' "default-nosdkless" \
+            || yt_dl '' "plain-with-pot" \
+            || true
+
+          extract_url() {
+            printf '%s' "$1" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except Exception:
+    sys.exit(0)
+if isinstance(d, str) and d.startswith("http"):
+    print(d); sys.exit(0)
+if not isinstance(d, dict):
+    sys.exit(0)
+u = d.get("url") or d.get("formatUrl") or ""
+if isinstance(u, str) and u.startswith("http"):
+    print(u); sys.exit(0)
+for f in (d.get("picker") or []):
+    u = f.get("url") or ""
+    if u.startswith("http"):
+        print(u); sys.exit(0)
+for f in (d.get("videos") or []):
+    u = f.get("url") or ""
+    if f.get("height") == 720 and u.startswith("http"):
+        print(u); sys.exit(0)
+for f in (d.get("formats") or []) + (d.get("adaptiveFormats") or []):
+    u = f.get("url") or ""
+    blob = str(f.get("type", "")) + str(f.get("mime", ""))
+    if u.startswith("http") and "mp4" in blob:
+        print(u); sys.exit(0)
+'
+          }
+
+          if [ ! -s "${OUT}.mp4" ] && ! ls "${OUT}".* >/dev/null 2>&1; then
+            for API in \
+              "https://api.cobalt.tools/" \
+              "https://cobalt-api.kwiatekmiki.com/" \
+              "https://cobalt-backend.canine.tools/" \
+              "https://capi.oak.li/"
+            do
+              echo "=== COBALT $API ===" | tee -a /tmp/attempts.log
+              RESP=$(curl -sS --max-time 30 -X POST "$API" \
+                -H 'Accept: application/json' \
+                -H 'Content-Type: application/json' \
+                -d "{\"url\":\"https://www.youtube.com/watch?v=${VID}\",\"videoQuality\":\"720\",\"filenameStyle\":\"basic\"}" \
+                || true)
+              echo "$RESP" | head -c 500 | tee -a /tmp/attempts.log
+              echo >> /tmp/attempts.log
+              URL=$(extract_url "$RESP")
+              echo "url=[$URL]" | tee -a /tmp/attempts.log
+              if [ -n "$URL" ]; then
+                if curl -sSL --max-time 180 -o "${OUT}.mp4" "$URL" && [ -s "${OUT}.mp4" ]; then
+                  echo "cobalt ok" | tee -a /tmp/attempts.log
+                  break
+                fi
+                rm -f "${OUT}.mp4" 2>/dev/null || true
+              fi
+            done
+          fi
+
+          if [ ! -s "${OUT}.mp4" ]; then
+            for IV in \
+              "https://yewtu.be" \
+              "https://invidious.f5.si" \
+              "https://iv.ggtyler.dev" \
+              "https://invidious.privacyredirect.com" \
+              "https://vid.puffyan.us" \
+              "https://pipedapi.kavin.rocks" \
+              "https://api.piped.yt" \
+              "https://watchapi.whatever.social"
+            do
+              echo "=== IV $IV ===" | tee -a /tmp/attempts.log
+              for path in \
+                "/api/v1/videos/${VID}" \
+                "/api/v1/videos/${VID}?fields=adaptiveFormats,formatStreams" \
+                "/streams/${VID}" \
+                "/latest_version?id=${VID}&itag=22"
+              do
+                RESP=$(curl -sS --max-time 15 "${IV}${path}" || true)
+                echo "$RESP" | head -c 300 | tee -a /tmp/attempts.log
+                echo >> /tmp/attempts.log
+                URL=$(extract_url "$RESP")
+                if [ -n "$URL" ]; then
+                  echo "iv url ok" | tee -a /tmp/attempts.log
+                  if curl -sSL --max-time 180 -o "${OUT}.mp4" "$URL" && [ -s "${OUT}.mp4" ]; then
+                    echo "iv ok" | tee -a /tmp/attempts.log
+                    break 2
+                  fi
+                  rm -f "${OUT}.mp4" 2>/dev/null || true
+                fi
+              done
+            done
+          fi
+
+          ls -lah background_cache/minecraft_parkour/downloads/ || true
+          cat /tmp/attempts.log || true
+          F="$(ls -1 background_cache/minecraft_parkour/downloads/orbital_${VID}.* 2>/dev/null | head -1 || true)"
+          echo "got file: [$F]"
           test -n "$F" && test -s "$F"
           if [ -n "$F" ] && [ "${F##*.}" != "mp4" ]; then
             ffmpeg -y -i "$F" -c copy "${OUT}.mp4" && rm -f "$F"
@@ -74,7 +200,9 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           mkdir -p background_cache/minecraft_parkour/downloads
           if [ -f /tmp/ytdlp.log ]; then
-            cp /tmp/ytdlp.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
+            cat /tmp/ytdlp.log /tmp/attempts.log > background_cache/minecraft_parkour/downloads/last_ytdlp.log 2>/dev/null || cp /tmp/ytdlp.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
+          elif [ -f /tmp/attempts.log ]; then
+            cp /tmp/attempts.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
           fi
           git add -f background_cache/minecraft_parkour/downloads/ || true
           git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}" || true
