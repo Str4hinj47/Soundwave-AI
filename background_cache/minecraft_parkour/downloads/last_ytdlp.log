@@ -1,0 +1,20 @@
+[debug] Command-line config: ['-v', '--no-playlist', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_.%(ext)s', 'https://www.youtube.com/watch?v=']
+[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
+[debug] yt-dlp version stable@2026.08.19 from yt-dlp/yt-dlp [594bd50c2] (pip)
+[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
+[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
+[debug] Optional libraries: sqlite3-3.45.1
+[debug] JS runtimes: none
+[debug] Proxy map: {}
+[debug] Request Handlers: urllib
+[debug] Plugin directories: none
+[debug] Loaded 1744 extractors
+[generic] Extracting URL: https://www.youtube.com/watch?v=
+[generic] watch?v=: Downloading webpage
+[redirect] Following redirect to https://www.youtube.com/
+[youtube:recommended] Extracting URL: https://www.youtube.com/
+[youtube:tab] Extracting URL: https://www.youtube.com/feed/recommended
+[youtube:tab] recommended: Downloading webpage
+[download] Downloading playlist: recommended
+[youtube:tab] Playlist recommended: Downloading 0 items
+[download] Finished downloading playlist: recommended
