@@ -25,15 +25,25 @@ jobs:
         run: |
           # YouTube does not blacklist Cloudflare WARP egress IPs (verified by
           # probe run 36068187416 — download succeeded through this proxy).
-          # Started before the heavy tool installs so the tunnel has warmup time.
-          # Everything diagnostic lands in /tmp/warp.log (committed on failure).
+          # Cloudflare rate-limits NEW WARP account registration (429) per IP, so
+          # once any run registers successfully the account files are committed
+          # to .github/warp/ and mounted into the container on every later run —
+          # skipping registration entirely.
           exec > >(tee -a /tmp/warp.log) 2>&1
           set -x
+          mkdir -p .github/warp
           start_warp() {
             docker rm -f warproxy 2>/dev/null || true
-            docker pull ghcr.io/kingcc/warproxy:latest
+            local mount=()
+            if [ -f .github/warp/wgcf-account.toml ]; then
+              mount=(-v "$PWD/.github/warp:/config")
+              echo "mounting persisted WARP account"
+            else
+              echo "no persisted WARP account — fresh registration (may 429)"
+            fi
             docker run -d --name warproxy -p 1080:1080 \
               --cap-add NET_ADMIN --device /dev/net/tun \
+              "${mount[@]}" \
               ghcr.io/kingcc/warproxy:latest
           }
           check_ready() {
@@ -41,21 +51,36 @@ jobs:
               https://www.cloudflare.com/cdn-cgi/trace > /tmp/warp_trace.txt 2>/dev/null \
               && grep -q '^warp=on' /tmp/warp_trace.txt
           }
-          start_warp
-          for pass in 1 2; do
-            for i in $(seq 1 60); do
+          wait_ready() {
+            local tries="$1"
+            for i in $(seq 1 "$tries"); do
               if check_ready; then
-                echo "WARP proxy ready (pass $pass, try $i):"
+                echo "WARP proxy ready (try $i):"
                 grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt || true
-                echo "ready=1" >> "$GITHUB_OUTPUT"
-                exit 0
+                return 0
               fi
               sleep 3
             done
-            echo "pass $pass failed — restarting warproxy"
-            docker logs warproxy 2>&1 | tail -40
-            start_warp
-          done
+            return 1
+          }
+          # Pass 1: persisted account (or fresh registration when none stored).
+          start_warp
+          if wait_ready 50; then
+            echo "ready=1" >> "$GITHUB_OUTPUT"
+            docker cp warproxy:/config/. .github/warp/ 2>/dev/null || true
+            ls -la .github/warp/ || true
+            exit 0
+          fi
+          docker logs warproxy 2>&1 | tail -40
+          # Pass 2: persisted account may be dead — drop it and register fresh.
+          rm -f .github/warp/wgcf-account.toml .github/warp/wgcf-profile.conf .github/warp/wireproxy.conf
+          start_warp
+          if wait_ready 50; then
+            echo "ready=1" >> "$GITHUB_OUTPUT"
+            docker cp warproxy:/config/. .github/warp/ 2>/dev/null || true
+            ls -la .github/warp/ || true
+            exit 0
+          fi
           echo "WARPROXY_NOT_READY — falling back to direct attempts"
           docker logs warproxy 2>&1 | tail -60
           docker ps -a | grep -i warp || true
@@ -311,4 +336,13 @@ jobs:
           else
             git commit -m "fetch: orbital ${{ steps.vid.outputs.id }}"
             git push origin main || echo "PUSH_FAILED — video commit stayed local"
+          fi
+          # Persist a freshly registered WARP account so future runs skip
+          # registration (Cloudflare 429s new registrations per IP).
+          if ls .github/warp/*.toml >/dev/null 2>&1; then
+            git add -f .github/warp/ || true
+            if ! git diff --cached --quiet; then
+              git commit -m "warp: persist WARP account for CI fetch" || true
+              git push origin main || true
+            fi
           fi
