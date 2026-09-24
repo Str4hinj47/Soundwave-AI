@@ -1,0 +1,36 @@
+name: Fetch Orbital Clip
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: YouTube video id
+        required: true
+        default: fw_eWpb7uCE
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: arena/01a0d098-soundwave-ai
+      - name: Install yt-dlp
+        run: pipx install yt-dlp || pip install yt-dlp
+      - name: Download section
+        run: |
+          mkdir -p background_cache/minecraft_parkour/downloads
+          yt-dlp --no-playlist --no-warnings \
+            -f 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b' \
+            --download-sections '*00:30-03:30' --force-keyframes-at-cuts \
+            --ffmpeg-location "$(which ffmpeg)" \
+            -o 'background_cache/minecraft_parkour/downloads/orbital_${{ inputs.video_id }}.mp4' \
+            "https://www.youtube.com/watch?v=${{ inputs.video_id }}"
+          ls -la background_cache/minecraft_parkour/downloads/
+      - name: Commit
+        run: |
+          git config user.name "orbital-fetcher"
+          git config user.email "actions@github.com"
+          git add -f background_cache/minecraft_parkour/downloads/
+          git commit -m "fetch: orbital ${{ inputs.video_id }}" || echo "no changes"
+          git push
