@@ -1,0 +1,120 @@
+name: Probe alternative downloaders
+# Tests candidate download paths against one Orbital video, from the Actions
+# runner (datacenter IP). Results land in alt_dl_probe.log on main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/probe-alt-dl.trigger"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          echo "==== probe start $(date -u) run=$GITHUB_RUN_ID ====" > /tmp/probe.log
+          python -m pip install -U yt-dlp pytubefix 2>&1 | tail -2 | tee -a /tmp/probe.log
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg 2>&1 | tail -1 | tee -a /tmp/probe.log
+          echo "yt-dlp $(yt-dlp --version)" | tee -a /tmp/probe.log
+          python -c "import pytubefix; print('pytubefix', pytubefix.__version__)" | tee -a /tmp/probe.log
+
+      - name: "Probe B - stock yt-dlp, no cookies (baseline)"
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "==== PROBE B: stock yt-dlp, no cookies ====" | tee -a /tmp/probe.log
+          timeout 150 yt-dlp --no-playlist \
+            -f "bv*[height<=720]+ba/b[height<=720]/b" \
+            --ffmpeg-location "$(command -v ffmpeg)" \
+            -o "/tmp/probe_b.%(ext)s" \
+            "https://www.youtube.com/watch?v=tiOl_mcAsF4" 2>&1 | tee -a /tmp/probe.log
+          echo "exit=$?" | tee -a /tmp/probe.log
+          ls -la /tmp/probe_b.* 2>&1 | tee -a /tmp/probe.log
+
+      - name: "Probe A - pytubefix (own extractor, not yt-dlp)"
+        continue-on-error: true
+        run: |
+          echo "==== PROBE A: pytubefix ====" | tee -a /tmp/probe.log
+          timeout 150 python -u - <<'PY' 2>&1 | tee -a /tmp/probe.log
+          import os, traceback
+          try:
+              from pytubefix import YouTube
+              y = YouTube("https://www.youtube.com/watch?v=tiOl_mcAsF4")
+              print("TITLE:", y.title, flush=True)
+              s = y.streams.filter(file_extension="mp4").order_by("resolution").desc().first()
+              print("STREAM:", s, flush=True)
+              p = s.download(output_path="/tmp", filename="probe_a.mp4")
+              print("BYTES:", os.path.getsize(p), flush=True)
+          except Exception:
+              print("PYTUBEFIX_FAIL:", traceback.format_exc(), flush=True)
+              raise SystemExit(1)
+          PY
+
+      - name: "Probe C - warproxy (Cloudflare WARP) + yt-dlp via SOCKS5"
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "==== PROBE C: warproxy WARP + yt-dlp ====" | tee -a /tmp/probe.log
+          docker run --name warproxy -p 1080:1080 \
+            --cap-add NET_ADMIN --device /dev/net/tun \
+            -d ghcr.io/kingcc/warproxy:latest 2>&1 | tee -a /tmp/probe.log
+          ok=""
+          for i in $(seq 1 45); do
+            if out=$(curl -sf --max-time 3 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null); then
+              ok=1
+              echo "WARP trace:" | tee -a /tmp/probe.log
+              echo "$out" | grep -E '^(ip|loc|warp)=' | tee -a /tmp/probe.log
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "WARPROXY_NEVER_READY" | tee -a /tmp/probe.log
+            docker logs warproxy 2>&1 | tail -30 | tee -a /tmp/probe.log
+          else
+            timeout 180 yt-dlp --proxy "socks5h://127.0.0.1:1080" --no-playlist \
+              -f "bv*[height<=720]+ba/b[height<=720]/b" \
+              --ffmpeg-location "$(command -v ffmpeg)" \
+              -o "/tmp/probe_c.%(ext)s" \
+              "https://www.youtube.com/watch?v=tiOl_mcAsF4" 2>&1 | tee -a /tmp/probe.log
+            echo "exit=$?" | tee -a /tmp/probe.log
+            ls -la /tmp/probe_c.* 2>&1 | tee -a /tmp/probe.log
+          fi
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "==== RESULTS run=$GITHUB_RUN_ID $(date -u) ===="
+            found=""
+            for f in /tmp/probe_a.mp4 /tmp/probe_b.* /tmp/probe_c.*; do
+              [ -e "$f" ] || continue
+              found=1
+              echo "FILE $f $(stat -c%s "$f") bytes"
+              ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$f" 2>&1 | sed 's/^/duration /'
+            done
+            [ -n "$found" ] || echo "NO_OUTPUT_FILES"
+          } | tee -a /tmp/probe.log
+          mkdir -p background_cache/minecraft_parkour/downloads
+          head -c 400000 /tmp/probe.log > background_cache/minecraft_parkour/downloads/alt_dl_probe.log
+          git config user.name "alt-probe"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f background_cache/minecraft_parkour/downloads/alt_dl_probe.log
+          if git diff --cached --quiet; then
+            echo "no probe log change"
+          else
+            git commit -m "probe: alternative downloader results (run $GITHUB_RUN_ID)"
+            git push origin main || echo PUSH_FAILED
+          fi
