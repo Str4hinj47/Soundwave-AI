@@ -20,6 +20,46 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Start Cloudflare WARP proxy (warproxy)
+        id: warp
+        run: |
+          # YouTube does not blacklist Cloudflare WARP egress IPs (verified by
+          # probe run 36068187416 — download succeeded through this proxy).
+          # Started before the heavy tool installs so the tunnel has warmup time.
+          # Everything diagnostic lands in /tmp/warp.log (committed on failure).
+          exec > >(tee -a /tmp/warp.log) 2>&1
+          set -x
+          start_warp() {
+            docker rm -f warproxy 2>/dev/null || true
+            docker pull ghcr.io/kingcc/warproxy:latest
+            docker run -d --name warproxy -p 1080:1080 \
+              --cap-add NET_ADMIN --device /dev/net/tun \
+              ghcr.io/kingcc/warproxy:latest
+          }
+          check_ready() {
+            curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 \
+              https://www.cloudflare.com/cdn-cgi/trace > /tmp/warp_trace.txt 2>/dev/null \
+              && grep -q '^warp=on' /tmp/warp_trace.txt
+          }
+          start_warp
+          for pass in 1 2; do
+            for i in $(seq 1 60); do
+              if check_ready; then
+                echo "WARP proxy ready (pass $pass, try $i):"
+                grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt || true
+                echo "ready=1" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "pass $pass failed — restarting warproxy"
+            docker logs warproxy 2>&1 | tail -40
+            start_warp
+          done
+          echo "WARPROXY_NOT_READY — falling back to direct attempts"
+          docker logs warproxy 2>&1 | tail -60
+          docker ps -a | grep -i warp || true
+          echo "ready=0" >> "$GITHUB_OUTPUT"
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -48,27 +88,6 @@ jobs:
             sleep 1
           done
           curl -sS http://127.0.0.1:4416/ || echo "pot provider not answering"
-      - name: Start Cloudflare WARP proxy (warproxy)
-        id: warp
-        run: |
-          # YouTube does not blacklist Cloudflare WARP egress IPs (verified by
-          # probe run 36068187416 — download succeeded through this proxy).
-          docker run -d --name warproxy -p 1080:1080 \
-            --cap-add NET_ADMIN --device /dev/net/tun \
-            ghcr.io/kingcc/warproxy:latest
-          for i in $(seq 1 45); do
-            if curl -sf --max-time 3 --proxy socks5h://127.0.0.1:1080 \
-              https://www.cloudflare.com/cdn-cgi/trace > /tmp/warp_trace.txt 2>/dev/null; then
-              echo "WARP proxy ready:"
-              grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt || true
-              echo "ready=1" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "WARPROXY_NOT_READY — falling back to direct attempts"
-          docker logs warproxy 2>&1 | tail -20 || true
-          echo "ready=0" >> "$GITHUB_OUTPUT"
       - name: Determine video id
         id: vid
         run: |
@@ -272,7 +291,12 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           mkdir -p background_cache/minecraft_parkour/downloads
           if [ -f /tmp/ytdlp.log ]; then
-            cat /tmp/ytdlp.log /tmp/attempts.log > background_cache/minecraft_parkour/downloads/last_ytdlp.log 2>/dev/null || cp /tmp/ytdlp.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
+            {
+              [ -f /tmp/warp.log ] && sed 's/^/[warp] /' /tmp/warp.log
+              [ -f /tmp/warp_trace.txt ] && sed 's/^/[warp-trace] /' /tmp/warp_trace.txt
+              cat /tmp/ytdlp.log
+              cat /tmp/attempts.log
+            } > background_cache/minecraft_parkour/downloads/last_ytdlp.log 2>/dev/null || cp /tmp/ytdlp.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
           elif [ -f /tmp/attempts.log ]; then
             cp /tmp/attempts.log background_cache/minecraft_parkour/downloads/last_ytdlp.log || true
           fi
