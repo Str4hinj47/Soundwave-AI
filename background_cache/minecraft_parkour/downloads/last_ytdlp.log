@@ -367,9 +367,9 @@ url=[]
     <title>Verifying your browser…</title>
     <!-- No-JS visitors are sent to the image captcha 
 === IV https://invidious.f5.si ===
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f0477d1a000>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fdb3924ddc0>): Connection reset by peer"}
 
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f0477ea3780>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7f46dbd22640>): Connection reset by peer"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
@@ -418,7 +418,13 @@ url=[]
 </html>
 
 === IV https://vid.puffyan.us ===
-
+<html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+<center><h1>502 Bad Gateway</h1></center>
+<hr><center>nginx/1.22.1</center>
+</body>
+</html>
 
 <html>
 <head><title>502 Bad Gateway</title></head>
