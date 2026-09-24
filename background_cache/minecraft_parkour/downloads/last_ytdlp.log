@@ -306,22 +306,23 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
+warp_ready=0
 using YT_COOKIES secret
-=== ATTEMPT tv-safari clients=tv,web_safari ===
+=== ATTEMPT tv-safari clients=tv,web_safari warp=0 ===
 attempt tv-safari rc=1
-=== ATTEMPT android-vr clients=android_vr ===
+=== ATTEMPT android-vr clients=android_vr warp=0 ===
 attempt android-vr rc=1
-=== ATTEMPT web-embedded clients=web_embedded ===
+=== ATTEMPT web-embedded clients=web_embedded warp=0 ===
 attempt web-embedded rc=1
-=== ATTEMPT tv clients=tv ===
+=== ATTEMPT tv clients=tv warp=0 ===
 attempt tv rc=1
-=== ATTEMPT safari clients=web_safari ===
+=== ATTEMPT safari clients=web_safari warp=0 ===
 attempt safari rc=1
-=== ATTEMPT mobile clients=android,ios,mweb ===
+=== ATTEMPT mobile clients=android,ios,mweb warp=0 ===
 attempt mobile rc=1
-=== ATTEMPT default-nosdkless clients=default,-android_sdkless ===
+=== ATTEMPT default-nosdkless clients=default,-android_sdkless warp=0 ===
 attempt default-nosdkless rc=1
-=== ATTEMPT plain clients= ===
+=== ATTEMPT plain clients= warp=0 ===
 attempt plain rc=1
 cobalt list bytes=0
 === COBALT https://api.cobalt.tools/ ===
@@ -374,9 +375,9 @@ url=[]
     <title>Verifying your browser…</title>
     <!-- No-JS visitors are sent to the image captcha 
 === IV https://invidious.f5.si ===
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fe3902a7b40>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: Unexpected end of http response"}
 
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fcc64323500>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: Unexpected end of http response"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
@@ -425,21 +426,9 @@ url=[]
 </html>
 
 === IV https://vid.puffyan.us ===
-<html>
-<head><title>502 Bad Gateway</title></head>
-<body>
-<center><h1>502 Bad Gateway</h1></center>
-<hr><center>nginx/1.22.1</center>
-</body>
-</html>
 
-<html>
-<head><title>502 Bad Gateway</title></head>
-<body>
-<center><h1>502 Bad Gateway</h1></center>
-<hr><center>nginx/1.22.1</center>
-</body>
-</html>
+
+
 
 <html>
 <head><title>404 Not Found</title></head>
