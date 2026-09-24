@@ -152,7 +152,23 @@ function friendlyError(stderr: string): string {
 }
 
 function baseArgs(): string[] {
-  const args = ["--no-playlist", "--no-warnings", "--ignore-config", "--restrict-filenames"];
+  // --js-runtimes: yt-dlp only enables deno by default; Node is what ships
+  // with the app, so opt in explicitly for signature/n-sig challenges.
+  // player_client: try less bot-gated innertube clients first.
+  const args = [
+    "--no-playlist",
+    "--no-warnings",
+    "--ignore-config",
+    "--restrict-filenames",
+    // Comma-joined values are rejected; yt-dlp wants one flag per runtime.
+    "--js-runtimes",
+    "node",
+    "--js-runtimes",
+    "deno",
+    // Prefer clients that clear the bot wall without cookies (yt-dlp.net guidance).
+    "--extractor-args",
+    "youtube:player_client=tv,web_safari",
+  ];
   if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
   return args;
 }
@@ -205,14 +221,27 @@ export async function downloadVideo(
     ...baseArgs(),
     "-f",
     "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+    // Prefer merged MP4; needed when downloading time sections of DASH streams.
+    "--merge-output-format", "mp4",
   ];
   if (downloadSections) {
     args.push("--download-sections", downloadSections);
+    // Without this, section cuts snap to keyframes and often yield empty/broken files.
+    args.push("--force-keyframes-at-cuts");
   }
   // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());
   if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
+  // YouTube's innertube often requires a JS runtime for challenge signing.
+  // Surface Node (bundled with the app) so yt-dlp can find it.
+  const nodeDir = path.dirname(process.execPath || "");
+  if (nodeDir && nodeDir !== ".") {
+    const prev = process.env.PATH || "";
+    if (!prev.split(path.delimiter).includes(nodeDir)) {
+      process.env.PATH = `${nodeDir}${path.delimiter}${prev}`;
+    }
+  }
   args.push("--newline", "-o", template, url);
 
   const cleanup = () => {

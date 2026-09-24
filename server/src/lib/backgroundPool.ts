@@ -492,7 +492,8 @@ export class MinecraftBackgroundPool {
         try {
           console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
           // Download a fast 3-minute section (e.g. 00:30 to 03:30) with 45s max timeout
-          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 45_000);
+          // Section download + keyframe re-encode needs more than 45s on cold caches.
+          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 180_000);
           if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath) && dlResult.size > 200_000) {
             longVideoPath = dlResult.filePath;
             downloadOk = true;
