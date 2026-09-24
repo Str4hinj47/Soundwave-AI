@@ -1,11 +1,10 @@
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno,node', '--extractor-args', 'youtube:player_client=android,ios,web,mweb,tv', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_fw_eWpb7uCE.%(ext)s', 'https://www.youtube.com/watch?v=fw_eWpb7uCE']
-WARNING: Ignoring unsupported JavaScript runtime(s): deno,node. Supported runtimes: deno, node, bun, quickjs.
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=android_vr,web_embedded,web_safari,web_music,android_music,ios,web,mweb,tv', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_fw_eWpb7uCE.%(ext)s', 'https://www.youtube.com/watch?v=fw_eWpb7uCE']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version stable@2026.08.19 from yt-dlp/yt-dlp [594bd50c2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
 [debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
 [debug] Optional libraries: sqlite3-3.45.1
-[debug] JS runtimes: deno-2.9.7
+[debug] JS runtimes: deno-2.9.7, node-22.23.2
 [debug] Proxy map: {}
 [debug] Request Handlers: urllib
 [debug] Plugin directories: none
@@ -13,13 +12,27 @@ WARNING: Ignoring unsupported JavaScript runtime(s): deno,node. Supported runtim
 [debug] [youtube] [pot] PO Token Providers: none
 [debug] [youtube] [pot] PO Token Cache Providers: memory
 [debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
-[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node (unavailable), quickjs (unavailable)
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
 [youtube] Extracting URL: https://www.youtube.com/watch?v=fw_eWpb7uCE
 [youtube] fw_eWpb7uCE: Downloading webpage
+WARNING: [youtube] Skipping unsupported client "android_music"
 [debug] [youtube] Forcing "main" player JS variant for player 7460dd14
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[youtube] fw_eWpb7uCE: Downloading android player API JSON
-[debug] [youtube] fw_eWpb7uCE: android player response playability status: LOGIN_REQUIRED
+[youtube] fw_eWpb7uCE: Downloading android vr player API JSON
+[debug] [youtube] fw_eWpb7uCE: android_vr player response playability status: LOGIN_REQUIRED
+[youtube] fw_eWpb7uCE: Downloading web embedded client config
+[debug] [youtube] fw_eWpb7uCE: Detected experiment to bind GVS PO Token to video ID for web_embedded client
+[youtube] fw_eWpb7uCE: Downloading player 7460dd14-main
+[youtube] fw_eWpb7uCE: Downloading web embedded player API JSON
+[debug] [youtube] fw_eWpb7uCE: web_embedded player response playability status: LOGIN_REQUIRED
+[youtube] fw_eWpb7uCE: Downloading web safari client config
+[debug] [youtube] fw_eWpb7uCE: Detected experiment to bind GVS PO Token to video ID for web_safari client
+[youtube] fw_eWpb7uCE: Downloading web safari player API JSON
+[debug] [youtube] fw_eWpb7uCE: web_safari player response playability status: LOGIN_REQUIRED
+[youtube] fw_eWpb7uCE: Downloading web music client config
+[debug] [youtube] fw_eWpb7uCE: Detected experiment to bind GVS PO Token to video ID for web_music client
+[youtube] fw_eWpb7uCE: Downloading web music player API JSON
+[debug] [youtube] fw_eWpb7uCE: web_music player response playability status: UNPLAYABLE
 [youtube] fw_eWpb7uCE: Downloading ios player API JSON
 [debug] [youtube] fw_eWpb7uCE: ios player response playability status: LOGIN_REQUIRED
 [debug] [youtube] fw_eWpb7uCE: web player response playability status: LOGIN_REQUIRED
@@ -28,11 +41,9 @@ WARNING: Ignoring unsupported JavaScript runtime(s): deno,node. Supported runtim
 [youtube] fw_eWpb7uCE: Downloading mweb player API JSON
 [debug] [youtube] fw_eWpb7uCE: mweb player response playability status: LOGIN_REQUIRED
 [youtube] fw_eWpb7uCE: Downloading tv client config
-[youtube] fw_eWpb7uCE: Downloading player 7460dd14-main
 [youtube] fw_eWpb7uCE: Downloading tv player API JSON
 [debug] [youtube] fw_eWpb7uCE: tv player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] fw_eWpb7uCE: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
+ERROR: [youtube] fw_eWpb7uCE: Video unavailable. This video is not available
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 765, in extract
     ie_result = self._real_extract(url)
                 ^^^^^^^^^^^^^^^^^^^^^^^
