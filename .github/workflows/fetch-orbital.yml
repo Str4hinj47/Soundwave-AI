@@ -101,6 +101,20 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           yt-dlp --version
           deno --version | head -1
+      - name: Clone yt-download engine (custom Innertube, no yt-dlp)
+        run: |
+          git clone --depth 1 https://github.com/Str4hinj47/yt-download /tmp/yt-download
+          cd /tmp/yt-download
+          # The repo currently ships flat, but cli.py/app.py import `engine.*`
+          # and Flask wants templates/index.html (README layout). Shim it here
+          # until the repo layout itself is fixed.
+          if [ ! -d engine ]; then
+            mkdir -p engine templates
+            cp -f __init__.py innertube.py probe.py engine/
+            [ -f index.html ] && cp -f index.html templates/ || true
+          fi
+          python -m pip install -q requests
+          python3 cli.py -h | head -3
       - name: Start PO-token provider
         run: |
           docker run -d --name bgutil -p 127.0.0.1:4416:4416 --init \
@@ -147,6 +161,32 @@ jobs:
           else
             echo "no cookies in use" | tee -a /tmp/attempts.log
           fi
+
+          # PRIMARY: yt-download custom Innertube engine (Android/iOS client
+          # contexts — the same-API-different-client fix, no yt-dlp involved).
+          echo "=== ATTEMPT engine yt-download ===" | tee -a /tmp/attempts.log
+          mkdir -p /tmp/ytd
+          if timeout 300 python3 /tmp/yt-download/cli.py \
+              "https://www.youtube.com/watch?v=${VID}" -q 720 -o /tmp/ytd \
+              > /tmp/ytcli.log 2>&1; then
+            SRC="$(find /tmp/ytd -type f \( -name '*.mp4' -o -name '*.webm' -o -name '*.mkv' \) -size +1M 2>/dev/null | head -1)"
+            echo "engine saved: [$SRC]" | tee -a /tmp/attempts.log
+            if [ -n "$SRC" ]; then
+              if ffmpeg -y -ss 30 -t 90 -i "$SRC" -c copy "${OUT}.section.mp4" >> /tmp/ytcli.log 2>&1 \
+                 || ffmpeg -y -ss 30 -t 90 -i "$SRC" -c:v libx264 -preset veryfast -c:a aac "${OUT}.section.mp4" >> /tmp/ytcli.log 2>&1; then
+                mv -f "${OUT}.section.mp4" "${OUT}.mp4"
+                echo "engine section cut ok" | tee -a /tmp/attempts.log
+              fi
+            fi
+          else
+            echo "engine cli failed rc=$?" | tee -a /tmp/attempts.log
+            # Which Innertube contexts does this IP have? (diagnostic)
+            timeout 60 python3 /tmp/yt-download/probe.py "$VID" >> /tmp/ytcli.log 2>&1 || true
+          fi
+          tail -c 4000 /tmp/ytcli.log >> /tmp/attempts.log 2>/dev/null || true
+
+          if [ ! -s "${OUT}.mp4" ]; then
+          echo "engine did not produce output — falling back to yt-dlp paths" | tee -a /tmp/attempts.log
 
           yt_dl() {
             CLIENTS="$1"
@@ -200,6 +240,7 @@ jobs:
               || yt_dl "default,-android_sdkless" "default-nosdkless" \
               || yt_dl "" "plain" \
               || true
+          fi
           fi
 
           extract_url() {
