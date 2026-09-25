@@ -4,9 +4,10 @@
 [warp] + mount=()
 [warp] + local mount
 [warp] + '[' -f .github/warp/wgcf-account.toml ']'
-[warp] + echo 'no persisted WARP account — fresh registration (may 429)'
-[warp] no persisted WARP account — fresh registration (may 429)
-[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun ghcr.io/kingcc/warproxy:latest
+[warp] + mount=(-v "$PWD/.github/warp:/config")
+[warp] + echo 'mounting persisted WARP account'
+[warp] mounting persisted WARP account
+[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun -v /home/runner/work/Soundwave-AI/Soundwave-AI/.github/warp:/config ghcr.io/kingcc/warproxy:latest
 [warp] Unable to find image 'ghcr.io/kingcc/warproxy:latest' locally
 [warp] latest: Pulling from kingcc/warproxy
 [warp] 34bcef1e5f98: Pulling fs layer
@@ -18,32 +19,34 @@
 [warp] 892c2d9d6aa3: Pulling fs layer
 [warp] d029fb8a838f: Pulling fs layer
 [warp] 4f4fb700ef54: Pulling fs layer
+[warp] 3d4a5b0c51bb: Waiting
+[warp] 5cc376fd3d90: Waiting
 [warp] ab31007733df: Waiting
 [warp] 892c2d9d6aa3: Waiting
 [warp] d029fb8a838f: Waiting
 [warp] 4f4fb700ef54: Waiting
-[warp] 3d4a5b0c51bb: Waiting
-[warp] 5cc376fd3d90: Waiting
+[warp] c0f8eff906b8: Verifying Checksum
 [warp] c0f8eff906b8: Download complete
 [warp] a284d4c5ddeb: Verifying Checksum
 [warp] a284d4c5ddeb: Download complete
-[warp] 3d4a5b0c51bb: Verifying Checksum
-[warp] 3d4a5b0c51bb: Download complete
 [warp] 34bcef1e5f98: Verifying Checksum
 [warp] 34bcef1e5f98: Download complete
+[warp] 3d4a5b0c51bb: Verifying Checksum
+[warp] 3d4a5b0c51bb: Download complete
+[warp] 5cc376fd3d90: Verifying Checksum
+[warp] 5cc376fd3d90: Download complete
 [warp] ab31007733df: Verifying Checksum
 [warp] ab31007733df: Download complete
-[warp] 5cc376fd3d90: Download complete
+[warp] 34bcef1e5f98: Pull complete
 [warp] 4f4fb700ef54: Verifying Checksum
 [warp] 4f4fb700ef54: Download complete
 [warp] 892c2d9d6aa3: Verifying Checksum
 [warp] 892c2d9d6aa3: Download complete
-[warp] 34bcef1e5f98: Pull complete
-[warp] d029fb8a838f: Verifying Checksum
-[warp] d029fb8a838f: Download complete
 [warp] c0f8eff906b8: Pull complete
 [warp] a284d4c5ddeb: Pull complete
 [warp] 3d4a5b0c51bb: Pull complete
+[warp] d029fb8a838f: Verifying Checksum
+[warp] d029fb8a838f: Download complete
 [warp] 5cc376fd3d90: Pull complete
 [warp] ab31007733df: Pull complete
 [warp] 892c2d9d6aa3: Pull complete
@@ -51,7 +54,7 @@
 [warp] 4f4fb700ef54: Pull complete
 [warp] Digest: sha256:1c00e4aad95976ffac6de9a424e7e5c27f92f2a1141fbfeb931ac8ebb75db2e2
 [warp] Status: Downloaded newer image for ghcr.io/kingcc/warproxy:latest
-[warp] 1ed889410559ec4e836a3ecdb12a1e5df9526711f40eb7359ab8df26863d3dd6
+[warp] 6a7efa96451f67fc1fb967a0dade1c0e15d916eb368ebd99b27911fa4004b974
 [warp] + wait_ready 50
 [warp] + local tries=50
 [warp] ++ seq 1 50
@@ -62,581 +65,49 @@
 [warp] + for i in $(seq 1 "$tries")
 [warp] + check_ready
 [warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + return 1
-[warp] + docker logs warproxy
-[warp] + tail -40
-[warp] *** wgcf: registering a new account...
-[warp] 2026/09/25 07:08:11 Using config file: /config/wgcf-account.toml
-[warp] 2026/09/25 07:08:11 429 Too Many Requests
-[warp] (1) attached stack trace
-[warp]   -- stack trace:
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:62
-[warp]   | [...repeated from below...]
-[warp] Wraps: (2) attached stack trace
-[warp]   -- stack trace:
-[warp]   | github.com/ViRb3/wgcf/v2/cloudflare.Register
-[warp]   | 	github.com/ViRb3/wgcf/v2/cloudflare/api.go:73
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:60
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/shared.RunCommandFatal
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/shared/shared.go:24
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.init.func1
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:28
-[warp]   | github.com/spf13/cobra.(*Command).execute
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1019
-[warp]   | github.com/spf13/cobra.(*Command).ExecuteC
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1148
-[warp]   | github.com/spf13/cobra.(*Command).Execute
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1071
-[warp]   | github.com/ViRb3/wgcf/v2/cmd.Execute
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/root.go:35
-[warp]   | main.main
-[warp]   | 	github.com/ViRb3/wgcf/v2/main.go:12
-[warp]   | runtime.main
-[warp]   | 	runtime/proc.go:285
-[warp]   | runtime.goexit
-[warp]   | 	runtime/asm_amd64.s:1693
-[warp] Wraps: (3) 429 Too Many Requests
-[warp] Error types: (1) *withstack.withStack (2) *withstack.withStack (3) *openapi.GenericOpenAPIError
-[warp] *** wgcf: generating a new wireguard profile...
-[warp] 2026/09/25 07:08:11 Using config file: /config/wgcf-account.toml
-[warp] 2026/09/25 07:08:11 no account detected, register one first
-[warp] cp: cannot stat '/config/wgcf-profile.conf': No such file or directory
-[warp] [custom-init] No custom files found, skipping...
-[warp] 2026/09/25 07:08:11 one and only one [Interface] is expected
-[warp] + rm -f .github/warp/wgcf-account.toml .github/warp/wgcf-profile.conf .github/warp/wireproxy.conf
-[warp] + start_warp
-[warp] + docker rm -f warproxy
-[warp] warproxy
-[warp] + mount=()
-[warp] + local mount
-[warp] + '[' -f .github/warp/wgcf-account.toml ']'
-[warp] + echo 'no persisted WARP account — fresh registration (may 429)'
-[warp] no persisted WARP account — fresh registration (may 429)
-[warp] + docker run -d --name warproxy -p 1080:1080 --cap-add NET_ADMIN --device /dev/net/tun ghcr.io/kingcc/warproxy:latest
-[warp] 0fd274508ac3b3a5b430de61da91d57f7ab887412abbfe2b86bfc99908d782f5
-[warp] + wait_ready 50
-[warp] + local tries=50
-[warp] ++ seq 1 50
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + for i in $(seq 1 "$tries")
-[warp] + check_ready
-[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-[warp] + sleep 3
-[warp] + return 1
-[warp] + echo 'WARPROXY_NOT_READY — falling back to direct attempts'
-[warp] WARPROXY_NOT_READY — falling back to direct attempts
-[warp] + docker logs warproxy
-[warp] + tail -60
-[warp]  |_____|_____|_____| |_| |_____|_|_|_|
-[warp]        _____ __ __ _ __    ____  
-[warp]       | __  |  |  | |  |  |    \ 
-[warp]       | __ -|  |  | |  |__|  |  |
-[warp]       |_____|_____|_|_____|____/ 
-[warp] 
-[warp]   Based on images from linuxserver.io
-[warp] ───────────────────────────────────────
-[warp] 
-[warp] To support LSIO projects visit:
-[warp] https://www.linuxserver.io/donate/
-[warp] 
-[warp] ───────────────────────────────────────
-[warp] GID/UID
-[warp] ───────────────────────────────────────
-[warp] 
-[warp] User UID:    911
-[warp] User GID:    911
-[warp] ───────────────────────────────────────
-[warp] 
-[warp] *** wgcf: registering a new account...
-[warp] 2026/09/25 07:10:42 Using config file: /config/wgcf-account.toml
-[warp] 2026/09/25 07:10:42 429 Too Many Requests
-[warp] (1) attached stack trace
-[warp]   -- stack trace:
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:62
-[warp]   | [...repeated from below...]
-[warp] Wraps: (2) attached stack trace
-[warp]   -- stack trace:
-[warp]   | github.com/ViRb3/wgcf/v2/cloudflare.Register
-[warp]   | 	github.com/ViRb3/wgcf/v2/cloudflare/api.go:73
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.registerAccount
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:60
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/shared.RunCommandFatal
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/shared/shared.go:24
-[warp]   | github.com/ViRb3/wgcf/v2/cmd/register.init.func1
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/register/register.go:28
-[warp]   | github.com/spf13/cobra.(*Command).execute
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1019
-[warp]   | github.com/spf13/cobra.(*Command).ExecuteC
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1148
-[warp]   | github.com/spf13/cobra.(*Command).Execute
-[warp]   | 	github.com/spf13/cobra@v1.9.1/command.go:1071
-[warp]   | github.com/ViRb3/wgcf/v2/cmd.Execute
-[warp]   | 	github.com/ViRb3/wgcf/v2/cmd/root.go:35
-[warp]   | main.main
-[warp]   | 	github.com/ViRb3/wgcf/v2/main.go:12
-[warp]   | runtime.main
-[warp]   | 	runtime/proc.go:285
-[warp]   | runtime.goexit
-[warp]   | 	runtime/asm_amd64.s:1693
-[warp] Wraps: (3) 429 Too Many Requests
-[warp] Error types: (1) *withstack.withStack (2) *withstack.withStack (3) *openapi.GenericOpenAPIError
-[warp] *** wgcf: generating a new wireguard profile...
-[warp] 2026/09/25 07:10:42 Using config file: /config/wgcf-account.toml
-[warp] 2026/09/25 07:10:42 no account detected, register one first
-[warp] cp: cannot stat '/config/wgcf-profile.conf': No such file or directory
-[warp] [custom-init] No custom files found, skipping...
-[warp] 2026/09/25 07:10:42 one and only one [Interface] is expected
-[warp] + docker ps -a
-[warp] + grep -i warp
-[warp] 0fd274508ac3   ghcr.io/kingcc/warproxy:latest   "/init"   2 minutes ago   Up 2 minutes (unhealthy)   0.0.0.0:1080->1080/tcp, [::]:1080->1080/tcp   warproxy
-[warp] + echo ready=0
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv,web_safari', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[warp] + grep -q '^warp=on' /tmp/warp_trace.txt
+[warp] + echo 'WARP proxy ready (try 2):'
+[warp] WARP proxy ready (try 2):
+[warp] + grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt
+[warp] ip=104.28.201.80
+[warp] loc=US
+[warp] warp=on
+[warp] + return 0
+[warp] + echo ready=1
+[warp] + docker cp warproxy:/config/. .github/warp/
+[warp] + true
+[warp] + ls -la .github/warp/
+[warp] total 20
+[warp] drwxr-xr-x 2    911    911 4096 Sep 25 22:59 .
+[warp] drwxr-xr-x 4 runner runner 4096 Sep 25 22:59 ..
+[warp] -rw-r--r-- 1    911    911  209 Sep 25 22:59 wgcf-account.toml
+[warp] -rw-r--r-- 1    911    911  353 Sep 25 22:59 wgcf-profile.conf
+[warp] -rw-r--r-- 1    911    911  390 Sep 25 22:59 wireproxy.conf
+[warp] + exit 0
+[warp-trace] fl=1232f132
+[warp-trace] h=www.cloudflare.com
+[warp-trace] ip=104.28.201.80
+[warp-trace] ts=1790377159.000
+[warp-trace] visit_scheme=https
+[warp-trace] uag=curl/8.5.0
+[warp-trace] colo=SJC
+[warp-trace] sliver=none
+[warp-trace] http=http/2
+[warp-trace] loc=US
+[warp-trace] tls=TLSv1.3
+[warp-trace] sni=plaintext
+[warp-trace] warp=on
+[warp-trace] gateway=off
+[warp-trace] rbi=off
+[warp-trace] kex=X25519
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--proxy', 'socks5h://127.0.0.1:1080', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
 [debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
 [debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
 [debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
-[debug] Request Handlers: urllib, requests, websockets
-[debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
-[debug] Loaded 1745 extractors
-[debug] [youtube] Found YouTube account cookies
-[debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
-[debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-deno] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/src/generate_once.ts
-[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.0 (external), bgutil:script-node-2.0.0 (external, unavailable), bgutil:script-deno-2.0.0 (external, unavailable)
-[debug] [youtube] [pot] PO Token Cache Providers: memory
-[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
-[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
-[youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
-[youtube] tiOl_mcAsF4: Downloading webpage
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[youtube] tiOl_mcAsF4: Downloading tv client config
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
-        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[youtube] tiOl_mcAsF4: Downloading player 7460dd14-main
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[youtube] tiOl_mcAsF4: Downloading tv player API JSON
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[debug] [youtube] tiOl_mcAsF4: tv player response playability status: LOGIN_REQUIRED
-[youtube] tiOl_mcAsF4: Downloading web safari client config
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_safari client
-[youtube] tiOl_mcAsF4: Downloading web safari player API JSON
-WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser as a security measure. For tips on how to effectively export YouTube cookies, refer to  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies .
-[debug] [youtube] tiOl_mcAsF4: web_safari player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
-
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android_vr', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
-[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
-[debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
-[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
-[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
-[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
-[debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
+[debug] Proxy map: {'all': 'socks5h://127.0.0.1:1080'}
 [debug] Request Handlers: urllib, requests, websockets
 [debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
 [debug] Loaded 1745 extractors
@@ -652,101 +123,96 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
 [youtube] tiOl_mcAsF4: Downloading webpage
 [debug] [youtube] Forcing "main" player JS variant for player 7460dd14
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[youtube] tiOl_mcAsF4: Downloading android vr player API JSON
-[debug] [youtube] tiOl_mcAsF4: android_vr player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
+[youtube] tiOl_mcAsF4: Downloading visionos player API JSON
+[youtube] tiOl_mcAsF4: Downloading m3u8 information
+[debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web client
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] [youtube] tiOl_mcAsF4: Some web client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[info] tiOl_mcAsF4: Downloading 1 format(s): 398+251
+[info] tiOl_mcAsF4: Downloading 1 time ranges: 30.0-120.0
+[debug] Invoking ffmpeg downloader on "https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790398852&ei=JP22ao3oHfS8sfIPo7qHkAw&ip=104.28.201.73&id=o-ADJYtw5jtR1_kmG7TwzzpoYH_hV_vn26hHtm2iA5F0Me&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=353&met=1790377252%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=3344500&bui=AWzQHwooySK3bPORZm9SuZF0NKJVsB4mHLV00G_NuPX7EkjBB21e1SIzDSHlj8PHafaRHQJFXMZpuuf7&spc=I-rgISaCY2_f2qqpIZU1n7-tfZge56zAeNK5OvPh3xyiJrPVFXSA4H0CWG1EVklWKw&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790377026&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456%2C52227522&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIgXVfscIokbaHg8wtlK-D6PMwdlKj-eT4HNy6V7dQt4yECIQDX_2QcwzlA8FbmTLynWQ-uJbwSeaasDi1pn30gillzug%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgOOJC5z1Li30Sp_CdnDODA2wuG4fZzO_V_gHvdq085DECIAlQbZMYdK5v_iZhn2xWad3ZPEvrdKPrwTj-oNuZS3_2", "https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790398852&ei=JP22ao3oHfS8sfIPo7qHkAw&ip=104.28.201.73&id=o-ADJYtw5jtR1_kmG7TwzzpoYH_hV_vn26hHtm2iA5F0Me&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=353&met=1790377252%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=3344500&bui=AWzQHwooySK3bPORZm9SuZF0NKJVsB4mHLV00G_NuPX7EkjBB21e1SIzDSHlj8PHafaRHQJFXMZpuuf7&spc=I-rgISaCY2_f2qqpIZU1n7-tfZge56zAeNK5OvPh3xyiJrPVFXSA4H0CWG1EVklWKw&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=58484036&dur=4224.381&lmt=1788349658390126&mt=1790377026&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456%2C52227522&c=VISIONOS&txp=5318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRgIhAPmroAGr6unG71OSW1yYOGT1HloaNMOk8W5nIri5v0erAiEA3y5S0N6v2vOMfyHkfXKGJLL-8WMcO_YbQGiUuaD07QE%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgOOJC5z1Li30Sp_CdnDODA2wuG4fZzO_V_gHvdq085DECIAlQbZMYdK5v_iZhn2xWad3ZPEvrdKPrwTj-oNuZS3_2"
+[download] Destination: background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.webm
+WARNING: ffmpeg does not support SOCKS proxies. Downloading is likely to fail. Consider adding --hls-prefer-native to your command.
+[debug] ffmpeg command line: /usr/bin/ffmpeg -y -loglevel verbose -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Sec-Fetch-Mode: navigate
+' -ss 30 -t 90 -i 'https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790398852&ei=JP22ao3oHfS8sfIPo7qHkAw&ip=104.28.201.73&id=o-ADJYtw5jtR1_kmG7TwzzpoYH_hV_vn26hHtm2iA5F0Me&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=353&met=1790377252%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=3344500&bui=AWzQHwooySK3bPORZm9SuZF0NKJVsB4mHLV00G_NuPX7EkjBB21e1SIzDSHlj8PHafaRHQJFXMZpuuf7&spc=I-rgISaCY2_f2qqpIZU1n7-tfZge56zAeNK5OvPh3xyiJrPVFXSA4H0CWG1EVklWKw&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790377026&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456%2C52227522&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIgXVfscIokbaHg8wtlK-D6PMwdlKj-eT4HNy6V7dQt4yECIQDX_2QcwzlA8FbmTLynWQ-uJbwSeaasDi1pn30gillzug%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgOOJC5z1Li30Sp_CdnDODA2wuG4fZzO_V_gHvdq085DECIAlQbZMYdK5v_iZhn2xWad3ZPEvrdKPrwTj-oNuZS3_2' -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Sec-Fetch-Mode: navigate
+' -ss 30 -t 90 -i 'https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790398852&ei=JP22ao3oHfS8sfIPo7qHkAw&ip=104.28.201.73&id=o-ADJYtw5jtR1_kmG7TwzzpoYH_hV_vn26hHtm2iA5F0Me&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=353&met=1790377252%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=3344500&bui=AWzQHwooySK3bPORZm9SuZF0NKJVsB4mHLV00G_NuPX7EkjBB21e1SIzDSHlj8PHafaRHQJFXMZpuuf7&spc=I-rgISaCY2_f2qqpIZU1n7-tfZge56zAeNK5OvPh3xyiJrPVFXSA4H0CWG1EVklWKw&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=58484036&dur=4224.381&lmt=1788349658390126&mt=1790377026&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456%2C52227522&c=VISIONOS&txp=5318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRgIhAPmroAGr6unG71OSW1yYOGT1HloaNMOk8W5nIri5v0erAiEA3y5S0N6v2vOMfyHkfXKGJLL-8WMcO_YbQGiUuaD07QE%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgOOJC5z1Li30Sp_CdnDODA2wuG4fZzO_V_gHvdq085DECIAlQbZMYdK5v_iZhn2xWad3ZPEvrdKPrwTj-oNuZS3_2' -map 0:0 -map 1:0 -f webm file:background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.webm.part
+ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers
+  built with gcc 13 (Ubuntu 13.2.0-23ubuntu3)
+  configuration: --prefix=/usr --extra-version=3ubuntu5 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --disable-omx --enable-gnutls --enable-libaom --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libglslang --enable-libgme --enable-libgsm --enable-libharfbuzz --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-openal --enable-opencl --enable-opengl --disable-sndio --enable-libvpl --disable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-ladspa --enable-libbluray --enable-libjack --enable-libpulse --enable-librabbitmq --enable-librist --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libx264 --enable-libzmq --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-libplacebo --enable-librav1e --enable-pocketsphinx --enable-librsvg --enable-libjxl --enable-shared
+  libavutil      58. 29.100 / 58. 29.100
+  libavcodec     60. 31.102 / 60. 31.102
+  libavformat    60. 16.100 / 60. 16.100
+  libavdevice    60.  3.100 / 60.  3.100
+  libavfilter     9. 12.100 /  9. 12.100
+  libswscale      7.  5.100 /  7.  5.100
+  libswresample   4. 12.100 /  4. 12.100
+  libpostproc    57.  3.100 / 57.  3.100
+[tcp @ 0x56441d693740] Starting connection attempt to 173.194.25.8 port 443
+[tcp @ 0x56441d693740] Successfully connected to 173.194.25.8 port 443
+[tcp @ 0x56441d693740] Starting connection attempt to 173.194.132.213 port 443
+[tcp @ 0x56441d693740] Successfully connected to 173.194.132.213 port 443
+[https @ 0x56441d68fdc0] HTTP error 403 Forbidden
+[in#0 @ 0x56441d68f040] Error opening input: Server returned 403 Forbidden (access denied)
+Error opening input file https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790398852&ei=JP22ao3oHfS8sfIPo7qHkAw&ip=104.28.201.73&id=o-ADJYtw5jtR1_kmG7TwzzpoYH_hV_vn26hHtm2iA5F0Me&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=353&met=1790377252%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=3344500&bui=AWzQHwooySK3bPORZm9SuZF0NKJVsB4mHLV00G_NuPX7EkjBB21e1SIzDSHlj8PHafaRHQJFXMZpuuf7&spc=I-rgISaCY2_f2qqpIZU1n7-tfZge56zAeNK5OvPh3xyiJrPVFXSA4H0CWG1EVklWKw&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790377026&fvip=4&keepalive=yes&fexp=51565116%2C52112905%2C52178456%2C52227522&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIgXVfscIokbaHg8wtlK-D6PMwdlKj-eT4HNy6V7dQt4yECIQDX_2QcwzlA8FbmTLynWQ-uJbwSeaasDi1pn30gillzug%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgOOJC5z1Li30Sp_CdnDODA2wuG4fZzO_V_gHvdq085DECIAlQbZMYdK5v_iZhn2xWad3ZPEvrdKPrwTj-oNuZS3_2.
+Error opening input files: Server returned 403 Forbidden (access denied)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_embedded', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+
+ERROR: ffmpeg exited with code 8
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/bin/yt-dlp", line 6, in <module>
+    sys.exit(main())
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1080, in main
+    _exit(*variadic(_real_main(argv)))
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1071, in _real_main
+    return ydl.download(all_urls)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3712, in download
+    self.__download_wrapper(self.extract_info)(
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3685, in wrapper
+    res = func(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1719, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1730, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1886, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1945, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3132, in process_video_result
+    self.process_info(new_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 194, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3533, in process_info
+    success, real_download = self.dl(temp_filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3321, in dl
+    return fd.download(name, new_info, subtitle)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/common.py", line 480, in download
+    ret = self.real_download(filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/external.py", line 79, in real_download
+    self.report_error('%s exited with code %d' % (
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1164, in report_error
+    self.trouble(f'{self._format_err("ERROR:", self.Styles.ERROR)} {message}', *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1091, in trouble
+    tb_data = traceback.format_list(traceback.extract_stack())
+
+
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--proxy', 'socks5h://127.0.0.1:1080', '--extractor-args', 'youtube:player_client=web_safari', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
 [debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
 [debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
 [debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
-[debug] Request Handlers: urllib, requests, websockets
-[debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
-[debug] Loaded 1745 extractors
-[debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
-[debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-deno] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/src/generate_once.ts
-[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.0 (external), bgutil:script-node-2.0.0 (external, unavailable), bgutil:script-deno-2.0.0 (external, unavailable)
-[debug] [youtube] [pot] PO Token Cache Providers: memory
-[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
-[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
-[youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
-[youtube] tiOl_mcAsF4: Downloading webpage
-[youtube] tiOl_mcAsF4: Downloading web embedded client config
-[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
-        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_embedded client
-[youtube] tiOl_mcAsF4: Downloading player 7460dd14-main
-[youtube] tiOl_mcAsF4: Downloading web embedded player API JSON
-[debug] [youtube] tiOl_mcAsF4: web_embedded player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
-
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=tv', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
-[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
-[debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
-[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
-[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
-[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
-[debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
-[debug] Request Handlers: urllib, requests, websockets
-[debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
-[debug] Loaded 1745 extractors
-[debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
-[debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-deno] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/src/generate_once.ts
-[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.0 (external), bgutil:script-node-2.0.0 (external, unavailable), bgutil:script-deno-2.0.0 (external, unavailable)
-[debug] [youtube] [pot] PO Token Cache Providers: memory
-[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
-[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
-[youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
-[youtube] tiOl_mcAsF4: Downloading webpage
-[youtube] tiOl_mcAsF4: Downloading tv client config
-[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
-        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[youtube] tiOl_mcAsF4: Downloading player 7460dd14-main
-[youtube] tiOl_mcAsF4: Downloading tv player API JSON
-[debug] [youtube] tiOl_mcAsF4: tv player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
-
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=web_safari', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
-[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
-[debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
-[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
-[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
-[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
-[debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
+[debug] Proxy map: {'all': 'socks5h://127.0.0.1:1080'}
 [debug] Request Handlers: urllib, requests, websockets
 [debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
 [debug] Loaded 1745 extractors
@@ -765,9 +231,194 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
 [debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_safari client
 [youtube] tiOl_mcAsF4: Downloading web safari player API JSON
-[debug] [youtube] tiOl_mcAsF4: web_safari player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
+[debug] [youtube] tiOl_mcAsF4: Detected a 10s ad skippable after 5s for web_safari
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] [youtube] tiOl_mcAsF4: Some web_safari client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+WARNING: Only images are available for download. use --list-formats to see them
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+ERROR: [youtube] tiOl_mcAsF4: Requested format is not available. Use --list-formats for a list of available formats
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1730, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1886, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1945, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3094, in process_video_result
+    raise ExtractorError(
+yt_dlp.utils.ExtractorError: [youtube] tiOl_mcAsF4: Requested format is not available. Use --list-formats for a list of available formats
+
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--proxy', 'socks5h://127.0.0.1:1080', '--extractor-args', 'youtube:player_client=tv,web_safari', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
+[debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
+[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
+[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
+[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
+[debug] JS runtimes: deno-2.9.7, node-22.23.2
+[debug] Proxy map: {'all': 'socks5h://127.0.0.1:1080'}
+[debug] Request Handlers: urllib, requests, websockets
+[debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
+[debug] Loaded 1745 extractors
+[debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
+[debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
+[debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
+[debug] [youtube] [pot:bgutil:script-deno] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/src/generate_once.ts
+[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.0 (external), bgutil:script-node-2.0.0 (external, unavailable), bgutil:script-deno-2.0.0 (external, unavailable)
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
+[youtube] tiOl_mcAsF4: Downloading webpage
+[youtube] tiOl_mcAsF4: Downloading tv client config
+[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
+        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
+[youtube] tiOl_mcAsF4: Downloading player 7460dd14-main
+[youtube] tiOl_mcAsF4: Downloading tv player API JSON
+[debug] [youtube] tiOl_mcAsF4: tv player response playability status: UNPLAYABLE
+[youtube] tiOl_mcAsF4: Downloading web safari client config
+[debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web_safari client
+[youtube] tiOl_mcAsF4: Downloading web safari player API JSON
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] [youtube] tiOl_mcAsF4: Some web_safari client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web_safari client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+ERROR: [youtube] tiOl_mcAsF4: The page needs to be reloaded.
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
     ie_result = self._real_extract(url)
                 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -776,14 +427,14 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
     raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=android,ios,mweb', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--proxy', 'socks5h://127.0.0.1:1080', '--extractor-args', 'youtube:player_client=android,ios,mweb', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
 [debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
 [debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
 [debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
+[debug] Proxy map: {'all': 'socks5h://127.0.0.1:1080'}
 [debug] Request Handlers: urllib, requests, websockets
 [debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
 [debug] Loaded 1745 extractors
@@ -800,31 +451,161 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
 [debug] [youtube] Forcing "main" player JS variant for player 7460dd14
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
 [youtube] tiOl_mcAsF4: Downloading android player API JSON
-[debug] [youtube] tiOl_mcAsF4: android player response playability status: LOGIN_REQUIRED
 [youtube] tiOl_mcAsF4: Downloading ios player API JSON
-[debug] [youtube] tiOl_mcAsF4: ios player response playability status: LOGIN_REQUIRED
 [youtube] tiOl_mcAsF4: Downloading mweb client config
 [debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for mweb client
 [youtube] tiOl_mcAsF4: Downloading mweb player API JSON
-[debug] [youtube] tiOl_mcAsF4: mweb player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
+WARNING: [youtube] tiOl_mcAsF4: Some android client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+WARNING: [youtube] tiOl_mcAsF4: Some ios client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+WARNING: [youtube] tiOl_mcAsF4: mweb client https formats require a GVS PO Token which was not provided. They will be skipped as they may yield HTTP Error 403. You can manually pass a GVS PO Token for this client with --extractor-args "youtube:po_token=mweb.gvs+XXX". For more information, refer to  https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for mweb client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by <HTTPError 500: Internal Server Error>)'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[info] tiOl_mcAsF4: Downloading 1 format(s): 18
+[info] tiOl_mcAsF4: Downloading 1 time ranges: 30.0-120.0
+[debug] Invoking ffmpeg downloader on "https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400260&ei=pAK3asboJOyXsfIP9cXvyQ8&ip=104.28.201.73&id=o-ABETicBe7kq8j98A7dn-Hy3Vrxx6wPgZgw3cNhPeYyeb&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=381&met=1790378660%2C&mh=vm&mm=31%2C29&mn=sn-o097znzd%2Csn-n4v7snls&ms=au%2Crdu&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1751375&bui=AWzQHwqdVIKVCurVM_uGWCb6_BnP5QIh1VVMipFT8S4RkPETQilmG1lNAOZP2uWlUi_s9yMA8mcZGM30&spc=I-rgIW5OH5UT67OyJJIWc-BbdUdYvYlRE7Vux2okbPt-3CNCeQvvkwHCAfvMnxcpsFA&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=360422207&ratebypass=yes&dur=4224.406&lmt=1788349037076715&mt=1790378478&fvip=2&epbp=1&fexp=51565115%2C52178456%2C52184226&c=ANDROID&txp=5319224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AE0s2JYwRQIgdJFvs_dKBOCUQUnoK-dBWspiCN_2LIfkxfFns8d0K_8CIQDFB072g5LDFeexz_O-kpyDWExl741-YHs_jtksx5iw1w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgEFk18E-ceucwbEUp6PWVXxOdrHCv39p2HyHv7GEvKT8CIHLQgfcNiv_6mxOJhyLbAz2KHz3yMLRAkNZUnKOJpmgI"
+[download] Destination: background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.mp4
+WARNING: ffmpeg does not support SOCKS proxies. Downloading is likely to fail. Consider adding --hls-prefer-native to your command.
+[debug] ffmpeg command line: /usr/bin/ffmpeg -y -loglevel verbose -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Sec-Fetch-Mode: navigate
+' -ss 30 -t 90 -i 'https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400260&ei=pAK3asboJOyXsfIP9cXvyQ8&ip=104.28.201.73&id=o-ABETicBe7kq8j98A7dn-Hy3Vrxx6wPgZgw3cNhPeYyeb&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=381&met=1790378660%2C&mh=vm&mm=31%2C29&mn=sn-o097znzd%2Csn-n4v7snls&ms=au%2Crdu&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1751375&bui=AWzQHwqdVIKVCurVM_uGWCb6_BnP5QIh1VVMipFT8S4RkPETQilmG1lNAOZP2uWlUi_s9yMA8mcZGM30&spc=I-rgIW5OH5UT67OyJJIWc-BbdUdYvYlRE7Vux2okbPt-3CNCeQvvkwHCAfvMnxcpsFA&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=360422207&ratebypass=yes&dur=4224.406&lmt=1788349037076715&mt=1790378478&fvip=2&epbp=1&fexp=51565115%2C52178456%2C52184226&c=ANDROID&txp=5319224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AE0s2JYwRQIgdJFvs_dKBOCUQUnoK-dBWspiCN_2LIfkxfFns8d0K_8CIQDFB072g5LDFeexz_O-kpyDWExl741-YHs_jtksx5iw1w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgEFk18E-ceucwbEUp6PWVXxOdrHCv39p2HyHv7GEvKT8CIHLQgfcNiv_6mxOJhyLbAz2KHz3yMLRAkNZUnKOJpmgI' -f mp4 file:background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.mp4.part
+ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers
+  built with gcc 13 (Ubuntu 13.2.0-23ubuntu3)
+  configuration: --prefix=/usr --extra-version=3ubuntu5 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --disable-omx --enable-gnutls --enable-libaom --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libglslang --enable-libgme --enable-libgsm --enable-libharfbuzz --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-openal --enable-opencl --enable-opengl --disable-sndio --enable-libvpl --disable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-ladspa --enable-libbluray --enable-libjack --enable-libpulse --enable-librabbitmq --enable-librist --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libx264 --enable-libzmq --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-libplacebo --enable-librav1e --enable-pocketsphinx --enable-librsvg --enable-libjxl --enable-shared
+  libavutil      58. 29.100 / 58. 29.100
+  libavcodec     60. 31.102 / 60. 31.102
+  libavformat    60. 16.100 / 60. 16.100
+  libavdevice    60.  3.100 / 60.  3.100
+  libavfilter     9. 12.100 /  9. 12.100
+  libswscale      7.  5.100 /  7.  5.100
+  libswresample   4. 12.100 /  4. 12.100
+  libpostproc    57.  3.100 / 57.  3.100
+[tcp @ 0x565143ab3540] Starting connection attempt to 173.194.25.8 port 443
+[tcp @ 0x565143ab3540] Successfully connected to 173.194.25.8 port 443
+[tcp @ 0x565143ab3540] Starting connection attempt to 74.125.166.1 port 443
+[tcp @ 0x565143ab3540] Successfully connected to 74.125.166.1 port 443
+[https @ 0x565143aafb80] HTTP error 403 Forbidden
+[in#0 @ 0x565143aaedc0] Error opening input: Server returned 403 Forbidden (access denied)
+Error opening input file https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400260&ei=pAK3asboJOyXsfIP9cXvyQ8&ip=104.28.201.73&id=o-ABETicBe7kq8j98A7dn-Hy3Vrxx6wPgZgw3cNhPeYyeb&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=381&met=1790378660%2C&mh=vm&mm=31%2C29&mn=sn-o097znzd%2Csn-n4v7snls&ms=au%2Crdu&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1751375&bui=AWzQHwqdVIKVCurVM_uGWCb6_BnP5QIh1VVMipFT8S4RkPETQilmG1lNAOZP2uWlUi_s9yMA8mcZGM30&spc=I-rgIW5OH5UT67OyJJIWc-BbdUdYvYlRE7Vux2okbPt-3CNCeQvvkwHCAfvMnxcpsFA&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=360422207&ratebypass=yes&dur=4224.406&lmt=1788349037076715&mt=1790378478&fvip=2&epbp=1&fexp=51565115%2C52178456%2C52184226&c=ANDROID&txp=5319224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AE0s2JYwRQIgdJFvs_dKBOCUQUnoK-dBWspiCN_2LIfkxfFns8d0K_8CIQDFB072g5LDFeexz_O-kpyDWExl741-YHs_jtksx5iw1w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgEFk18E-ceucwbEUp6PWVXxOdrHCv39p2HyHv7GEvKT8CIHLQgfcNiv_6mxOJhyLbAz2KHz3yMLRAkNZUnKOJpmgI.
+Error opening input files: Server returned 403 Forbidden (access denied)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--extractor-args', 'youtube:player_client=default,-android_sdkless', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
+
+ERROR: ffmpeg exited with code 8
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/bin/yt-dlp", line 6, in <module>
+    sys.exit(main())
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1080, in main
+    _exit(*variadic(_real_main(argv)))
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1071, in _real_main
+    return ydl.download(all_urls)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3712, in download
+    self.__download_wrapper(self.extract_info)(
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3685, in wrapper
+    res = func(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1719, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1730, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1886, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1945, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3132, in process_video_result
+    self.process_info(new_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 194, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3586, in process_info
+    success, real_download = self.dl(temp_filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3321, in dl
+    return fd.download(name, new_info, subtitle)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/common.py", line 480, in download
+    ret = self.real_download(filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/external.py", line 79, in real_download
+    self.report_error('%s exited with code %d' % (
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1164, in report_error
+    self.trouble(f'{self._format_err("ERROR:", self.Styles.ERROR)} {message}', *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1091, in trouble
+    tb_data = traceback.format_list(traceback.extract_stack())
+
+
+[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--proxy', 'socks5h://127.0.0.1:1080', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
 [debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
 [debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
 [debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
 [debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
 [debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
 [debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
+[debug] Proxy map: {'all': 'socks5h://127.0.0.1:1080'}
 [debug] Request Handlers: urllib, requests, websockets
 [debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
 [debug] Loaded 1745 extractors
@@ -841,71 +622,118 @@ ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cooki
 [debug] [youtube] Forcing "main" player JS variant for player 7460dd14
         original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
 [youtube] tiOl_mcAsF4: Downloading visionos player API JSON
-[debug] [youtube] tiOl_mcAsF4: visionos player response playability status: LOGIN_REQUIRED
-[debug] [youtube] tiOl_mcAsF4: web player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
+[youtube] tiOl_mcAsF4: Downloading m3u8 information
+[debug] [youtube] tiOl_mcAsF4: Detected experiment to bind GVS PO Token to video ID for web client
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] [youtube] tiOl_mcAsF4: Some web client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[youtube] [pot:bgutil:http] Generating a gvs PO Token for web client via bgutil HTTP server
+WARNING: [youtube] [pot] Error fetching PO Token from "bgutil:http" provider: PoTokenProviderError('Error reaching POST /get_pot (caused by TransportError("HTTPConnectionPool(host=\'127.0.0.1\', port=4416): Read timed out. (read timeout=20.0)"))'); please report this issue to the provider developer at  https://github.com/Brainicism/bgutil-ytdlp-pot-provider/issues  .
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[info] tiOl_mcAsF4: Downloading 1 format(s): 398+251
+[info] tiOl_mcAsF4: Downloading 1 time ranges: 30.0-120.0
+[debug] Invoking ffmpeg downloader on "https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400963&ei=YwW3aoH0Ks2psfIP7vzAgQw&ip=104.28.233.73&id=o-AE4sTA_Ep7tOXkgnrbcgJgg08B5wGCjWg5NrcjC37SSO&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=368&met=1790379363%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1805125&bui=AWzQHwrkZ3lZObXvxG-lhs3BTSRfGjOU4IY1fvuEEkKA2mvIroyDV2v726gP84p5RaxrNKGeFYeo6o_K&spc=I-rgIe6ZwkqM_fIWVFeXaNvuAZ3WkiBbHtFgLdfX-aUIpdZ0Nx4qJbkUa91D&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790378955&fvip=4&keepalive=yes&fexp=51565115%2C52112905%2C52178456&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRgIhAKdoa9yYHKzeE0uf2FZfH_dzogUYcxlBfJhMIh0_wdaYAiEA9mW4RS3H1yv-nrXwiZUA55OUQabuvsTofYJgjPARCec%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKZNAyphVdVp9QAEyWuRlhjd0OmsIsp1pdOzr9anwKqvAiBvseJ7-D_AhF-zczfhmEEsKM8H34U4KBlGdSJdtpB0UQ%3D%3D", "https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400963&ei=YwW3aoH0Ks2psfIP7vzAgQw&ip=104.28.233.73&id=o-AE4sTA_Ep7tOXkgnrbcgJgg08B5wGCjWg5NrcjC37SSO&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=368&met=1790379363%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1805125&bui=AWzQHwrkZ3lZObXvxG-lhs3BTSRfGjOU4IY1fvuEEkKA2mvIroyDV2v726gP84p5RaxrNKGeFYeo6o_K&spc=I-rgIe6ZwkqM_fIWVFeXaNvuAZ3WkiBbHtFgLdfX-aUIpdZ0Nx4qJbkUa91D&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=58484036&dur=4224.381&lmt=1788349658390126&mt=1790378955&fvip=4&keepalive=yes&fexp=51565115%2C52112905%2C52178456&c=VISIONOS&txp=5318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIgd8Mxguxkn90vfRtWlORsAKKmOzbFIQBh8jG3HWPbKoECIQD4rQulCQ7liODsfMor5eyBeU7vOm6u81fVz0T9RjZhmw%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKZNAyphVdVp9QAEyWuRlhjd0OmsIsp1pdOzr9anwKqvAiBvseJ7-D_AhF-zczfhmEEsKM8H34U4KBlGdSJdtpB0UQ%3D%3D"
+[download] Destination: background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.webm
+WARNING: ffmpeg does not support SOCKS proxies. Downloading is likely to fail. Consider adding --hls-prefer-native to your command.
+[debug] ffmpeg command line: /usr/bin/ffmpeg -y -loglevel verbose -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Sec-Fetch-Mode: navigate
+' -ss 30 -t 90 -i 'https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400963&ei=YwW3aoH0Ks2psfIP7vzAgQw&ip=104.28.233.73&id=o-AE4sTA_Ep7tOXkgnrbcgJgg08B5wGCjWg5NrcjC37SSO&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=368&met=1790379363%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1805125&bui=AWzQHwrkZ3lZObXvxG-lhs3BTSRfGjOU4IY1fvuEEkKA2mvIroyDV2v726gP84p5RaxrNKGeFYeo6o_K&spc=I-rgIe6ZwkqM_fIWVFeXaNvuAZ3WkiBbHtFgLdfX-aUIpdZ0Nx4qJbkUa91D&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790378955&fvip=4&keepalive=yes&fexp=51565115%2C52112905%2C52178456&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRgIhAKdoa9yYHKzeE0uf2FZfH_dzogUYcxlBfJhMIh0_wdaYAiEA9mW4RS3H1yv-nrXwiZUA55OUQabuvsTofYJgjPARCec%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKZNAyphVdVp9QAEyWuRlhjd0OmsIsp1pdOzr9anwKqvAiBvseJ7-D_AhF-zczfhmEEsKM8H34U4KBlGdSJdtpB0UQ%3D%3D' -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Sec-Fetch-Mode: navigate
+' -ss 30 -t 90 -i 'https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400963&ei=YwW3aoH0Ks2psfIP7vzAgQw&ip=104.28.233.73&id=o-AE4sTA_Ep7tOXkgnrbcgJgg08B5wGCjWg5NrcjC37SSO&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=368&met=1790379363%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1805125&bui=AWzQHwrkZ3lZObXvxG-lhs3BTSRfGjOU4IY1fvuEEkKA2mvIroyDV2v726gP84p5RaxrNKGeFYeo6o_K&spc=I-rgIe6ZwkqM_fIWVFeXaNvuAZ3WkiBbHtFgLdfX-aUIpdZ0Nx4qJbkUa91D&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=58484036&dur=4224.381&lmt=1788349658390126&mt=1790378955&fvip=4&keepalive=yes&fexp=51565115%2C52112905%2C52178456&c=VISIONOS&txp=5318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRQIgd8Mxguxkn90vfRtWlORsAKKmOzbFIQBh8jG3HWPbKoECIQD4rQulCQ7liODsfMor5eyBeU7vOm6u81fVz0T9RjZhmw%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKZNAyphVdVp9QAEyWuRlhjd0OmsIsp1pdOzr9anwKqvAiBvseJ7-D_AhF-zczfhmEEsKM8H34U4KBlGdSJdtpB0UQ%3D%3D' -map 0:0 -map 1:0 -f webm file:background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.webm.part
+ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers
+  built with gcc 13 (Ubuntu 13.2.0-23ubuntu3)
+  configuration: --prefix=/usr --extra-version=3ubuntu5 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --disable-omx --enable-gnutls --enable-libaom --enable-libass --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libglslang --enable-libgme --enable-libgsm --enable-libharfbuzz --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-openal --enable-opencl --enable-opengl --disable-sndio --enable-libvpl --disable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-ladspa --enable-libbluray --enable-libjack --enable-libpulse --enable-librabbitmq --enable-librist --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libx264 --enable-libzmq --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-libplacebo --enable-librav1e --enable-pocketsphinx --enable-librsvg --enable-libjxl --enable-shared
+  libavutil      58. 29.100 / 58. 29.100
+  libavcodec     60. 31.102 / 60. 31.102
+  libavformat    60. 16.100 / 60. 16.100
+  libavdevice    60.  3.100 / 60.  3.100
+  libavfilter     9. 12.100 /  9. 12.100
+  libswscale      7.  5.100 /  7.  5.100
+  libswresample   4. 12.100 /  4. 12.100
+  libpostproc    57.  3.100 / 57.  3.100
+[tcp @ 0x5643992da740] Starting connection attempt to 173.194.25.8 port 443
+[tcp @ 0x5643992da740] Successfully connected to 173.194.25.8 port 443
+[tcp @ 0x5643992da740] Starting connection attempt to 173.194.132.213 port 443
+[tcp @ 0x5643992da740] Successfully connected to 173.194.132.213 port 443
+[https @ 0x5643992d6dc0] HTTP error 403 Forbidden
+[in#0 @ 0x5643992d6040] Error opening input: Server returned 403 Forbidden (access denied)
+Error opening input file https://rr3---sn-o097znzd.googlevideo.com/videoplayback?expire=1790400963&ei=YwW3aoH0Ks2psfIP7vzAgQw&ip=104.28.233.73&id=o-AE4sTA_Ep7tOXkgnrbcgJgg08B5wGCjWg5NrcjC37SSO&itag=398&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=368&met=1790379363%2C&mh=vm&mm=31%2C26&mn=sn-o097znzd%2Csn-ajaig5-5g&ms=au%2Conr&mv=m&mvi=3&pl=24&rms=au%2Cau&initcwndbps=1805125&bui=AWzQHwrkZ3lZObXvxG-lhs3BTSRfGjOU4IY1fvuEEkKA2mvIroyDV2v726gP84p5RaxrNKGeFYeo6o_K&spc=I-rgIe6ZwkqM_fIWVFeXaNvuAZ3WkiBbHtFgLdfX-aUIpdZ0Nx4qJbkUa91D&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=1158301433&dur=4224.366&lmt=1788349420394013&mt=1790378955&fvip=4&keepalive=yes&fexp=51565115%2C52112905%2C52178456&c=VISIONOS&txp=5309224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AE0s2JYwRgIhAKdoa9yYHKzeE0uf2FZfH_dzogUYcxlBfJhMIh0_wdaYAiEA9mW4RS3H1yv-nrXwiZUA55OUQabuvsTofYJgjPARCec%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAKZNAyphVdVp9QAEyWuRlhjd0OmsIsp1pdOzr9anwKqvAiBvseJ7-D_AhF-zczfhmEEsKM8H34U4KBlGdSJdtpB0UQ%3D%3D.
+Error opening input files: Server returned 403 Forbidden (access denied)
 
-[debug] Command-line config: ['-v', '--no-playlist', '--js-runtimes', 'deno', '--js-runtimes', 'node', '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416', '--cookies', '/tmp/yt-cookies.txt', '-f', 'bv*[height<=720]+ba/b[height<=720]/b', '--download-sections', '*30-120', '--force-keyframes-at-cuts', '--max-filesize', '80M', '--ffmpeg-location', '/usr/bin/ffmpeg', '-o', 'background_cache/minecraft_parkour/downloads/orbital_tiOl_mcAsF4.%(ext)s', 'https://www.youtube.com/watch?v=tiOl_mcAsF4']
-[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8 (No ANSI), error utf-8 (No ANSI), screen utf-8 (No ANSI)
-[debug] yt-dlp version nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds [c7fb478d2] (pip)
-[debug] Python 3.12.14 (CPython x86_64 64bit) - Linux-6.17.0-1022-azure-x86_64-with-glibc2.39 (OpenSSL 3.0.13 30 Jan 2024, glibc 2.39)
-[debug] exe versions: ffmpeg 6.1.1 (setts), ffprobe 6.1.1
-[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.07.22, mutagen-1.48.1, requests-2.34.2, sqlite3-3.45.1, urllib3-2.8.0, websockets-17.1, yt_dlp_ejs-0.8.0
-[debug] JS runtimes: deno-2.9.7, node-22.23.2
-[debug] Proxy map: {}
-[debug] Request Handlers: urllib, requests, websockets
-[debug] Plugin directories: /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp_plugins
-[debug] Loaded 1745 extractors
-[debug] [youtube] [pot:bgutil:script-node] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-node] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/build/generate_once.js
-[debug] [youtube] [pot:bgutil:script-deno] No server_home or script_path passed, defaulting to /home/runner/bgutil-ytdlp-pot-provider/server
-[debug] [youtube] [pot:bgutil:script-deno] Script path doesn't exist: /home/runner/bgutil-ytdlp-pot-provider/server/src/generate_once.ts
-[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.0 (external), bgutil:script-node-2.0.0 (external, unavailable), bgutil:script-deno-2.0.0 (external, unavailable)
-[debug] [youtube] [pot] PO Token Cache Providers: memory
-[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
-[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node, quickjs (unavailable)
-[youtube] Extracting URL: https://www.youtube.com/watch?v=tiOl_mcAsF4
-[youtube] tiOl_mcAsF4: Downloading webpage
-[debug] [youtube] Forcing "main" player JS variant for player 7460dd14
-        original url = /s/player/7460dd14/player_es6.vflset/en_US/base.js
-[youtube] tiOl_mcAsF4: Downloading visionos player API JSON
-[debug] [youtube] tiOl_mcAsF4: visionos player response playability status: LOGIN_REQUIRED
-[debug] [youtube] tiOl_mcAsF4: web player response playability status: LOGIN_REQUIRED
-WARNING: [youtube] No title found in player responses; falling back to title from initial data. Other metadata may also be missing
-ERROR: [youtube] tiOl_mcAsF4: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 764, in extract
-    ie_result = self._real_extract(url)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/youtube/_video.py", line 4076, in _real_extract
-    self.raise_no_formats(reason, expected=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 1271, in raise_no_formats
-    raise ExtractorError(msg, expected=expected, video_id=video_id)
 
-warp_ready=0
-using YT_COOKIES secret
-=== ATTEMPT tv-safari clients=tv,web_safari warp=0 ===
-attempt tv-safari rc=1
-=== ATTEMPT android-vr clients=android_vr warp=0 ===
-attempt android-vr rc=1
-=== ATTEMPT web-embedded clients=web_embedded warp=0 ===
-attempt web-embedded rc=1
-=== ATTEMPT tv clients=tv warp=0 ===
-attempt tv rc=1
-=== ATTEMPT safari clients=web_safari warp=0 ===
-attempt safari rc=1
-=== ATTEMPT mobile clients=android,ios,mweb warp=0 ===
-attempt mobile rc=1
-=== ATTEMPT default-nosdkless clients=default,-android_sdkless warp=0 ===
-attempt default-nosdkless rc=1
-=== ATTEMPT plain clients= warp=0 ===
+ERROR: ffmpeg exited with code 8
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/bin/yt-dlp", line 6, in <module>
+    sys.exit(main())
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1080, in main
+    _exit(*variadic(_real_main(argv)))
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/__init__.py", line 1071, in _real_main
+    return ydl.download(all_urls)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3712, in download
+    self.__download_wrapper(self.extract_info)(
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3685, in wrapper
+    res = func(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1719, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1730, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1886, in __extract_info
+    return self.process_ie_result(ie_result, download, extra_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1945, in process_ie_result
+    ie_result = self.process_video_result(ie_result, download=download)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3132, in process_video_result
+    self.process_info(new_info)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 194, in wrapper
+    return func(self, *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3533, in process_info
+    success, real_download = self.dl(temp_filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 3321, in dl
+    return fd.download(name, new_info, subtitle)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/common.py", line 480, in download
+    ret = self.real_download(filename, info_dict)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/downloader/external.py", line 79, in real_download
+    self.report_error('%s exited with code %d' % (
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1164, in report_error
+    self.trouble(f'{self._format_err("ERROR:", self.Styles.ERROR)} {message}', *args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1091, in trouble
+    tb_data = traceback.format_list(traceback.extract_stack())
+
+
+warp_ready=1
+no cookies in use
+=== ATTEMPT engine yt-download ===
+engine cli failed rc=1
+  Error: YouTube demands a login for this video (age restriction or a hard IP block). Try again later, or run the tool through a residential proxy.
+android         key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+android         key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+android_19      key=False: HTTP 400 | None | formats=0 direct_url=False | 
+android_19      key=True: HTTP 400 | None | formats=0 direct_url=False | 
+ios             key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+ios             key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+mweb            key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+mweb            key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+tv              key=False: HTTP 400 | None | formats=0 direct_url=False | 
+tv              key=True: HTTP 400 | None | formats=0 direct_url=False | 
+tv_embedded     key=False: HTTP 400 | None | formats=0 direct_url=False | 
+tv_embedded     key=True: HTTP 400 | None | formats=0 direct_url=False | 
+web_embedded    key=False: HTTP 400 | None | formats=0 direct_url=False | 
+web_embedded    key=True: HTTP 400 | None | formats=0 direct_url=False | 
+web             key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+web             key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+engine did not produce output — falling back to yt-dlp paths
+=== ATTEMPT warp-plain clients= warp=1 ===
+attempt warp-plain rc=1
+=== ATTEMPT warp-safari clients=web_safari warp=1 ===
+attempt warp-safari rc=1
+=== ATTEMPT warp-tv-safari clients=tv,web_safari warp=1 ===
+attempt warp-tv-safari rc=1
+=== ATTEMPT warp-mobile clients=android,ios,mweb warp=1 ===
+attempt warp-mobile rc=1
+=== ATTEMPT plain clients= warp=1 ===
 attempt plain rc=1
 cobalt list bytes=0
 === COBALT https://api.cobalt.tools/ ===
@@ -960,7 +788,7 @@ url=[]
 === IV https://invidious.f5.si ===
 {"error":"Error while communicating with Invidious companion: Unexpected end of http response"}
 
-{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7fc344834a00>): Connection reset by peer"}
+{"error":"Error while communicating with Invidious companion: read (#<TCPSocket:0x7ff1ef5ba640>): Connection reset by peer"}
 
 <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.27.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex,nofollow"><style>
    
@@ -1015,7 +843,13 @@ url=[]
 
 
 
-
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.22.1</center>
+</body>
+</html>
 
 === IV https://pipedapi.kavin.rocks ===
 
