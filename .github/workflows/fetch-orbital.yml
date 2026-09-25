@@ -114,7 +114,7 @@ jobs:
             cp -f __init__.py innertube.py probe.py engine/
             [ -f index.html ] && cp -f index.html templates/ || true
           fi
-          python -m pip install -q requests
+          python -m pip install -q requests pysocks
           python3 cli.py -h | head -3
       - name: Start PO-token provider
         run: |
@@ -171,7 +171,9 @@ jobs:
           mkdir -p /tmp/ytd
           ENGINE_PROXY=()
           if [ "$WARP_READY" = "1" ]; then
-            ENGINE_PROXY=(--proxy "http://127.0.0.1:3128")
+            # requests + pysocks → SOCKS5 (the proven tunnel; warproxy's HTTP
+            # port reset connections in run 36201914511).
+            ENGINE_PROXY=(--proxy "socks5h://127.0.0.1:1080")
           fi
           if timeout 300 python3 /tmp/yt-download/cli.py \
               "https://www.youtube.com/watch?v=${VID}" -q 720 -o /tmp/ytd \
