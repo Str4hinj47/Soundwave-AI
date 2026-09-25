@@ -165,17 +165,19 @@ jobs:
 
           # PRIMARY: yt-download custom Innertube engine (Android/iOS client
           # contexts — the same-API-different-client fix, no yt-dlp involved).
-          # Routed through WARP's HTTP proxy: from the runner's bare datacenter
-          # IP every client context is bot-walled (their probe.py proved it).
-          echo "=== ATTEMPT engine yt-download ===" | tee -a /tmp/attempts.log
-          mkdir -p /tmp/ytd
+          # From the runner's bare datacenter IP every client context is
+          # bot-walled (their probe.py proved it), so it goes through WARP's
+          # SOCKS5 via requests+pysocks — extraction+download both verified
+          # working that way in run 36202206328 (killed only by our old
+          # 300s cap at 53%; full video needs ~9-10 min at ~3MB/s).
           ENGINE_PROXY=()
           if [ "$WARP_READY" = "1" ]; then
-            # requests + pysocks → SOCKS5 (the proven tunnel; warproxy's HTTP
-            # port reset connections in run 36201914511).
             ENGINE_PROXY=(--proxy "socks5h://127.0.0.1:1080")
           fi
-          if timeout 300 python3 /tmp/yt-download/cli.py \
+          if [ ! -s "${OUT}.mp4" ]; then
+          echo "=== ATTEMPT engine yt-download ===" | tee -a /tmp/attempts.log
+          mkdir -p /tmp/ytd
+          if timeout 900 python3 /tmp/yt-download/cli.py \
               "https://www.youtube.com/watch?v=${VID}" -q 720 -o /tmp/ytd \
               "${ENGINE_PROXY[@]}" \
               > /tmp/ytcli.log 2>&1; then
@@ -194,6 +196,7 @@ jobs:
             timeout 60 python3 /tmp/yt-download/probe.py "$VID" >> /tmp/ytcli.log 2>&1 || true
           fi
           tail -c 4000 /tmp/ytcli.log >> /tmp/attempts.log 2>/dev/null || true
+          fi
 
           if [ ! -s "${OUT}.mp4" ]; then
           echo "engine did not produce output — falling back to yt-dlp paths" | tee -a /tmp/attempts.log
