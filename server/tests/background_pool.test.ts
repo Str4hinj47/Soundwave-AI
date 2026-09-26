@@ -1,7 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../src/lib/backgroundPool.js";
+
+// fetchMetadata is mocked (sandbox has no YouTube egress); downloadVideo stays
+// real so failure paths behave like production.
+const { fetchMetaMock } = vi.hoisted(() => ({ fetchMetaMock: vi.fn() }));
+vi.mock("../src/lib/ytdlp.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/ytdlp.js")>();
+  return { ...actual, fetchMetadata: fetchMetaMock };
+});
+
+beforeEach(() => {
+  fetchMetaMock.mockReset();
+  fetchMetaMock.mockRejectedValue(new Error("offline in tests"));
+});
 
 describe("Minecraft Background Pool & 60s Rotation Engine", () => {
   it("initializes background pool with status and history", () => {
@@ -67,7 +80,45 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
     if (!hist1.usedUrls.includes(failUrl)) {
       expect(hist1.usedUrls.length).toBe(before);
     }
+    // The failure IS remembered so the pool stops retrying dead links blindly.
+    expect(hist1.failedAttempts?.[failUrl] ?? 0).toBeGreaterThanOrEqual(1);
   }, 180_000);
+
+  it("parks a URL after MAX_FAILED_ATTEMPTS failures and refuses to retry it", async () => {
+    const parkedUrl = "https://www.youtube.com/watch?v=ORBITAL_FAIL_RETRY_1"; // failed once in the test above
+    const hist = backgroundPool.getHistory();
+    hist.failedAttempts[parkedUrl] = 3;
+    (backgroundPool as any).saveHistory(hist);
+
+    const beforeCount = backgroundPool.getStatus().failedAttempts[parkedUrl];
+    expect(beforeCount).toBe(3);
+
+    // A parked URL is refused instantly: no new failure recorded ⇒ it never even tried.
+    const ok = await backgroundPool.replenishPool(parkedUrl);
+    expect(ok).toBe(false);
+    expect(backgroundPool.getStatus().failedAttempts[parkedUrl]).toBe(beforeCount);
+  });
+
+  it("copyright guard drops links that are not from the Orbital NCG channel", async () => {
+    const foreignUrl = "https://www.youtube.com/watch?v=FOREIGN_NOT_ORBITAL_1";
+    backgroundPool.addCustomUrl(foreignUrl); // no-op if a previous run left it queued
+    expect(backgroundPool.getHistory().customUrls).toContain(foreignUrl);
+
+    fetchMetaMock.mockResolvedValueOnce({
+      title: "Some other channel's gameplay",
+      duration: 600,
+      webpageUrl: foreignUrl,
+      channel: "Completely Unrelated Gameplay",
+      channelUrl: "https://www.youtube.com/@someotherchannel",
+    });
+
+    const ok = await backgroundPool.replenishPool(foreignUrl);
+    expect(ok).toBe(false);
+    const hist = backgroundPool.getHistory();
+    expect(hist.customUrls).not.toContain(foreignUrl); // purged from the queue
+    expect(hist.usedUrls).not.toContain(foreignUrl); // never downloaded
+    expect(hist.failedAttempts[foreignUrl] ?? 0).toBeGreaterThanOrEqual(1);
+  });
 
   it("consumes a 60s clip, deletes it from the pool, and moves to the next sequentially", async () => {
     // Ensure at least one test clip exists in pool to test consumption & rotation

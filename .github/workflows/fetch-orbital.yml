@@ -6,10 +6,10 @@ on:
         description: YouTube video id
         required: true
         default: tiOl_mcAsF4
-  push:
-    branches: [main]
-    paths:
-      - ".github/fetch-orbital.trigger"
+  # Auto-download disabled 2026-09-26 by user direction: the app imports
+  # background videos via a YouTube link instead ("instead of downloading
+  # videos, just make him import it via a YouTube link"). Manual dispatch
+  # remains available for seeding the cache when needed.
 
 jobs:
   fetch:

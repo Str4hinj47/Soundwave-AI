@@ -3,11 +3,15 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
-import { downloadVideo } from "./ytdlp.js";
+import { downloadVideo, fetchMetadata, type YtDownloadResult, type YtMetadata } from "./ytdlp.js";
 
 // Orbital - No Copyright Gameplay (https://www.youtube.com/@OrbitalNCG/videos)
-// All background sources come from this channel only.
+// All background sources come from this channel only (Minecraft parkour — the
+// channel's entire catalog — so published content stays copyright-safe).
 export const ORBITAL_NCG_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG/videos";
+
+/** After this many consecutive failed downloads a link is parked until the cycle resets. */
+export const MAX_FAILED_ATTEMPTS = 3;
 
 export const CURATED_LONG_PARKOUR_VIDEOS = [
   "https://www.youtube.com/watch?v=fw_eWpb7uCE", // Orbital NCG — Vertical 4 HOURS
@@ -31,6 +35,8 @@ export const BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll"];
 export interface PoolHistory {
   usedUrls: string[];
   customUrls: string[];
+  /** Per-URL consecutive download/verification failures — how the pool "remembers" dead links. */
+  failedAttempts: Record<string, number>;
   totalClipsGenerated: number;
   totalClipsConsumed: number;
   lastReplenishedAt: string | null;
@@ -143,17 +149,33 @@ export class MinecraftBackgroundPool {
     return await this.sliceLongVideoIntoPool(filePath, `Upload: ${label}`);
   }
 
+  /** Back-fill fields added over time so older used_videos.json files keep working. */
+  private normalizeHistory(raw: unknown): PoolHistory {
+    const h = (raw ?? {}) as Partial<PoolHistory> & Record<string, unknown>;
+    return {
+      usedUrls: Array.isArray(h.usedUrls) ? h.usedUrls : [],
+      customUrls: Array.isArray(h.customUrls) ? h.customUrls : [],
+      failedAttempts: h.failedAttempts && typeof h.failedAttempts === "object" ? { ...h.failedAttempts } : {},
+      totalClipsGenerated: typeof h.totalClipsGenerated === "number" ? h.totalClipsGenerated : 0,
+      totalClipsConsumed: typeof h.totalClipsConsumed === "number" ? h.totalClipsConsumed : 0,
+      lastReplenishedAt: h.lastReplenishedAt ?? null,
+      currentSourceVideo: h.currentSourceVideo ?? null,
+      cleanedLegacySway: h.cleanedLegacySway,
+    };
+  }
+
   private ensureHistoryFile(): PoolHistory {
     try {
       if (fs.existsSync(this.historyFile)) {
         const raw = fs.readFileSync(this.historyFile, "utf-8");
-        return JSON.parse(raw);
+        return this.normalizeHistory(JSON.parse(raw));
       }
     } catch {}
 
     const initial: PoolHistory = {
       usedUrls: [],
       customUrls: [],
+      failedAttempts: {},
       totalClipsGenerated: 0,
       totalClipsConsumed: 0,
       lastReplenishedAt: null,
@@ -177,7 +199,7 @@ export class MinecraftBackgroundPool {
     try {
       if (fs.existsSync(this.historyFile)) {
         const raw = fs.readFileSync(this.historyFile, "utf-8");
-        return JSON.parse(raw);
+        return this.normalizeHistory(JSON.parse(raw));
       }
     } catch {}
     return this.ensureHistoryFile();
@@ -218,12 +240,17 @@ export class MinecraftBackgroundPool {
   public getStatus() {
     const clips = this.getClipsInPool();
     const hist = this.getHistory();
+    const failedAttempts = hist.failedAttempts ?? {};
     return {
       clipsRemaining: clips.length,
       clipNames: clips.map((c) => path.basename(c)),
       usedUrlsCount: hist.usedUrls.length,
       usedUrls: hist.usedUrls,
       customUrlsCount: hist.customUrls.length,
+      failedAttempts,
+      parkedUrls: Object.entries(failedAttempts)
+        .filter(([, n]) => n >= MAX_FAILED_ATTEMPTS)
+        .map(([u]) => u),
       totalClipsConsumed: hist.totalClipsConsumed,
       totalClipsGenerated: hist.totalClipsGenerated,
       lastReplenishedAt: hist.lastReplenishedAt,
@@ -440,6 +467,41 @@ export class MinecraftBackgroundPool {
     });
   }
 
+  /** Record a failed attempt against a link so dead links are remembered. */
+  private recordFailure(hist: PoolHistory, url: string) {
+    const prev = hist.failedAttempts?.[url] ?? 0;
+    hist.failedAttempts = { ...(hist.failedAttempts ?? {}), [url]: prev + 1 };
+  }
+
+  /**
+   * Copyright guard: background footage must be Minecraft parkour from the
+   * Orbital NCG channel ("so we don't get sued"). Curated links are pre-vetted;
+   * any pasted/custom link is checked against its resolved channel before any
+   * bytes are downloaded.
+   * - ok=true: verified Orbital (or curated).
+   * - ok=false + hardReject: provably another channel → drop the link.
+   * - ok=false + !hardReject: metadata unavailable (offline etc.) → stay retryable.
+   */
+  private async verifyOrbitalSource(url: string): Promise<{ ok: boolean; hardReject: boolean }> {
+    if (CURATED_LONG_PARKOUR_VIDEOS.includes(url)) return { ok: true, hardReject: false };
+    let meta: YtMetadata | null = null;
+    try {
+      meta = await fetchMetadata(url, 20_000);
+    } catch {
+      meta = null;
+    }
+    if (!meta) return { ok: false, hardReject: false };
+    const channel = (meta.channel ?? "").toLowerCase();
+    const channelUrl = (meta.channelUrl ?? "").toLowerCase();
+    const orbital = channel.includes("orbital") || channelUrl.includes("orbitalncg");
+    if (!orbital) {
+      console.warn(
+        `[BackgroundPool] Copyright guard: "${url}" belongs to channel "${meta.channel || meta.channelUrl || "unknown"}" — only Orbital NCG Minecraft parkour is allowed. Dropping link.`,
+      );
+    }
+    return { ok: orbital, hardReject: !orbital };
+  }
+
   /**
    * Find a new long parkour video that has NOT been used yet,
    * download it, and slice it into 60s clips.
@@ -453,34 +515,58 @@ export class MinecraftBackgroundPool {
     this.isProcessing = true;
     try {
       const hist = this.getHistory();
+      const isParked = (u: string) => (hist.failedAttempts?.[u] ?? 0) >= MAX_FAILED_ATTEMPTS;
       let targetUrl: string | null = null;
+
+      if (specificUrl && isParked(specificUrl)) {
+        console.warn(
+          `[BackgroundPool] ${specificUrl} is parked after ${MAX_FAILED_ATTEMPTS} failed attempts — refusing until the cycle resets.`,
+        );
+        return false;
+      }
 
       if (specificUrl && !hist.usedUrls.includes(specificUrl)) {
         targetUrl = specificUrl;
       } else {
-        // 1. Check custom URLs queue first
+        // 1. Check custom URLs queue first (skip links already used AND parked ones)
         for (const u of hist.customUrls) {
-          if (!hist.usedUrls.includes(u)) {
+          if (!hist.usedUrls.includes(u) && !isParked(u)) {
             targetUrl = u;
             break;
           }
         }
 
-        // 2. Check curated pool for an unused URL
+        // 2. Check curated pool for an unused, non-parked URL
         if (!targetUrl) {
           for (const u of CURATED_LONG_PARKOUR_VIDEOS) {
-            if (!hist.usedUrls.includes(u)) {
+            if (!hist.usedUrls.includes(u) && !isParked(u)) {
               targetUrl = u;
               break;
             }
           }
         }
 
-        // 3. If every single URL has been used, reset the cycle
+        // 3. If every link has been used or parked, reset the cycle with a clean slate
         if (!targetUrl) {
           console.log("[BackgroundPool] All curated video URLs have been used! Cycling from beginning of pool.");
           targetUrl = CURATED_LONG_PARKOUR_VIDEOS[0] || null;
           hist.usedUrls = [];
+          hist.failedAttempts = {};
+        }
+      }
+
+      // Copyright guard: only Minecraft parkour footage from the Orbital NCG channel.
+      // Curated links are pre-vetted; any custom/pasted link is verified before download.
+      if (targetUrl) {
+        const verdict = await this.verifyOrbitalSource(targetUrl);
+        if (!verdict.ok) {
+          if (verdict.hardReject) {
+            hist.customUrls = hist.customUrls.filter((u) => u !== targetUrl);
+            console.warn(`[BackgroundPool] Copyright guard removed non-Orbital link from queue: ${targetUrl}`);
+          }
+          this.recordFailure(hist, targetUrl);
+          this.saveHistory(hist);
+          return false;
         }
       }
 
@@ -489,17 +575,44 @@ export class MinecraftBackgroundPool {
       let downloadOk = false;
 
       if (targetUrl) {
+        const usable = (r: YtDownloadResult | null): r is YtDownloadResult =>
+          !!r && !!r.filePath && fs.existsSync(r.filePath) && r.size > 200_000;
+
+        // Fast path: grab a 3-minute section (00:30–03:30) of the link.
+        let dlResult: YtDownloadResult | null = null;
         try {
-          console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
-          // Download a fast 3-minute section (e.g. 00:30 to 03:30) with 45s max timeout
-          // Section download + keyframe re-encode needs more than 45s on cold caches.
-          const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 180_000);
-          if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath) && dlResult.size > 200_000) {
-            longVideoPath = dlResult.filePath;
-            downloadOk = true;
-          }
+          console.log(`[BackgroundPool] Attempting section download via yt-dlp...`);
+          dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 180_000);
         } catch (ytErr) {
-          console.warn(`[BackgroundPool] YouTube download skipped (${(ytErr as Error).message}); using high-definition local Minecraft master.`);
+          console.warn(
+            `[BackgroundPool] Section download failed (${(ytErr as Error).message}); falling back to full link import (the long-standing /upload/youtube flow).`,
+          );
+        }
+
+        // Fallback: import the WHOLE video from the same YouTube link — the import
+        // path that has always worked — with a480p cap so multi-hour videos stay
+        // under the1.5GB budget.
+        if (!usable(dlResult)) {
+          try {
+            dlResult = await downloadVideo(
+              targetUrl,
+              `long_${Date.now()}`,
+              1_500_000_000,
+              undefined,
+              undefined,
+              600_000,
+              "b[height<=480]/b",
+            );
+          } catch (impErr) {
+            console.warn(
+              `[BackgroundPool] Full link import also failed (${(impErr as Error).message}); using high-definition local Minecraft master.`,
+            );
+          }
+        }
+
+        if (usable(dlResult)) {
+          longVideoPath = dlResult.filePath;
+          downloadOk = true;
         }
       }
 
@@ -537,17 +650,29 @@ export class MinecraftBackgroundPool {
       }
 
       // Only burn the source URL into history when we actually downloaded it.
-      // Failed downloads must stay retryable (offline sandbox, TLS blocks, etc.).
+      // Failed downloads must stay retryable (offline sandbox, TLS blocks, etc.)
+      // — but the failure itself IS remembered and parks the link after 3 strikes.
       if (downloadOk && targetUrl && !hist.usedUrls.includes(targetUrl)) {
         hist.usedUrls.push(targetUrl);
+        delete hist.failedAttempts[targetUrl]; // success clears the dead-link counter
         this.saveHistory(hist);
         console.log(`[BackgroundPool] Recorded URL to persistent history. Total unique used URLs: ${hist.usedUrls.length}`);
       } else if (targetUrl && !downloadOk) {
-        console.warn(`[BackgroundPool] Leaving ${targetUrl} unused so the next replenish can retry it.`);
+        this.recordFailure(hist, targetUrl);
+        this.saveHistory(hist);
+        const attempts = hist.failedAttempts[targetUrl] ?? 0;
+        console.warn(
+          `[BackgroundPool] Leaving ${targetUrl} unused so the next replenish can retry it (attempt ${attempts}/${MAX_FAILED_ATTEMPTS} before parking).`,
+        );
       }
 
-      // Clean up temporary long download file to save disk space
-      if (downloadOk && longVideoPath && longVideoPath.startsWith(this.downloadsDir)) {
+      // Clean up temporary long download file to save disk space (section downloads
+      // and full link imports both land under long_* names outside downloadsDir).
+      if (
+        downloadOk &&
+        longVideoPath &&
+        (longVideoPath.startsWith(this.downloadsDir) || path.basename(longVideoPath).startsWith("long_"))
+      ) {
         try {
           fs.unlinkSync(longVideoPath);
         } catch {}

@@ -13,6 +13,10 @@ export interface YtMetadata {
   title: string;
   duration: number; // seconds, 0 when unknown
   webpageUrl: string;
+  /** Uploader channel name (YouTube), empty when unavailable. */
+  channel?: string;
+  /** Channel page URL (e.g. https://www.youtube.com/@OrbitalNCG), empty when unavailable. */
+  channelUrl?: string;
 }
 
 /** Only real YouTube URLs are accepted (SSRF / abuse guard). */
@@ -177,22 +181,35 @@ function baseArgs(): string[] {
 }
 
 /** Fetch title/duration without downloading — validates the video early. */
-export async function fetchMetadata(url: string): Promise<YtMetadata> {
+export async function fetchMetadata(url: string, timeoutMs?: number): Promise<YtMetadata> {
   const { stdout } = await run(
-    [...baseArgs(), "--skip-download", "--print", "%(title)s\n%(duration)s\n%(webpage_url)s", url],
-    Math.min(config.ytDlpTimeoutMs, 60_000),
+    [
+      ...baseArgs(),
+      "--skip-download",
+      "--print",
+      "%(title)s\n%(duration)s\n%(webpage_url)s\n%(channel)s\n%(channel_url)s",
+      url,
+    ],
+    timeoutMs ?? Math.min(config.ytDlpTimeoutMs, 60_000),
   );
-  const lines = stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const [title, durationRaw, webpageUrl] = lines;
+  // Parse right-anchored so multi-line titles and empty channel fields cannot
+  // shift the fixed positions of duration / webpage URL / channel fields.
+  const lines = stdout.split("\n").map((l) => l.trim());
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length < 3) throw new Error("Could not read this YouTube video's details.");
+  const channelUrl = lines.length >= 5 ? lines.pop()! : "";
+  const channel = lines.length >= 4 ? lines.pop()! : "";
+  const webpageUrl = lines.pop() ?? url;
+  const durationRaw = lines.pop() ?? "0";
+  const title = lines.join("\n");
   if (!title) throw new Error("Could not read this YouTube video's details.");
   const duration = Number.parseFloat(durationRaw ?? "0");
   return {
     title: title.slice(0, 200),
     duration: Number.isFinite(duration) ? duration : 0,
     webpageUrl: webpageUrl ?? url,
+    channel: channel || "",
+    channelUrl: channelUrl || "",
   };
 }
 
@@ -215,6 +232,8 @@ export async function downloadVideo(
   onProgress?: (pct: number) => void,
   downloadSections?: string,
   timeoutMs?: number,
+  /** Optional yt-dlp `-f` override (e.g. a lower-height cap for full imports of long videos). */
+  formatOverride?: string,
 ): Promise<YtDownloadResult> {
   const dir = config.uploadsDir;
   fs.mkdirSync(dir, { recursive: true });
@@ -223,7 +242,8 @@ export async function downloadVideo(
   const args = [
     ...baseArgs(),
     "-f",
-    "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+    formatOverride ??
+      "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
     // Prefer merged MP4; needed when downloading time sections of DASH streams.
     "--merge-output-format", "mp4",
   ];
