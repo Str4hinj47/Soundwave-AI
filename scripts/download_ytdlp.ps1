@@ -16,8 +16,17 @@ $ytdlpExe = Join-Path $vendorDir "yt-dlp.exe"
 
 if (Test-Path $ytdlpExe) {
     if ((Get-Item $ytdlpExe).Length -gt 1000000) {
-        Write-Host "[INFO] yt-dlp.exe already present in vendor\yt-dlp\yt-dlp.exe"
-        exit 0
+        # YouTube regularly breaks older extractors ("The page needs to be
+        # reloaded") — self-update the vendored copy on every launch. The
+        # check is a no-op when already current; on failure the working
+        # binary is kept as-is.
+        Write-Host "[INFO] Checking vendored yt-dlp for updates..."
+        try { & $ytdlpExe --ignore-config -U *> $null } catch { }
+        if ((Test-Path $ytdlpExe) -and ((Get-Item $ytdlpExe).Length -gt 1000000)) {
+            Write-Host "[INFO] yt-dlp.exe ready at vendor\yt-dlp\yt-dlp.exe"
+            exit 0
+        }
+        # Update left a missing/truncated binary — fall through to a fresh download.
     }
 }
 

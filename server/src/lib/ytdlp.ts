@@ -126,7 +126,11 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(friendlyError(stderr)));
+      else {
+        const err = new Error(friendlyError(stderr));
+        (err as { rawStderr?: string }).rawStderr = stderr;
+        reject(err);
+      }
     });
   });
 }
@@ -145,6 +149,8 @@ function friendlyError(stderr: string): string {
   if (s.includes("age-restrict") || s.includes("age gate") || s.includes("age verif") || s.includes("confirm your age"))
     return "This video is age-restricted and requires account cookies (YTDLP_COOKIES).";
   if (s.includes("copyright")) return "This video can't be downloaded due to a copyright restriction.";
+  if (s.includes("page needs to be reloaded"))
+    return "YouTube changed its player checks. Close and re-run start_windows.bat (it refreshes yt-dlp automatically), wait a minute, then try again.";
   if (s.includes("unsupported url") || s.includes("no suitable") || s.includes("unable to extract"))
     return "That URL doesn't look like a downloadable YouTube video.";
   const line = stderr
@@ -155,10 +161,9 @@ function friendlyError(stderr: string): string {
   return (line ?? stderr.trim().split("\n").pop() ?? "YouTube download failed").replace(/^ERROR:\s*/, "").slice(0, 300);
 }
 
-function baseArgs(): string[] {
+function baseArgs(clientOverride?: string): string[] {
   // --js-runtimes: yt-dlp only enables deno by default; Node is what ships
   // with the app, so opt in explicitly for signature/n-sig challenges.
-  // player_client: try less bot-gated innertube clients first.
   const args = [
     "--no-playlist",
     "--no-warnings",
@@ -170,21 +175,64 @@ function baseArgs(): string[] {
     "--js-runtimes",
     "deno",
   ];
-  const hasCookies = Boolean(config.ytDlpBrowser || config.ytDlpCookies);
-  // Pairing cookies with player_client=tv invalidates the session (yt-dlp.net);
-  // with live browser cookies use web_safari only, otherwise try tv first.
-  args.push("--extractor-args", hasCookies ? "youtube:player_client=web_safari" : "youtube:player_client=tv,web_safari");
+  // player_client is opt-in per attempt — the ladder in runYt decides.
+  if (clientOverride) args.push("--extractor-args", `youtube:player_client=${clientOverride}`);
   // Live browser cookies beat an exported file: no export step, no rotation.
   if (config.ytDlpBrowser) args.push("--cookies-from-browser", config.ytDlpBrowser);
   else if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
   return args;
 }
 
+/** Client strategies in order of preference. YouTube rotates which innertube
+ * client is broken: the `tv` client hits "The page needs to be reloaded"
+ * (yt-dlp#17389) while it's down, and the default ladder hits
+ * "sign in to confirm you're not a bot" on strict IPs — so try the default
+ * ladder first and fall back to hardened clients only when walled. */
+function clientStrategies(): Array<string | undefined> {
+  const hasCookies = Boolean(config.ytDlpBrowser || config.ytDlpCookies);
+  // Pairing cookies with player_client=tv invalidates the session (yt-dlp.net).
+  if (hasCookies) return ["web_safari", "web_embedded"];
+  return [undefined, "tv,web_safari"];
+}
+
+/** Walls that a different player client can plausibly get through. */
+function isRetryableClientError(rawStderr: string): boolean {
+  const s = rawStderr.toLowerCase();
+  return (
+    s.includes("page needs to be reloaded") ||
+    s.includes("sign in to confirm") ||
+    s.includes("not a bot")
+  );
+}
+
+/** Run yt-dlp, retrying once with the next client strategy when YouTube
+ * walls the chosen player client. */
+async function runYt(
+  buildArgs: (client: string | undefined) => string[],
+  timeoutMs: number,
+  onStderr?: (chunk: string) => void,
+): Promise<RunResult> {
+  const strategies = clientStrategies();
+  let lastErr: Error | undefined;
+  for (let i = 0; i < strategies.length; i++) {
+    try {
+      return await run(buildArgs(strategies[i]), timeoutMs, onStderr);
+    } catch (e) {
+      const err = e as Error;
+      const raw = (err as { rawStderr?: string }).rawStderr ?? err.message;
+      if (!isRetryableClientError(raw) || i === strategies.length - 1) throw err;
+      lastErr = err;
+      console.warn(`[ytdlp] YouTube walled client strategy #${i + 1} — retrying with next strategy. (${raw.split("\n").pop()?.slice(0, 160)})`);
+    }
+  }
+  throw lastErr ?? new Error("YouTube download failed.");
+}
+
 /** Fetch title/duration without downloading — validates the video early. */
 export async function fetchMetadata(url: string, timeoutMs?: number): Promise<YtMetadata> {
-  const { stdout } = await run(
-    [
-      ...baseArgs(),
+  const { stdout } = await runYt(
+    (client) => [
+      ...baseArgs(client),
       "--skip-download",
       "--print",
       "%(title)s\n%(duration)s\n%(webpage_url)s\n%(channel)s\n%(channel_url)s",
@@ -238,18 +286,6 @@ export async function downloadVideo(
   fs.mkdirSync(dir, { recursive: true });
   const template = path.join(dir, `${uuid}.%(ext)s`);
 
-  const args = [
-    ...baseArgs(),
-    "-f",
-    formatOverride ??
-      "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
-    // Prefer a single pre-merged MP4 so the imported file plays everywhere.
-    "--merge-output-format", "mp4",
-  ];
-  // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
-  // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
-  const ffmpegDir = path.dirname(resolveFfmpegPath());
-  if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
   // YouTube's innertube often requires a JS runtime for challenge signing.
   // Surface Node (bundled with the app) so yt-dlp can find it.
   const nodeDir = path.dirname(process.execPath || "");
@@ -259,7 +295,19 @@ export async function downloadVideo(
       process.env.PATH = `${nodeDir}${path.delimiter}${prev}`;
     }
   }
-  args.push("--newline", "-o", template, url);
+
+  const commonArgs = [
+    "-f",
+    formatOverride ??
+      "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+    // Prefer a single pre-merged MP4 so the imported file plays everywhere.
+    "--merge-output-format", "mp4",
+  ];
+  // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
+  // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
+  const ffmpegDir = path.dirname(resolveFfmpegPath());
+  if (ffmpegDir && ffmpegDir !== ".") commonArgs.push("--ffmpeg-location", ffmpegDir);
+  commonArgs.push("--newline", "-o", template, url);
 
   const cleanup = () => {
     for (const f of fs.readdirSync(dir)) {
@@ -274,10 +322,14 @@ export async function downloadVideo(
   };
 
   try {
-    await run(args, timeoutMs ?? config.ytDlpTimeoutMs, (chunk) => {
-      const m = chunk.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
-      if (m) onProgress?.(Math.min(99, parseFloat(m[1]!)));
-    });
+    await runYt(
+      (client) => [...baseArgs(client), ...commonArgs],
+      timeoutMs ?? config.ytDlpTimeoutMs,
+      (chunk) => {
+        const m = chunk.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
+        if (m) onProgress?.(Math.min(99, parseFloat(m[1]!)));
+      },
+    );
   } catch (e) {
     cleanup();
     throw e;

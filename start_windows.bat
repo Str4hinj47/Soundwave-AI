@@ -77,18 +77,21 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
-:: Check for yt-dlp
-where yt-dlp >nul 2>&1
-if %ERRORLEVEL% EQU 0 goto :ytdlp_ready
-
-if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
-
-:: Download standalone portable yt-dlp.exe via PowerShell script
+:: Ensure yt-dlp exists and is current — YouTube breaks old extractors often,
+:: so the script self-updates the vendored copy on every launch (fast no-op
+:: when already up to date).
 if exist scripts\download_ytdlp.ps1 (
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
 )
 
 if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
+
+:: No vendored copy — fall back to a yt-dlp already on PATH (best-effort update).
+where yt-dlp >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    yt-dlp --ignore-config -U >nul 2>&1
+    goto :ytdlp_ready
+)
 goto :continue_boot
 
 :ytdlp_vendored
