@@ -45,7 +45,6 @@ nsis:
   shortcutName: Soundwave AI
   deleteAppDataOnUninstall: false
   runAfterFinish: true
-  warningAsInteractive: false
 
 portable:
   artifactName: SoundwaveAI-Portable-${version}.exe
