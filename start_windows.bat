@@ -77,26 +77,30 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
-:: Check for Python 3 — the vendored yt-download engine (YouTube import) runs through it
-where python >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [WARN] Python 3 not found on PATH. YouTube import will be unavailable.
+:: Check for Python 3 - the vendored yt-download engine (YouTube import) runs through it.
+:: Probe with --version (not "where python") so the Microsoft Store python.exe
+:: stub on Windows 11 is correctly detected as unavailable.
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] Python 3 not available. YouTube import will be unavailable.
     echo [WARN] Install it with: winget install Python.Python.3.12
-    goto :continue_boot
+    goto :engine_done
 )
 
-:: Ensure the engine's only Python dependency (requests) is importable
+:: Ensure the engine's only Python dependency - requests - is importable
 python -c "import requests" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo [INFO] Installing Python dependency: requests ...
     python -m pip install --quiet requests
 )
 
 if exist vendor\yt-download\bridge.py (
-    echo [INFO] yt-download engine is ready (vendor\yt-download).
+    echo [INFO] yt-download engine is ready at vendor\yt-download.
 ) else (
-    echo [WARN] vendor\yt-download is missing — YouTube import will be unavailable.
+    echo [WARN] vendor\yt-download is missing - YouTube import will be unavailable.
 )
+
+:engine_done
 
 :continue_boot
 :: Prepare server .env if missing
