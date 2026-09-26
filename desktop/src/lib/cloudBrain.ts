@@ -1,4 +1,5 @@
 import type { Card, ChatMsg } from "./types";
+import { apiBase } from "./sync";
 
 export interface CloudReply {
   text: string;
@@ -19,7 +20,7 @@ export async function cloudBrain(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
   try {
-    const res = await fetch("/api/v1/agent/chat", {
+    const res = await fetch(`${apiBase()}/api/v1/agent/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -65,7 +66,7 @@ export async function pingBrain(): Promise<boolean> {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 3500);
-    const res = await fetch("/api/v1/agent/status", { signal: ctrl.signal, credentials: "include" });
+    const res = await fetch(`${apiBase()}/api/v1/agent/status`, { signal: ctrl.signal, credentials: "include" });
     clearTimeout(t);
     return res.ok;
   } catch {
@@ -78,7 +79,7 @@ export async function neuralSpeak(text: string, voice: string): Promise<string |
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch("/api/v1/agent/speak", {
+    const res = await fetch(`${apiBase()}/api/v1/agent/speak`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

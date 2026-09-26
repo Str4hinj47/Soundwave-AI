@@ -97,10 +97,23 @@ python soundwave_agent.py --companion
 The companion hangs from the **top center of your screen**: hover the top edge
 (or hit the hotkey) and it drops down; move away and it tucks away. It ships
 with an on-device brain (free, offline — tasks, notes, habits, focus,
-calendar, day plans) and an optional **Soundwave Cloud** brain that connects to
-the API for viral scripts, 1-click shorts, neural voices and workstation
-commands. Everything you write stays on your computer. The content generation
-platform itself remains on the web at `frontend/`. See
+calendar, day plans) plus two bigger brains you can switch between in chat:
+
+- **Gemini · Free** — plug in a free [AI Studio](https://aistudio.google.com/apikey)
+  key (Settings → Brain) and general conversation runs on free-tier Gemini
+  models, directly from the companion. The server does the same when
+  `GEMINI_API_KEY` is set in `server/.env` (see `.env.example`).
+- **Soundwave Cloud** — your API server for viral scripts, 1-click shorts,
+  neural voices and workstation commands.
+
+**Phone:** Settings → *Pair my phone* shows a QR code — scan it on the same
+Wi‑Fi and the same buddy opens on your phone with a bottom-tab mobile layout.
+Tasks, notes, habits, settings and chat sync **both ways** through
+`/api/v1/companion/*` (pairing code is LAN-only). This mirrors Taby’s
+phone web app (app.heytaby.com) without any cloud account.
+
+Everything you write stays on your computer. The content generation platform
+itself remains on the web at `frontend/`. See
 [`desktop/README.md`](desktop/README.md) for packaging installers.
 
 > **Windows:** the commands are the same in PowerShell or `cmd`. Install

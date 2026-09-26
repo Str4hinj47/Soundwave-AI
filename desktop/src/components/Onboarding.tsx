@@ -223,6 +223,28 @@ export function Onboarding({ openUrl }: { openUrl: (url: string) => void }) {
                   </div>
                 </button>
                 <button
+                  onClick={() => setBrain("gemini")}
+                  className={`w-full text-left rounded-3xl p-4 ring-1 transition ${brain === "gemini" ? "ring-accent bg-accent-soft" : "ring-line bg-card hover:bg-card/70"}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-2xl bg-accent/15 text-accent p-2.5">
+                      <Sparkles className="h-5 w-5" />
+                    </span>
+                    <div className="flex-1">
+                      <div className="font-extrabold text-[15px] flex items-center gap-2">
+                        Gemini · Free
+                        <span className="text-[9.5px] font-bold uppercase tracking-wide rounded bg-good/15 text-good px-1.5 py-px">
+                          no cost
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-muted leading-snug">
+                        Real AI answers from Google’s free-tier Flash models. Bring your own free key.
+                      </div>
+                    </div>
+                    {brain === "gemini" && <Check className="h-5 w-5 text-accent" />}
+                  </div>
+                </button>
+                <button
                   onClick={() => setBrain("cloud")}
                   className={`w-full text-left rounded-3xl p-4 ring-1 transition ${brain === "cloud" ? "ring-accent bg-accent-soft" : "ring-line bg-card hover:bg-card/70"}`}
                 >

@@ -2,18 +2,25 @@ import { useEffect, useState } from "react";
 import {
   Check,
   Cloud,
+  Copy,
   ExternalLink,
   Flame,
   Laptop,
   LogOut,
+  RefreshCw,
   RotateCcw,
+  Smartphone,
   Sparkles,
   Volume2,
+  Zap,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { useStore, useUI } from "../../store";
-import type { Personality, Theme } from "../../lib/types";
+import type { Personality, Settings as SettingsT, Theme } from "../../lib/types";
 import { pingBrain } from "../../lib/cloudBrain";
 import { PERSONALITIES } from "../../lib/brain";
+import { GEMINI_KEY_URL, GEMINI_MODELS } from "../../lib/gemini";
+import { fetchPairInfo, rotatePairToken, type PairInfo } from "../../lib/sync";
 
 const PERSONA_META: Array<{ id: Personality; blurb: string }> = [
   { id: "normal", blurb: "Friendly & direct" },
@@ -37,6 +44,162 @@ const THEMES: Array<{ id: Theme; label: string; swatch: string[] }> = [
   { id: "dark", label: "Espresso", swatch: ["#211D19", "#FF7F52"] },
   { id: "ocean", label: "Ocean", swatch: ["#EFF7F4", "#14987F"] },
 ];
+
+
+function phoneUrlFor(info: PairInfo): string {
+  const host = info.lanOrigin.replace(/^https?:\/\//, "");
+  if (import.meta.env.DEV) return `http://${host}:5174/?phone=1&pair=${info.token}`;
+  return `http://${host}:${info.apiPort}/phone?pair=${info.token}`;
+}
+
+function PhoneSection({ settings, patch }: { settings: SettingsT; patch: (p: Partial<SettingsT>) => void }) {
+  const [info, setInfo] = useState<PairInfo | null>(null);
+  const [url, setUrl] = useState("");
+  const [qr, setQr] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [syncState, setSyncState] = useState<"idle" | "ok" | "error">("idle");
+
+  const load = async (rotate = false) => {
+    setBusy(true);
+    setErr(null);
+    let fresh = await fetchPairInfo();
+    if (!fresh) {
+      setInfo(null);
+      setUrl("");
+      setQr("");
+      setErr("API server is offline — start it with: cd server && npm run dev");
+      setBusy(false);
+      return;
+    }
+    if (rotate) {
+      const token = await rotatePairToken();
+      if (token) fresh = { ...fresh, token };
+    }
+    const u = phoneUrlFor(fresh);
+    setInfo(fresh);
+    setUrl(u);
+    try {
+      setQr(await QRCode.toString(u, { type: "svg", margin: 1, width: 220 }));
+    } catch {
+      setQr("");
+    }
+    setBusy(false);
+  };
+
+  useEffect(() => {
+    if (settings.phoneLink) void load();
+    else {
+      setInfo(null);
+      setUrl("");
+      setQr("");
+      setErr(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.phoneLink]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ state?: string }>).detail;
+      if (detail?.state === "ok" || detail?.state === "error") setSyncState(detail.state);
+    };
+    window.addEventListener("sw-sync", handler);
+    return () => window.removeEventListener("sw-sync", handler);
+  }, []);
+
+  return (
+    <Section title="Phone — Companion Link">
+      <Row>
+        <span className="rounded-xl bg-accent-soft text-accent p-2">
+          <Smartphone className="h-4 w-4" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13.5px] font-bold">Pair my phone</div>
+          <div className="text-[11.5px] text-muted leading-snug">
+            Scan the code to open Echo on your phone — same buddy, same data, pocket size.
+          </div>
+        </div>
+        <button
+          onClick={() => patch({ phoneLink: !settings.phoneLink })}
+          className={`relative h-6 w-11 rounded-full transition shrink-0 ${
+            settings.phoneLink ? "bg-accent" : "bg-line"
+          }`}
+          role="switch"
+          aria-checked={settings.phoneLink}
+          title="Toggle Companion Link"
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              settings.phoneLink ? "left-[22px]" : "left-0.5"
+            }`}
+          />
+        </button>
+      </Row>
+
+      {settings.phoneLink && (
+        <div className="px-3.5 py-3 border-t border-line">
+          {err && (
+            <div className="rounded-xl bg-red-400/10 text-red-500 text-[12px] font-semibold px-3 py-2.5 mb-2.5">{err}</div>
+          )}
+          {info && (
+            <div className="flex gap-3.5">
+              <div
+                className="shrink-0 rounded-2xl bg-white p-2.5 ring-1 ring-line w-[132px] h-[132px] flex items-center justify-center overflow-hidden"
+                aria-label="QR code to open the companion on your phone"
+                dangerouslySetInnerHTML={{ __html: qr }}
+              />
+              <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                <div className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Open on phone</div>
+                <code className="break-all text-[10.5px] leading-snug bg-sunken rounded-lg px-2 py-1.5 font-mono text-ink/90 select-all">
+                  {url}
+                </code>
+                <div className="flex gap-1.5 mt-auto">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(url);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                    className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-ink text-panel px-2 py-2 text-[11.5px] font-bold hover:opacity-90 transition"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? "Copied" : "Copy link"}
+                  </button>
+                  <button
+                    onClick={() => void load(true)}
+                    disabled={busy}
+                    className="rounded-xl bg-card ring-1 ring-line px-2.5 py-2 text-[11.5px] font-bold text-muted hover:text-ink transition disabled:opacity-50"
+                    title="Generate a new pairing code"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                syncState === "error" ? "bg-red-500" : syncState === "ok" ? "bg-good" : "bg-line"
+              }`}
+            />
+            <span className={syncState === "error" ? "text-red-500" : "text-muted"}>
+              {syncState === "error"
+                ? "sync paused — is the API server up?"
+                : syncState === "ok"
+                ? "live sync · both devices stay in step"
+                : "waiting for first sync…"}
+            </span>
+          </div>
+          <div className="mt-1.5 text-[10.5px] text-faint leading-snug">
+            Same Wi‑Fi network · tasks, notes, chat and habits merge both ways · pairing code stays on your LAN.
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
 
 export function SettingsView({ openUrl }: { openUrl: (url: string) => void }) {
   const settings = useStore((s) => s.settings);
@@ -80,6 +243,78 @@ export function SettingsView({ openUrl }: { openUrl: (url: string) => void }) {
           </div>
           {settings.brain === "local" && <Check className="h-4.5 w-4.5 text-accent" style={{ height: 18, width: 18 }} />}
         </button>
+        <button
+          onClick={() => patch({ brain: "gemini" })}
+          className={`w-full text-left px-3.5 py-3 flex items-center gap-3 transition hover:bg-sunken/60 ${
+            settings.brain === "gemini" ? "bg-accent-soft/60" : ""
+          }`}
+        >
+          <span className="rounded-xl bg-accent/15 text-accent p-2">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold flex items-center gap-2">
+              Gemini · Free
+              <span
+                className={`text-[9.5px] font-bold uppercase px-1.5 py-px rounded ${
+                  settings.geminiKey.trim() ? "bg-good/15 text-good" : "bg-sunken text-muted"
+                }`}
+              >
+                {settings.geminiKey.trim() ? "key saved" : "needs key"}
+              </span>
+            </div>
+            <div className="text-[11.5px] text-muted leading-snug">
+              Google’s free-tier Flash models — real AI answers, no credit card.
+            </div>
+          </div>
+          {settings.brain === "gemini" && <Check className="text-accent" style={{ height: 18, width: 18 }} />}
+        </button>
+        {settings.brain === "gemini" && (
+          <div className="px-3.5 py-3 bg-sunken/50 space-y-2.5 border-y border-line">
+            <div>
+              <div className="text-[12px] font-bold mb-1 flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 text-accent" /> Free API key
+              </div>
+              <div className="flex gap-1.5">
+                <input
+                  defaultValue={settings.geminiKey}
+                  type="password"
+                  placeholder="AIza…"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onBlur={(e) => patch({ geminiKey: e.target.value.trim() })}
+                  onKeyDown={(e) => e.key === "Enter" && patch({ geminiKey: (e.target as HTMLInputElement).value.trim() })}
+                  className="flex-1 min-w-0 rounded-xl bg-card ring-1 ring-line px-2.5 py-2 text-[12.5px] font-mono outline-none focus:ring-accent/50 transition"
+                />
+                <a
+                  href={GEMINI_KEY_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 rounded-xl bg-ink text-panel px-3 text-[11.5px] font-bold inline-flex items-center gap-1 hover:opacity-90 transition"
+                >
+                  Get key <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <div className="text-[10.5px] text-faint mt-1">
+                Stored only on this device · saved when you leave the field
+              </div>
+            </div>
+            <div>
+              <div className="text-[12px] font-bold mb-1">Model · free tier</div>
+              <select
+                value={settings.geminiModel}
+                onChange={(e) => patch({ geminiModel: e.target.value })}
+                className="w-full rounded-xl bg-card ring-1 ring-line px-2.5 py-2 text-[12.5px] font-semibold outline-none focus:ring-accent/50"
+              >
+                {GEMINI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
         <button
           onClick={() => patch({ brain: "cloud" })}
           className={`w-full text-left px-3.5 py-3 flex items-center gap-3 transition hover:bg-sunken/60 ${
@@ -247,6 +482,8 @@ export function SettingsView({ openUrl }: { openUrl: (url: string) => void }) {
           ))}
         </div>
       </Section>
+
+      <PhoneSection settings={settings} patch={patch} />
 
       {/* privacy */}
       <Section title="Privacy">

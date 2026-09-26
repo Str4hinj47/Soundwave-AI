@@ -10,7 +10,7 @@ export type TabId =
 
 export type Mood = "idle" | "thinking" | "listening" | "talking" | "happy" | "focused";
 
-export type Brain = "local" | "cloud";
+export type Brain = "local" | "gemini" | "cloud";
 
 export type Personality = "normal" | "butler" | "bro" | "anime" | "coach" | "chill";
 
@@ -24,6 +24,7 @@ export interface Task {
   due?: string;
   createdAt: number;
   completedAt?: number;
+  updatedAt?: number;
 }
 
 export interface Note {
@@ -40,6 +41,7 @@ export interface Habit {
   /** yyyy-mm-dd keys of days completed */
   days: string[];
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface CalEvent {
@@ -49,6 +51,7 @@ export interface CalEvent {
   date: string;
   /** HH:MM (24h) */
   time: string;
+  createdAt?: number;
 }
 
 export interface FocusLog {
@@ -78,6 +81,11 @@ export interface ChatMsg {
   pending?: boolean;
 }
 
+export interface Tombstone {
+  id: string;
+  ts: number;
+}
+
 export interface Settings {
   onboarded: boolean;
   userName: string;
@@ -88,4 +96,9 @@ export interface Settings {
   voiceReplies: boolean;
   neuralVoice: string;
   studioUrl: string;
+  /** Free Google Gemini brain (AI Studio key) — stored only on this device. */
+  geminiKey: string;
+  geminiModel: string;
+  /** Companion Link: sync state with the phone web app. */
+  phoneLink: boolean;
 }

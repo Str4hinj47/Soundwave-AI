@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { generalLimiter, securityHeaders } from "./lib/security.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
@@ -21,6 +22,7 @@ import jarvisShortRoutes from "./routes/jarvisShort.js";
 import creatorRoutes from "./routes/creator.js";
 import ghostRoutes from "./routes/ghost.js";
 import youtubeRoutes from "./routes/youtube.js";
+import companionRoutes from "./routes/companion.js";
 
 export function createApp() {
   const app = express();
@@ -48,6 +50,10 @@ export function createApp() {
   // Health.
   app.get("/api/health", (_req, res) => res.json({ ok: true, service: "soundwave-ai", time: new Date().toISOString() }));
 
+  // Companion Link (phone pairing + state sync) — mounted before the general
+  // limiter so device polling never trips the per-minute budget.
+  app.use("/api/v1/companion", companionRoutes);
+
   // API routes.
   app.use("/api/v1/auth", authRoutes);
   app.use("/api/v1/voices", voiceRoutes);
@@ -72,6 +78,21 @@ export function createApp() {
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");
   if (fs.existsSync(samplesDir)) {
     app.use("/voice-samples", express.static(samplesDir, { maxAge: "7d", immutable: true }));
+  }
+
+  // Phone web app — the built Soundwave Companion served same-origin so the
+  // phone (http://<lan-ip>:4000/phone?pair=…) talks to the API without CORS.
+  const phoneDirCandidates = [
+    path.join(process.cwd(), "..", "desktop", "dist"),
+    path.join(process.cwd(), "desktop", "dist"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "desktop", "dist"),
+  ];
+  const phoneDir = phoneDirCandidates.find((p) => fs.existsSync(path.join(p, "index.html")));
+  if (phoneDir) {
+    app.use("/phone", express.static(phoneDir, { index: "index.html", maxAge: "0" }));
+    app.get("/phone/*", (_req, res) => {
+      res.sendFile(path.join(phoneDir, "index.html"));
+    });
   }
 
   app.use(notFoundHandler);

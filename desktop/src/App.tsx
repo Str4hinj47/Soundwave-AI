@@ -4,6 +4,125 @@ import { useStore, useUI, applyTheme } from "./store";
 import { Panel } from "./components/Panel";
 import { Onboarding } from "./components/Onboarding";
 import { BuddyFace } from "./components/BuddyFace";
+import { PAIR_STORAGE_KEY, fetchPairInfo, startSync, validatePair } from "./lib/sync";
+
+/** Phone mode: served at /phone (prod) or ?phone=1 (dev). */
+function isPhoneMode(): boolean {
+  try {
+    return (
+      new URLSearchParams(window.location.search).get("phone") === "1" ||
+      window.location.pathname.startsWith("/phone")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Read & persist the pairing code from the QR deep link (?pair=…). */
+function readPairToken(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const fromUrl = url.searchParams.get("pair");
+    if (fromUrl) {
+      localStorage.setItem(PAIR_STORAGE_KEY, fromUrl);
+      url.searchParams.delete("pair");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      return fromUrl;
+    }
+    return localStorage.getItem(PAIR_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function PairingGate({ onConnected }: { onConnected: (token: string) => void }) {
+  const [draft, setDraft] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const connect = async () => {
+    const token = draft.trim();
+    if (!token) {
+      setErr("Paste the pairing code from your computer.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const ok = await validatePair(token);
+    setBusy(false);
+    if (ok) {
+      localStorage.setItem(PAIR_STORAGE_KEY, token);
+      onConnected(token);
+    } else {
+      setErr("That code didn’t match. On your computer: Settings → Phone (same Wi‑Fi network).");
+    }
+  };
+
+  return (
+    <div className="min-h-full flex items-center justify-center p-5">
+      <div className="w-full max-w-[380px] rounded-3xl bg-panel ring-1 ring-line shadow-panel p-6 text-center">
+        <BuddyFace size={96} mood="happy" className="mx-auto bob" />
+        <h1 className="mt-4 text-[21px] font-extrabold tracking-tight">Pair with your computer</h1>
+        <p className="mt-1.5 text-[13px] text-muted leading-relaxed">
+          On your computer open the Soundwave Companion → <strong className="text-ink">Settings → Phone</strong>, then scan
+          the QR code or paste the pairing code below. Keep both devices on the same Wi‑Fi.
+        </p>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void connect()}
+          placeholder="pairing code"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          className="mt-4 w-full rounded-2xl bg-sunken ring-1 ring-line px-4 py-3 text-[14px] font-mono outline-none focus:ring-accent/50 text-center"
+        />
+        {err && <p className="mt-2 text-[12px] text-red-500 font-semibold">{err}</p>}
+        <button
+          onClick={() => void connect()}
+          disabled={busy}
+          className="mt-3 w-full rounded-full bg-accent text-accent-ink font-bold text-[15px] py-3.5 hover:brightness-105 active:scale-[0.98] transition shadow-pill disabled:opacity-50"
+        >
+          {busy ? "Checking…" : "Connect"}
+        </button>
+        <p className="mt-3 text-[11px] text-faint leading-snug">
+          The code only works on your local network — your data never leaves your devices.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** The phone web app — same buddy, pocket-sized chrome, live two-way sync. */
+function PhoneApp() {
+  const onboarded = useStore((s) => s.settings.onboarded);
+  const theme = useStore((s) => s.settings.theme);
+  const [pair, setPair] = useState<string | null>(() => readPairToken());
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (!pair) return;
+    return startSync(pair);
+  }, [pair]);
+
+  if (!pair) {
+    return (
+      <div className="fixed inset-0 bg-sunken overflow-y-auto">
+        <PairingGate onConnected={setPair} />
+      </div>
+    );
+  }
+
+  const panelBody = !onboarded ? (
+    <Onboarding openUrl={openUrl} />
+  ) : (
+    <Panel isElectron={false} phone onBrowserHide={() => undefined} openUrl={openUrl} />
+  );
+  return <div className="fixed inset-0 bg-sunken">{panelBody}</div>;
+}
 
 function openUrl(url: string) {
   if (window.companion?.openExternal) window.companion.openExternal(url);
@@ -40,8 +159,10 @@ function MenuBar({ onToggle }: { onToggle: () => void }) {
 }
 
 export default function App() {
+  const [isPhone] = useState(() => isPhoneMode());
   const onboarded = useStore((s) => s.settings.onboarded);
   const theme = useStore((s) => s.settings.theme);
+  const phoneLink = useStore((s) => s.settings.phoneLink);
   const panelOpen = useUI((s) => s.panelOpen);
   const setPanelOpen = useUI((s) => s.setPanelOpen);
   const isElectron = Boolean(window.companion?.isElectron);
@@ -56,9 +177,27 @@ export default function App() {
     if (!onboarded) setPanelOpen(true);
   }, [onboarded, setPanelOpen]);
 
-  // Seed the greeting once onboarding is complete.
+  // Companion Link (desktop side): start syncing when the toggle is on.
   useEffect(() => {
-    if (!onboarded) return;
+    if (isPhone || !phoneLink) return;
+    let cancelled = false;
+    let stop: (() => void) | null = null;
+    void (async () => {
+      const info = await fetchPairInfo();
+      if (!info || cancelled) return;
+      stop = startSync(info.token);
+      if (cancelled) stop();
+    })();
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [phoneLink, isPhone]);
+
+  // Seed the greeting once onboarding is complete (desktop only — the phone
+  // pulls it down through Companion Link).
+  useEffect(() => {
+    if (!onboarded || isPhone) return;
     const st = useStore.getState();
     if (st.messages.length === 0) {
       st.pushMessage({
@@ -67,7 +206,7 @@ export default function App() {
         tag: "local",
       });
     }
-  }, [onboarded]);
+  }, [onboarded, isPhone]);
 
   // Global hotkey: Ctrl/Cmd + Alt + Space toggles the panel; Esc tucks it away.
   useEffect(() => {
@@ -96,6 +235,9 @@ export default function App() {
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
     closeTimer.current = null;
   };
+
+  // ── Phone: full-screen mobile shell with bottom nav + live sync ──
+  if (isPhone) return <PhoneApp />;
 
   const panelBody = !onboarded ? (
     <Onboarding openUrl={openUrl} />

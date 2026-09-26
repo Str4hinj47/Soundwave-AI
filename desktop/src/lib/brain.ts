@@ -387,6 +387,21 @@ export function localBrain(inputRaw: string, ctx: BrainCtx, actions: Actions): B
   if (math) return { handled: true, text: math, tag: "local" };
 
   /* ── personality switch ────────────────────────────────────────────── */
+  const brainSwitch = t.match(/^(?:switch|change|set|use)\s+(?:to\s+)?(?:the\s+)?(gemini|cloud|local)(?:\s+(?:brain|mode))?$/i);
+  if (brainSwitch) {
+    const target = brainSwitch[1]!.toLowerCase() as "gemini" | "cloud" | "local";
+    if (target === "gemini" && !ctx.settings.geminiKey.trim()) {
+      return {
+        handled: true,
+        text: "Gemini needs a free key first — grab one at aistudio.google.com/apikey and paste it in Settings → Brain, then ask me to switch to gemini again.",
+        tag: "local",
+      };
+    }
+    actions.patchSettings({ brain: target });
+    const label = target === "gemini" ? "Gemini (free)" : target === "cloud" ? "Soundwave Cloud" : "the local brain";
+    return { handled: true, mood: "happy", text: `Switched to ${label}. Ask me anything.`, tag: "local" };
+  }
+
   const personaMatch = t.match(/^(?:change|switch|set)(?:\s+your)?\s*personality(?:\s+to)?\s+(\w+)/i) || t.match(/^be\s+(?:a\s+)?(butler|bro|anime|coach|chill|normal)\b/i);
   if (personaMatch) {
     const key = lower(personaMatch[1]!);
@@ -404,7 +419,7 @@ export function localBrain(inputRaw: string, ctx: BrainCtx, actions: Actions): B
     return {
       handled: true,
       needsCloud: true,
-      text: "That's a job for the bigger Soundwave brain — cloud mode can generate scripts, render shorts, speak with neural voices, and run workstation commands. Flip the brain switch in Settings (or ask me to “switch to cloud”).",
+      text: "That's a job for a bigger brain — switch me to **Gemini (free)** or **Soundwave Cloud** in Settings and I'll generate scripts, render shorts, speak with neural voices, and run workstation commands.",
       tag: "local",
     };
   }

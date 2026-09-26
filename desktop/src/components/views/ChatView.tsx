@@ -4,6 +4,7 @@ import { useStore, useUI } from "../../store";
 import type { ChatMsg, Personality } from "../../lib/types";
 import { localBrain, smallTalk, PERSONALITIES, type Actions, type BrainCtx } from "../../lib/brain";
 import { cloudBrain } from "../../lib/cloudBrain";
+import { geminiBrain, GeminiError, geminiErrorMessage } from "../../lib/gemini";
 import { speakText, startListening, speechSupported, stopSpeaking } from "../../lib/voice";
 import { BuddyFace } from "../BuddyFace";
 import { ChatCard, RichText } from "./ChatCards";
@@ -72,7 +73,13 @@ function MessageBubble({ m, openUrl }: { m: ChatMsg; openUrl: (url: string) => v
         {m.cards?.map((c, i) => <ChatCard key={i} card={c} openUrl={openUrl} />)}
         {m.tag && !m.pending && (
           <div className="mt-1 text-[9.5px] font-bold uppercase tracking-wider text-faint">
-            {m.tag === "local" ? "local brain" : m.tag === "voice" ? "voice" : "soundwave cloud"}
+            {m.tag === "local"
+              ? "local brain"
+              : m.tag === "gemini"
+              ? "gemini · free"
+              : m.tag === "voice"
+              ? "voice"
+              : "soundwave cloud"}
           </div>
         )}
       </div>
@@ -112,7 +119,7 @@ export function ChatView({ openUrl }: { openUrl: (url: string) => void }) {
       setInput("");
 
       const store = useStore.getState();
-      store.pushMessage({ sender: "user", text });
+      const userMsg = store.pushMessage({ sender: "user", text });
       setMood("thinking");
       const pendingId = store.pushMessage({ sender: "echo", text: "", pending: true }).id;
 
@@ -121,30 +128,69 @@ export function ChatView({ openUrl }: { openUrl: (url: string) => void }) {
       let cards: ChatMsg["cards"];
       let tag = "local";
 
+      const brainNow = () => useStore.getState().settings.brain;
+      const historyFor = () => useStore.getState().messages.filter((m) => !m.pending && m.id !== userMsg.id);
+
+      type Reply = { text: string; cards?: ChatMsg["cards"]; tag: string };
+
+      const runGemini = async (): Promise<Reply> => {
+        try {
+          const g = await geminiBrain(text, historyFor(), buildCtx(), useStore.getState().settings);
+          return { text: g, tag: "gemini" };
+        } catch (e) {
+          const err = e instanceof GeminiError ? e : new GeminiError("network", (e as Error).message || "unknown error");
+          if (err.kind === "no-key") return { text: geminiErrorMessage(err), tag: "local" };
+          const fb = smallTalk(text, buildCtx());
+          return {
+            text: `*(Gemini: ${err.message} — staying on my local brain for now)*\n\n${fb.text}`,
+            tag: "local",
+          };
+        }
+      };
+
+      const runCloud = async (): Promise<Reply> => {
+        try {
+          const cloud = await cloudBrain(text, historyFor());
+          return { text: cloud.text, cards: cloud.cards, tag: cloud.tag || "cloud" };
+        } catch {
+          const fb = smallTalk(text, buildCtx());
+          return {
+            text: `*(Soundwave Cloud is unreachable — staying local)*\n\n${fb.text}`,
+            tag: "local",
+          };
+        }
+      };
+
       try {
         if (local.handled && !local.needsCloud) {
           replyText = local.text;
           cards = local.cards;
           tag = local.tag || "local";
-        } else if (local.needsCloud && useStore.getState().settings.brain === "cloud") {
-          const cloud = await cloudBrain(text, store.messages.slice(-12));
-          replyText = cloud.text;
-          cards = cloud.cards;
-          tag = cloud.tag || "cloud";
         } else if (local.needsCloud) {
-          replyText = local.text;
-          tag = "local";
-        } else if (useStore.getState().settings.brain === "cloud") {
-          try {
-            const cloud = await cloudBrain(text, store.messages.slice(-12));
-            replyText = cloud.text;
-            cards = cloud.cards;
-            tag = cloud.tag || "cloud";
-          } catch {
-            const fb = smallTalk(text, buildCtx());
-            replyText = `*(Soundwave Cloud is unreachable — staying local)*\n\n${fb.text}`;
+          if (brainNow() === "gemini") {
+            const r = await runGemini();
+            replyText = r.text;
+            cards = r.cards;
+            tag = r.tag;
+          } else if (brainNow() === "cloud") {
+            const r = await runCloud();
+            replyText = r.text;
+            cards = r.cards;
+            tag = r.tag;
+          } else {
+            replyText = local.text;
             tag = "local";
           }
+        } else if (brainNow() === "gemini") {
+          const r = await runGemini();
+          replyText = r.text;
+          cards = r.cards;
+          tag = r.tag;
+        } else if (brainNow() === "cloud") {
+          const r = await runCloud();
+          replyText = r.text;
+          cards = r.cards;
+          tag = r.tag;
         } else {
           const talk = smallTalk(text, buildCtx());
           replyText = talk.text;

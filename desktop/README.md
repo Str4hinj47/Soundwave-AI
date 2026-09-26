@@ -28,7 +28,9 @@ your desktop as a drop-down companion, exactly like [heytaby.com](https://www.he
 | Area | Details |
 | --- | --- |
 | **Buddy** | `Echo`, an animated face that blinks, listens, thinks and reacts to your day |
-| **Chat** | On-device intent engine + optional bigger “Soundwave Cloud” brain (`/api/v1/agent/chat`) |
+| **Chat** | On-device intent engine + two bigger brains: **Gemini (free)** and “Soundwave Cloud” (`/api/v1/agent/chat`) |
+| **Gemini brain** | Bring a free [AI Studio](https://aistudio.google.com/apikey) key — general chat runs on free-tier `gemini-3.5-flash` & friends, key stored on-device only |
+| **Phone** | Companion Link: scan a QR → the same buddy on your phone (`/phone` or `?phone=1`), two-way live sync over your LAN |
 | **Tasks** | Quick capture, due dates, overdue/today/upcoming groups, “plan my day” |
 | **Notes** | Quick capture + search + full editor — say `note …` to Echo |
 | **Habits** | Streaks, 7-day check grid, emoji markers |
@@ -47,6 +49,39 @@ your desktop as a drop-down companion, exactly like [heytaby.com](https://www.he
 - Global shortcut **Ctrl + Alt + Space** (Cmd + Option + Space on macOS)
 - Tray menu (Show / Hide / Quit), no dock icon, skips the taskbar
 - Frameless, transparent, always-on-top window
+
+## Brains
+
+| Brain | Cost | What it does |
+| --- | --- | --- |
+| **Local** (default) | Free, offline | Tasks, notes, habits, focus, calendar, day plans, small talk |
+| **Gemini** | Free tier | Real AI answers via your free Google AI Studio key — set it in *Settings → Brain* |
+| **Soundwave Cloud** | Your API server | Viral scripts, 1-click shorts, neural voices, workstation commands |
+
+```bash
+# server-side too (optional): the API's general answers also run on Gemini
+cd server && echo "GEMINI_API_KEY=your-free-key" >> .env   # GEMINI_MODEL=gemini-3.5-flash
+```
+
+Say “switch to gemini” / “switch to cloud” / “switch to local” in chat to flip brains.
+
+## Phone — Companion Link (like Taby’s phone app)
+
+1. Start the API server: `cd server && npm run dev`
+2. On the desktop: **Settings → Phone → Pair my phone** — scan the QR
+   (or copy the link) shown there.
+3. Your phone (same Wi‑Fi) opens the same buddy in mobile layout with a
+   bottom tab bar. Tasks, notes, habits, settings and chat **merge both
+   ways** — tick a habit on your phone, it’s done on your desktop.
+
+URLs by mode:
+
+- **Dev**: `http://<your-lan-ip>:5174/?phone=1&pair=<code>`
+- **Packaged** (Electron/prod): `http://<your-lan-ip>:4000/phone?pair=<code>`
+  — run `npm run build` once so the server can serve `desktop/dist`.
+
+Pairing is LAN-only: the code is validated by the API (loopback-only `/info`,
+401 for wrong codes), and no tunnel or account is involved.
 
 ## Run it
 
@@ -101,7 +136,9 @@ desktop/
     │   └── views/         # Today, Chat, Tasks, Notes, Focus, Habits, Calendar, Settings
     └── lib/
         ├── brain.ts       # local intent engine + personalities
+        ├── gemini.ts      # free Gemini brain (AI Studio key)
         ├── cloudBrain.ts  # /api/v1/agent/chat + /speak
+        ├── sync.ts        # Companion Link: merge + pull/push engine
         ├── schedule.ts    # plan-my-day engine
         └── voice.ts       # Web Speech STT + TTS
 ```

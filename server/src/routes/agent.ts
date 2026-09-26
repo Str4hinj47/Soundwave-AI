@@ -11,6 +11,7 @@ import { config } from "../config.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
+import { askGemini, geminiConfigured, geminiModel } from "../lib/gemini.js";
 
 const router = Router();
 
@@ -288,7 +289,30 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
 
     // 5. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
     let aiReply = "";
+    let geminiUsed = false;
 
+    // 5a. Free Gemini brain — used when GEMINI_API_KEY is configured.
+    if (!aiReply && geminiConfigured()) {
+      try {
+        aiReply = await askGemini(
+          message,
+          history.map((h) => ({ role: h.sender === "assistant" ? ("assistant" as const) : ("user" as const), text: h.text })),
+          {
+            system:
+              "You are Soundwave, the AI behind the Soundwave Companion desktop app (a Taby-style little buddy on the user's computer). " +
+              "Be warm, friendly and concise — 1-3 short paragraphs unless the user asks for depth. " +
+              "You help with questions, writing, ideas, research and creator work (scripts, hooks, YouTube strategy). " +
+              "Tasks, notes, habits and calendars live on-device, so if a user wants to record something, suggest they say 'add a task …' or 'note …' in the companion.",
+          }
+        );
+        geminiUsed = Boolean(aiReply);
+      } catch (err) {
+        console.warn("[agent/chat] Gemini failed, falling back to built-in brain:", (err as Error).message);
+      }
+    }
+
+    // 5b. Built-in responder (used when no Gemini key or Gemini failed).
+    if (!aiReply) {
     if (qLower.includes("hello") || qLower.includes("hi") || qLower.includes("hey") || qLower.includes("who are you")) {
       aiReply = `Hello! I am Soundwave, your real-time autonomous voice AI and desktop assistant. I can execute 16 computer control actions, run multi-step Ghost Operator macros, generate 60fps viral shorts with TikTok captions, and control your workstation. What would you like to build or run today?`;
     } else if (qLower.includes("hook") || qLower.includes("viral") || qLower.includes("script") || qLower.includes("short")) {
@@ -304,12 +328,13 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
     } else {
       aiReply = `I understand: "${message}". I have processed your input through my neural orchestrator. You can ask me to control your desktop, check system vitals, run automation workflows, or generate viral video content anytime!`;
     }
+    }
 
     res.json({
       success: true,
       reply: aiReply,
       executionReport: null,
-      tag: "VOICE",
+      tag: geminiUsed ? "GEMINI" : "VOICE",
     });
   } catch (e) {
     next(e);
@@ -350,6 +375,10 @@ router.get("/status", async (_req, res) => {
     cachedBackgroundClips: cachedClipsCount,
     cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
     supportedNiches: Object.keys(VIRAL_SCRIPTS),
+    gemini: {
+      configured: geminiConfigured(),
+      model: geminiModel(),
+    },
   });
 });
 

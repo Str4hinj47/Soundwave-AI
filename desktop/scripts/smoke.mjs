@@ -1,46 +1,11 @@
 /** Headless mount smoke test — renders the companion in jsdom and walks
- *  through onboarding + a chat roundtrip to catch runtime crashes. */
-import fs from "node:fs";
+ *  through onboarding, chat (local + cloud + gemini), every view, and the
+ *  Companion Link (phone) setup. */
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { JSDOM } from "jsdom";
+import { bootJsdom, bundlePath, sleep, reportFatal } from "./bootstrap-jsdom.mjs";
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const html = fs.readFileSync(path.join(root, "dist", "index.html"), "utf8");
-const jsMatch = html.match(/src="\.\/(assets\/[^"]+\.js)"/);
-if (!jsMatch) { console.error("no bundle found"); process.exit(1); }
-
-const dom = new JSDOM(`<!doctype html><html><body><div id="root"></div></body></html>`, {
-  url: "http://localhost:5174/",
-  pretendToBeVisual: true,
-});
-
-const w = dom.window;
-for (const k of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "CustomEvent", "MouseEvent", "KeyboardEvent", "getComputedStyle", "localStorage", "sessionStorage", "requestAnimationFrame", "cancelAnimationFrame", "Event", "MutationObserver"]) {
-  if (w[k] === undefined) continue;
-  try { globalThis[k] = w[k]; }
-  catch { try { Object.defineProperty(globalThis, k, { value: w[k], configurable: true, writable: true }); } catch { /* readonly */ } }
-}
-globalThis.self = w;
-w.HTMLElement.prototype.scrollIntoView = function () {};
-w.HTMLElement.prototype.hasPointerCapture = function () { return false; };
-w.HTMLElement.prototype.setPointerCapture = function () {};
-if (!w.matchMedia) w.matchMedia = () => ({ matches: false, addListener(){}, removeListener(){}, addEventListener(){}, removeEventListener(){} });
-class RO { observe(){} unobserve(){} disconnect(){} }
-w.ResizeObserver = RO; globalThis.ResizeObserver = RO;
-class IO { observe(){} unobserve(){} disconnect(){} }
-w.IntersectionObserver = IO; globalThis.IntersectionObserver = IO;
-
-const errors = [];
-const origError = console.error;
-console.error = (...a) => { errors.push(a.map(String).join(" ")); origError(...a); };
-w.addEventListener("error", (e) => errors.push("window.error: " + e.message));
-process.on("unhandledRejection", (e) => errors.push("unhandledRejection: " + e));
-
-const bundle = path.join(root, "dist", jsMatch[1]);
-await import(bundle);
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { w, errors } = bootJsdom("http://localhost:5174/");
+await import(bundlePath());
 await sleep(400);
 
 const $ = (sel) => w.document.querySelector(sel);
@@ -167,20 +132,47 @@ railClick("Chat"); await sleep(200);
 const ta3 = $("textarea");
 if (ta3) {
   const setter = Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype, "value").set;
-  setter.call(ta3, "hello");
+  setter.call(ta3, "hello there");
   ta3.dispatchEvent(new w.Event("input", { bubbles: true }));
   await sleep(60);
   const send = $$("button").find((b) => b.title === "Send (Enter)");
   if (send) send.click();
-  await sleep(1500);
+  await sleep(1800);
 }
-const cloudOk = w.document.body.textContent.includes("Soundwave");
+const cloudOk = w.document.body.textContent.includes("real-time autonomous voice AI");
 console.log("cloud brain replied through /api ✓:", cloudOk);
 
-const fatal = errors.filter((e) => /Error|error/i.test(e) && !/Not implemented|Could not parse CSS/i.test(e));
-if (fatal.length) {
-  console.error("RUNTIME ERRORS:\n" + fatal.slice(0, 8).join("\n---\n"));
-  process.exit(1);
+// ── Gemini brain without a key → friendly guidance ──
+railClick("Settings"); await sleep(250);
+const gemBtn = $$("button").find((b) => b.textContent.includes("Gemini · Free"));
+if (gemBtn) { gemBtn.click(); await sleep(200); }
+console.log("gemini brain selected ✓:", Boolean(gemBtn));
+railClick("Chat"); await sleep(200);
+const ta4 = $("textarea");
+if (ta4) {
+  const setter = Object.getOwnPropertyDescriptor(w.HTMLTextAreaElement.prototype, "value").set;
+  setter.call(ta4, "Explain how tide pools work in two sentences");
+  ta4.dispatchEvent(new w.Event("input", { bubbles: true }));
+  await sleep(60);
+  const send = $$("button").find((b) => b.title === "Send (Enter)");
+  if (send) send.click();
+  await sleep(700);
 }
+const geminiHint = w.document.body.textContent.includes("aistudio.google.com");
+console.log("gemini no-key guidance ✓:", geminiHint);
+
+// ── Companion Link (phone): QR + pairing URL ──
+railClick("Settings"); await sleep(300);
+const phoneToggle = $$("button").find((b) => b.title === "Toggle Companion Link");
+if (phoneToggle) { phoneToggle.click(); }
+await sleep(1600);
+const qr = w.document.querySelector('div[aria-label="QR code to open the companion on your phone"] svg');
+const phoneUrl = w.document.body.textContent.includes("?pair=");
+console.log("phone QR + pairing URL ✓:", Boolean(qr) && phoneUrl);
+const syncLive = w.document.body.textContent.includes("live sync");
+console.log("desktop sync pushing to server ✓:", syncLive);
+
+const ok = reportFatal(errors);
+if (!ok) process.exit(1);
 console.log("SMOKE PASS");
 process.exit(0);

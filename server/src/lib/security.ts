@@ -14,7 +14,9 @@ export const securityHeaders = helmet({
       "font-src": ["'self'", "https://fonts.gstatic.com"],
       "img-src": ["'self'", "data:", "blob:"],
       "media-src": ["'self'", "blob:"],
-      "connect-src": ["'self'"],
+      // 'self' covers the API; the Gemini host lets the phone web app
+      // (and Electron shell) talk to the free Gemini brain directly.
+      "connect-src": ["'self'", "https://generativelanguage.googleapis.com"],
       "frame-ancestors": ["'none'"],
       "base-uri": ["'self'"],
       "form-action": ["'self'"],
