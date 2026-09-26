@@ -50,7 +50,9 @@ console.log("[assemble] production node_modules (npm ci --omit=dev --ignore-scri
 execFileSync(
   process.platform === "win32" ? "npm.cmd" : "npm",
   ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"],
-  { cwd: path.join(stage, "server"), stdio: "inherit" },
+  // On Windows npm is a .cmd shim — Node refuses to exec those without a
+  // shell (EINVAL since the 2024 CVE fix), so enable shell on win32 only.
+  { cwd: path.join(stage, "server"), stdio: "inherit", shell: process.platform === "win32" },
 );
 
 console.log("[assemble] frontend dist …");

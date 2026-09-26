@@ -55,11 +55,13 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile desktop/bin/yt-dlp.exe
           Get-ChildItem desktop/bin | Format-Table Name, Length
 
+      - name: Install desktop tooling (Electron + electron-builder)
+        working-directory: desktop
+        run: npm ci
+
       - name: Assemble packaged app
         working-directory: desktop
-        run: |
-          npm ci
-          node assemble.mjs
+        run: node assemble.mjs
 
       - name: Smoke-test the assembled app on real Windows
         working-directory: desktop
