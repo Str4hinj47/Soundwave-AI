@@ -121,6 +121,19 @@ if not exist frontend\node_modules (
     cd frontend && call npm install && cd ..
 )
 
+:: npm 12 gates install scripts behind allowScripts (approvals committed in
+:: package.json). If a prior install ran with scripts skipped, the prisma
+:: client or esbuild binary is missing — re-run the install scripts now.
+if exist server\node_modules\.prisma\client\index.js if exist server\node_modules\@esbuild\win32-x64\bin\esbuild.exe if exist frontend\node_modules\@esbuild\win32-x64\bin\esbuild.exe goto :scripts_ok
+echo [INFO] Re-running dependency install scripts skipped by the npm allow-scripts gate...
+if exist server\node_modules (
+    cd server && call npm rebuild && cd ..
+)
+if exist frontend\node_modules (
+    cd frontend && call npm rebuild && cd ..
+)
+:scripts_ok
+
 :: Start Backend API Server in a new window
 echo [INFO] Starting Backend API Server on http://localhost:4000 ...
 start "Soundwave API Server" cmd /k "cd server && npm run dev"
