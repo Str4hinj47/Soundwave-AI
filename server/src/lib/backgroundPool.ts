@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
-import { downloadVideo } from "./ytengine.js";
+import { downloadVideo, resolvePythonCommand } from "./ytengine.js";
 
 export const CURATED_LONG_PARKOUR_VIDEOS = [
   "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 Hour 2026 4K 60fps Parkour
@@ -252,10 +252,10 @@ export class MinecraftBackgroundPool {
       path.resolve(process.cwd(), "..", "scripts", "generate_minecraft_parkour.py"),
     ];
     const script = scriptCandidates.find((s) => fs.existsSync(s));
-    if (script) {
-      const pythonBin = process.platform === "win32" ? (process.env.PYTHON || "python") : "python3";
+    const py = resolvePythonCommand();
+    if (script && py) {
       await new Promise<void>((resolve) => {
-        const p = spawn(pythonBin, [script], { stdio: "ignore" });
+        const p = spawn(py.command, [...py.prefixArgs, script], { stdio: "ignore" });
         p.on("close", () => resolve());
         p.on("error", () => resolve());
       });
@@ -264,6 +264,8 @@ export class MinecraftBackgroundPool {
           return m;
         }
       }
+    } else if (!py) {
+      console.warn("[BackgroundPool] Python 3 not found — skipping the parkour generator script (YouTube downloads need it too).");
     }
 
     const ffmpeg = resolveFfmpegPath();

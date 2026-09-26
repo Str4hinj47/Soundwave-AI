@@ -39,7 +39,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # allow `engine` import
 
-from engine import innertube as yt  # noqa: E402
+try:
+    from engine import innertube as yt  # noqa: E402
+except ModuleNotFoundError as exc:
+    # Missing third-party dep (almost always `requests`) — surface one clean,
+    # actionable line instead of a traceback so the Node wrapper can relay it.
+    dep = exc.name or str(exc)
+    sys.stderr.write(
+        f"ERROR: missing a dependency ({dep}) for the yt-download engine. "
+        f"Install it with: python -m pip install {dep}\n")
+    sys.exit(1)
 
 
 # ----------------------------------------------------------------- helpers

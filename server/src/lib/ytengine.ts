@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { config, resolveFfmpegPath } from "../config.js";
@@ -45,10 +45,59 @@ export function parseYouTubeUrl(raw: string): URL | null {
   return null;
 }
 
-/** Resolve the Python interpreter used to run the vendored engine. */
-export function resolvePythonCommand(): string {
-  if (process.env.PYTHON) return process.env.PYTHON;
-  return process.platform === "win32" ? "python" : "python3";
+export interface PyLaunch {
+  command: string;
+  prefixArgs: string[];
+}
+
+const PYTHON_INSTALL_HINT =
+  "Python 3 was not found on this machine. It is required for YouTube imports " +
+  "and background downloads. Install it from https://www.python.org/downloads/ " +
+  "or run: winget install Python.Python.3.12 — then restart the server. " +
+  "(On Windows 11, the python.exe Microsoft Store alias does NOT count.)";
+
+/**
+ * Probe for a real Python interpreter, most trustworthy first:
+ * PYTHON env → `py -3` (python.org launcher; never the Microsoft Store stub)
+ * → python3/python on PATH. Result is cached after the first call.
+ */
+let cachedPython: PyLaunch | null | undefined;
+
+function detectPython(): PyLaunch | null {
+  const candidates: PyLaunch[] = [];
+  if (process.env.PYTHON) candidates.push({ command: process.env.PYTHON, prefixArgs: [] });
+  if (process.platform === "win32") {
+    candidates.push(
+      { command: "py", prefixArgs: ["-3"] },
+      { command: "python", prefixArgs: [] },
+      { command: "python3", prefixArgs: [] },
+    );
+  } else {
+    candidates.push(
+      { command: "python3", prefixArgs: [] },
+      { command: "python", prefixArgs: [] },
+    );
+  }
+  for (const c of candidates) {
+    try {
+      // A working interpreter exits 0 on --version; the Win11 Store stub does not.
+      execFileSync(c.command, [...c.prefixArgs, "--version"], { stdio: "ignore", timeout: 10_000 });
+      return c;
+    } catch {
+      /* try next candidate */
+    }
+  }
+  return null;
+}
+
+/** Resolve the Python launcher used to run the vendored engine, or null. */
+export function resolvePythonCommand(): PyLaunch | null {
+  if (cachedPython === undefined) cachedPython = detectPython();
+  return cachedPython;
+}
+
+export function isPythonAvailable(): boolean {
+  return resolvePythonCommand() !== null;
 }
 
 /** Locate bridge.py: YT_ENGINE_PATH override (file or dir) → vendored copy. */
@@ -90,9 +139,14 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
       reject(new Error(INSTALL_HINT));
       return;
     }
+    const py = resolvePythonCommand();
+    if (!py) {
+      reject(new Error(PYTHON_INSTALL_HINT));
+      return;
+    }
     let child;
     try {
-      child = spawn(resolvePythonCommand(), [bridge, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+      child = spawn(py.command, [...py.prefixArgs, bridge, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     } catch (e) {
       reject(e);
       return;
@@ -113,20 +167,20 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
       clearTimeout(timer);
       const err = e as NodeJS.ErrnoException;
       if (err.code === "ENOENT") {
-        reject(
-          new Error(
-            "Python 3 is not installed or not on PATH — the YouTube download engine " +
-              "(vendor/yt-download) is launched through it. Install python3 and `pip install requests`.",
-          ),
-        );
+        reject(new Error(PYTHON_INSTALL_HINT));
       } else {
         reject(e);
       }
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(friendlyError(stderr)));
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        // Some launchers (Windows Store python stub) fail silently on stderr —
+        // fall back to the stdout tail so the user still sees the real cause.
+        reject(new Error(friendlyError(stderr.trim() ? stderr : stdout)));
+      }
     });
   });
 }
@@ -140,6 +194,10 @@ function friendlyError(stderr: string): string {
     .pop();
   const raw = (line ?? stderr.trim().split("\n").pop() ?? "YouTube download failed").replace(/^ERROR:\s*/, "");
   const s = raw.toLowerCase();
+  if (s.includes("no module named 'requests'") || s.includes('no module named "requests"') || s.includes("missing a dependency"))
+    return "The Python package 'requests' is missing. Install it with: py -m pip install requests — then restart the server.";
+  if (s.includes("python was not found"))
+    return PYTHON_INSTALL_HINT;
   // Network failures first — substrings like "login" appear in unrelated text.
   if (
     s.includes("network error") ||

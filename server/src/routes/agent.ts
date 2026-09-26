@@ -5,7 +5,7 @@ import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
-import { isYtEngineAvailable } from "../lib/ytengine.js";
+import { isPythonAvailable, isYtEngineAvailable } from "../lib/ytengine.js";
 import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
@@ -347,6 +347,7 @@ router.get("/status", async (_req, res) => {
     version: "2.0.0",
     ffmpegAvailable: Boolean(ffmpeg),
     ytEngineAvailable: ytEngine,
+    pythonAvailable: isPythonAvailable(),
     cachedBackgroundClips: cachedClipsCount,
     cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
     supportedNiches: Object.keys(VIRAL_SCRIPTS),
