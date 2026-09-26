@@ -15,12 +15,9 @@ import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
-import { backgroundPool, backgroundCacheRoot, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
+import { backgroundPool, backgroundCacheRoot } from "../lib/backgroundPool.js";
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
-
-// ── Curated sources — Orbital - No Copyright Gameplay (@OrbitalNCG) ONLY ──
-export const CURATED_MINECRAFT_PARKOUR = CURATED_LONG_PARKOUR_VIDEOS;
 
 export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];
 
@@ -862,7 +859,11 @@ router.post("/background-pool/purge", (_req, res) => {
 
 router.post("/background-pool/replenish", async (req, res) => {
   try {
-    const url = typeof req.body?.url === "string" ? req.body.url : undefined;
+    const url = typeof req.body?.url === "string" && req.body.url.trim() ? req.body.url.trim() : undefined;
+    // Link-import only: the system never downloads videos on its own anymore.
+    if (!url) {
+      return res.status(400).json({ error: "A YouTube link is required to import.", status: backgroundPool.getStatus() });
+    }
     const ok = await backgroundPool.replenishPool(url);
     res.json({ ok, status: backgroundPool.getStatus() });
   } catch (err: any) {
@@ -889,7 +890,6 @@ router.get("/backgrounds", async (_req, res) => {
     cached: !!found,
     path: found,
     preset: "minecraft_parkour_80s_master",
-    curated: CURATED_MINECRAFT_PARKOUR,
   });
 });
 
@@ -931,7 +931,6 @@ router.get("/defaults", (_req, res) => {
       only: "minecraft_parkour high quality 1080p 4K",
       blacklist: BLACKLIST,
       cacheChunkDuration: 80,
-      curated: CURATED_MINECRAFT_PARKOUR,
     },
     workflow: {
       oneClickEndpoint: "POST /api/v1/agent/generate-short",

@@ -230,7 +230,6 @@ export async function downloadVideo(
   uuid: string,
   maxBytes: number,
   onProgress?: (pct: number) => void,
-  downloadSections?: string,
   timeoutMs?: number,
   /** Optional yt-dlp `-f` override (e.g. a lower-height cap for full imports of long videos). */
   formatOverride?: string,
@@ -244,14 +243,9 @@ export async function downloadVideo(
     "-f",
     formatOverride ??
       "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
-    // Prefer merged MP4; needed when downloading time sections of DASH streams.
+    // Prefer a single pre-merged MP4 so the imported file plays everywhere.
     "--merge-output-format", "mp4",
   ];
-  if (downloadSections) {
-    args.push("--download-sections", downloadSections);
-    // Without this, section cuts snap to keyframes and often yield empty/broken files.
-    args.push("--force-keyframes-at-cuts");
-  }
   // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());

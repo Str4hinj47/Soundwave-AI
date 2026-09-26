@@ -815,7 +815,7 @@ export function AgentHub() {
 
   const handleReplenishPool = async (url?: string) => {
     setIsReplenishingPool(true);
-    toast.info("Replenishing Pool", "Downloading & slicing new long Minecraft video...");
+    toast.info("Importing YouTube Link", "Fetching your link and slicing it into 60s clips...");
     try {
       const res = await fetch("/api/v1/agent/background-pool/replenish", {
         method: "POST",
@@ -1230,10 +1230,10 @@ export function AgentHub() {
                   className="flex-1 rounded-lg border border-[#14233D] bg-[#070D18] px-2.5 py-1 text-[11px] text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
                 />
                 <button
-                  onClick={() => handleReplenishPool(customPoolUrl || undefined)}
-                  disabled={isReplenishingPool}
+                  onClick={() => handleReplenishPool(customPoolUrl.trim())}
+                  disabled={isReplenishingPool || !customPoolUrl.trim()}
                   className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 hover:bg-cyan-500 hover:text-[#070B14] text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer"
-                  title="Download and slice a new 60s clip pool"
+                  title="Import this YouTube link and slice it into 60s clips"
                 >
                   <RefreshCw className={`h-3 w-3 ${isReplenishingPool ? "animate-spin" : ""}`} />
                   {isReplenishingPool ? "Slicing..." : "Replenish"}
@@ -2437,7 +2437,7 @@ export function AgentHub() {
                     <div>
                       <h4 className="text-sm font-bold text-white">Rotation Pool is Empty</h4>
                       <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                        No 60-second sliced clips are currently in the queue. Soundwave will automatically download and slice new YouTube footage, or use the 60fps Minecraft parkour master.
+                        No 60-second sliced clips are currently in the queue. Paste a YouTube link above to import footage for slicing, or Soundwave will use the 60fps Minecraft parkour master.
                       </p>
                     </div>
                     <div className="pt-2 flex flex-wrap justify-center gap-2">
@@ -2449,15 +2449,6 @@ export function AgentHub() {
                       >
                         <Film className="h-3.5 w-3.5" />
                         {isSlicingMaster ? "Slicing..." : "Slice Master Video into 60s Clips"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleReplenishPool()}
-                        disabled={isReplenishingPool}
-                        className="rounded-lg border border-[#172A4A] bg-[#0A1224] text-gray-300 hover:border-cyan-400 hover:text-cyan-300 px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${isReplenishingPool ? "animate-spin" : ""}`} />
-                        {isReplenishingPool ? "Fetching..." : "Fetch New YouTube Gameplay"}
                       </button>
                     </div>
                   </div>

@@ -9,7 +9,7 @@ import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { backgroundCacheRoot } from "../lib/backgroundPool.js";
 import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
-import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
+import agentShortRouter, { VIRAL_SCRIPTS, generateScript, buildShortVideo } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 

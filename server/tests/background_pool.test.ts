@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../src/lib/backgroundPool.js";
+import { backgroundPool } from "../src/lib/backgroundPool.js";
 
 // fetchMetadata is mocked (sandbox has no YouTube egress); downloadVideo stays
 // real so failure paths behave like production.
@@ -35,32 +35,6 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
 
     const updated = backgroundPool.getHistory();
     expect(updated.customUrls).toContain(testUrl);
-  });
-
-  it("sources every curated video from the Orbital NCG channel", () => {
-    expect(CURATED_LONG_PARKOUR_VIDEOS.length).toBeGreaterThanOrEqual(5);
-    // Orbital NCG catalog video ids (https://www.youtube.com/@OrbitalNCG/videos)
-    const orbitalIds = new Set([
-      "fw_eWpb7uCE",
-      "zeyy5Yj-A4I",
-      "-qK8scH4UC8",
-      "85z7jqGAGcc",
-      "z84bmLDzIIk",
-      "tiOl_mcAsF4",
-      "xU29hjgAg2w",
-      "_GxTLyLyIbs",
-      "s600FYgI5-s",
-      "yve_DhR1F8s",
-      "VwZO7Im_tAc",
-      "FOX3lBXVeck",
-      "BXUA2FncVPI",
-      "zdVQSm8bYu8",
-    ]);
-    for (const url of CURATED_LONG_PARKOUR_VIDEOS) {
-      expect(url).toContain("youtube.com/watch?v=");
-      const id = url.split("watch?v=")[1];
-      expect(orbitalIds.has(id)).toBe(true);
-    }
   });
 
   it("does not mark a source URL used when the download fails", async () => {
@@ -118,6 +92,31 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
     expect(hist.customUrls).not.toContain(foreignUrl); // purged from the queue
     expect(hist.usedUrls).not.toContain(foreignUrl); // never downloaded
     expect(hist.failedAttempts[foreignUrl] ?? 0).toBeGreaterThanOrEqual(1);
+  });
+
+  it("never picks a video on its own: bare replenish with no imported link returns false", async () => {
+    // Save aside whatever the shared history holds, empty the link queue…
+    const hist = backgroundPool.getHistory();
+    const saved = {
+      customUrls: hist.customUrls,
+      usedUrls: hist.usedUrls,
+      failedAttempts: hist.failedAttempts,
+    };
+    (backgroundPool as any).saveHistory({ ...hist, customUrls: [], usedUrls: [], failedAttempts: {} });
+    try {
+      // …then a bare replenish (the old auto-download entrypoint) must be a
+      // fast no-op: no source selection, no download, nothing marked used.
+      const ok = await backgroundPool.replenishPool();
+      expect(ok).toBe(false);
+      const after = backgroundPool.getHistory();
+      expect(after.usedUrls).toEqual([]);
+    } finally {
+      const h = backgroundPool.getHistory();
+      h.customUrls = saved.customUrls;
+      h.usedUrls = saved.usedUrls;
+      h.failedAttempts = saved.failedAttempts;
+      (backgroundPool as any).saveHistory(h);
+    }
   });
 
   it("consumes a 60s clip, deletes it from the pool, and moves to the next sequentially", async () => {

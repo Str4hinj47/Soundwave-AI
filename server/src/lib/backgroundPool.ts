@@ -5,12 +5,7 @@ import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
 import { downloadVideo, fetchMetadata, type YtDownloadResult, type YtMetadata } from "./ytdlp.js";
 
-// Orbital - No Copyright Gameplay (https://www.youtube.com/@OrbitalNCG/videos)
-// All background sources come from this channel only (Minecraft parkour — the
-// channel's entire catalog — so published content stays copyright-safe).
-export const ORBITAL_NCG_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG/videos";
-
-/** After this many consecutive failed downloads a link is parked until the cycle resets. */
+/** After this many consecutive failed imports a link is parked (skipped until the user re-adds it). */
 export const MAX_FAILED_ATTEMPTS = 3;
 
 /**
@@ -25,23 +20,6 @@ export function backgroundCacheRoot(): string {
   const repoRoot = cwd.endsWith("server") ? path.resolve(cwd, "..") : cwd;
   return path.join(repoRoot, "background_cache");
 }
-
-export const CURATED_LONG_PARKOUR_VIDEOS = [
-  "https://www.youtube.com/watch?v=fw_eWpb7uCE", // Orbital NCG — Vertical 4 HOURS
-  "https://www.youtube.com/watch?v=zeyy5Yj-A4I", // Orbital NCG — 4 HOURS
-  "https://www.youtube.com/watch?v=-qK8scH4UC8", // Orbital NCG — Vertical 2 Hours
-  "https://www.youtube.com/watch?v=85z7jqGAGcc", // Orbital NCG — 2 Hours
-  "https://www.youtube.com/watch?v=z84bmLDzIIk", // Orbital NCG — 4K (2 Hours)
-  "https://www.youtube.com/watch?v=tiOl_mcAsF4", // Orbital NCG — 1 HOUR
-  "https://www.youtube.com/watch?v=xU29hjgAg2w", // Orbital NCG — Vertical 1 HOUR
-  "https://www.youtube.com/watch?v=_GxTLyLyIbs", // Orbital NCG — 4K (1 HOUR)
-  "https://www.youtube.com/watch?v=s600FYgI5-s", // Orbital NCG — Vertical
-  "https://www.youtube.com/watch?v=yve_DhR1F8s", // Orbital NCG — Vertical
-  "https://www.youtube.com/watch?v=VwZO7Im_tAc", // Orbital NCG — 4K Horror Map
-  "https://www.youtube.com/watch?v=FOX3lBXVeck", // Orbital NCG — Free2Use
-  "https://www.youtube.com/watch?v=BXUA2FncVPI", // Orbital NCG — 4K
-  "https://www.youtube.com/watch?v=zdVQSm8bYu8", // Orbital NCG — Minecraft Parkour
-];
 
 export const BLACKLIST_URLS = ["dQw4w9WgXcQ", "NJ1VD4eCcD0", "rickroll"];
 
@@ -226,6 +204,14 @@ export class MinecraftBackgroundPool {
     if (!hist.customUrls.includes(clean)) {
       hist.customUrls.push(clean);
       this.saveHistory(hist);
+      return true;
+    }
+    // Re-adding a link that previously failed clears its failure counter —
+    // pasting it again is an explicit "try this one" from the user.
+    if ((hist.failedAttempts?.[clean] ?? 0) > 0) {
+      delete hist.failedAttempts[clean];
+      this.saveHistory(hist);
+      console.log(`[BackgroundPool] Cleared failure history for re-imported link: ${clean}`);
       return true;
     }
     return false;
@@ -489,16 +475,14 @@ export class MinecraftBackgroundPool {
   }
 
   /**
-   * Copyright guard: background footage must be Minecraft parkour from the
-   * Orbital NCG channel ("so we don't get sued"). Curated links are pre-vetted;
-   * any pasted/custom link is checked against its resolved channel before any
-   * bytes are downloaded.
-   * - ok=true: verified Orbital (or curated).
+   * Copyright guard: imported footage must be Minecraft parkour from the
+   * Orbital NCG channel ("so we don't get sued"). Every user-imported link is
+   * checked against its resolved channel before any bytes are downloaded.
+   * - ok=true: verified Orbital.
    * - ok=false + hardReject: provably another channel → drop the link.
    * - ok=false + !hardReject: metadata unavailable (offline etc.) → stay retryable.
    */
   private async verifyOrbitalSource(url: string): Promise<{ ok: boolean; hardReject: boolean }> {
-    if (CURATED_LONG_PARKOUR_VIDEOS.includes(url)) return { ok: true, hardReject: false };
     let meta: YtMetadata | null = null;
     try {
       meta = await fetchMetadata(url, 20_000);
@@ -535,7 +519,7 @@ export class MinecraftBackgroundPool {
 
       if (specificUrl && isParked(specificUrl)) {
         console.warn(
-          `[BackgroundPool] ${specificUrl} is parked after ${MAX_FAILED_ATTEMPTS} failed attempts — refusing until the cycle resets.`,
+          `[BackgroundPool] ${specificUrl} is parked after ${MAX_FAILED_ATTEMPTS} failed attempts — re-add the link (POST /background-pool/add-url) to retry it.`,
         );
         return false;
       }
@@ -543,36 +527,24 @@ export class MinecraftBackgroundPool {
       if (specificUrl && !hist.usedUrls.includes(specificUrl)) {
         targetUrl = specificUrl;
       } else {
-        // 1. Check custom URLs queue first (skip links already used AND parked ones)
+        // Only user-IMPORTED links are eligible. The pool never picks a video
+        // to download on its own — there is no built-in source list anymore.
         for (const u of hist.customUrls) {
           if (!hist.usedUrls.includes(u) && !isParked(u)) {
             targetUrl = u;
             break;
           }
         }
-
-        // 2. Check curated pool for an unused, non-parked URL
-        if (!targetUrl) {
-          for (const u of CURATED_LONG_PARKOUR_VIDEOS) {
-            if (!hist.usedUrls.includes(u) && !isParked(u)) {
-              targetUrl = u;
-              break;
-            }
-          }
-        }
-
-        // 3. If every link has been used or parked, reset the cycle with a clean slate
-        if (!targetUrl) {
-          console.log("[BackgroundPool] All curated video URLs have been used! Cycling from beginning of pool.");
-          targetUrl = CURATED_LONG_PARKOUR_VIDEOS[0] || null;
-          hist.usedUrls = [];
-          hist.failedAttempts = {};
-        }
       }
 
-      // Copyright guard: only Minecraft parkour footage from the Orbital NCG channel.
-      // Curated links are pre-vetted; any custom/pasted link is verified before download.
-      if (targetUrl) {
+      if (!targetUrl) {
+        console.log("[BackgroundPool] No imported YouTube link pending — nothing to import (pool untouched).");
+        return false;
+      }
+
+      // Copyright guard: only Minecraft parkour footage from the Orbital NCG
+      // channel. Every imported link is verified before any bytes are fetched.
+      {
         const verdict = await this.verifyOrbitalSource(targetUrl);
         if (!verdict.ok) {
           if (verdict.hardReject) {
@@ -593,36 +565,24 @@ export class MinecraftBackgroundPool {
         const usable = (r: YtDownloadResult | null): r is YtDownloadResult =>
           !!r && !!r.filePath && fs.existsSync(r.filePath) && r.size > 200_000;
 
-        // Fast path: grab a 3-minute section (00:30–03:30) of the link.
+        // Import the video from the user's YouTube link — the same flow as
+        // POST /api/v1/upload/youtube, with a 480p cap so multi-hour videos
+        // stay under the 1.5GB budget.
         let dlResult: YtDownloadResult | null = null;
         try {
-          console.log(`[BackgroundPool] Attempting section download via yt-dlp...`);
-          dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 180_000);
-        } catch (ytErr) {
-          console.warn(
-            `[BackgroundPool] Section download failed (${(ytErr as Error).message}); falling back to full link import (the long-standing /upload/youtube flow).`,
+          console.log(`[BackgroundPool] Importing YouTube link: ${targetUrl}`);
+          dlResult = await downloadVideo(
+            targetUrl,
+            `long_${Date.now()}`,
+            1_500_000_000,
+            undefined,
+            600_000,
+            "b[height<=480]/b",
           );
-        }
-
-        // Fallback: import the WHOLE video from the same YouTube link — the import
-        // path that has always worked — with a480p cap so multi-hour videos stay
-        // under the1.5GB budget.
-        if (!usable(dlResult)) {
-          try {
-            dlResult = await downloadVideo(
-              targetUrl,
-              `long_${Date.now()}`,
-              1_500_000_000,
-              undefined,
-              undefined,
-              600_000,
-              "b[height<=480]/b",
-            );
-          } catch (impErr) {
-            console.warn(
-              `[BackgroundPool] Full link import also failed (${(impErr as Error).message}); using high-definition local Minecraft master.`,
-            );
-          }
+        } catch (impErr) {
+          console.warn(
+            `[BackgroundPool] Link import failed (${(impErr as Error).message}); using high-definition local Minecraft master.`,
+          );
         }
 
         if (usable(dlResult)) {
@@ -681,8 +641,8 @@ export class MinecraftBackgroundPool {
         );
       }
 
-      // Clean up temporary long download file to save disk space (section downloads
-      // and full link imports both land under long_* names outside downloadsDir).
+      // Clean up the temporary import file to save disk space (link imports land
+      // under long_* names outside downloadsDir).
       if (
         downloadOk &&
         longVideoPath &&
@@ -735,19 +695,21 @@ export class MinecraftBackgroundPool {
         console.warn(`[BackgroundPool] Could not delete consumed clip ${clipName}:`, err);
       }
 
-      // If pool is running low (<= 2 clips left), trigger background replenishment asynchronously
+      // If pool is running low (<= 2 clips left), import the next pending
+      // imported link asynchronously (no-op when no imported links are pending).
       if (clips.length <= 2 && !this.isProcessing) {
-        console.log("[BackgroundPool] Pool running low. Replenishing in background...");
-        this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background replenishment error:", e.message));
+        console.log("[BackgroundPool] Pool running low. Importing next pending link in background...");
+        this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background import error:", e.message));
       }
 
       return targetExecutionPath;
     }
 
-    // Pool is currently empty: Immediately start background replenishment,
-    // and serve the guaranteed 60fps master video so this short finishes immediately!
-    console.log("[BackgroundPool] Pool is empty! Starting background replenishment and serving guaranteed 60fps master video...");
-    this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background replenishment error:", e.message));
+    // Pool is currently empty: serve the guaranteed 60fps master video so this
+    // short finishes immediately. Any pending imported link is processed in the
+    // background; with no imported link this is a no-op (no downloads happen).
+    console.log("[BackgroundPool] Pool is empty! Serving guaranteed 60fps master video (imported links, if any, process in background)...");
+    this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background import error:", e.message));
 
     return await this.ensureLocalMasterVideo();
   }
