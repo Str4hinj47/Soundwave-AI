@@ -16,6 +16,8 @@ permissions:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    outputs:
+      debug: ${{ steps.mirror.outputs.debug }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,8 +33,10 @@ jobs:
           ls -la handoff
 
       - name: Split + mirror to artifact-handoff branch
+        id: mirror
         run: |
           set -euo pipefail
+          trap 'echo "debug=FAILED_AT: ${BASH_COMMAND}" >> "$GITHUB_OUTPUT"' ERR
           cd handoff
           manifest=manifest.json
           echo "{" > "$manifest"
@@ -55,7 +59,6 @@ jobs:
           git config user.name "artifact-handoff"
           git config user.email "handoff@local"
           git checkout --orphan artifact-handoff
-          git rm -rq --cached .
           git add -f SoundwaveAI-*.exe.part* manifest.json
           git commit -m "artifact handoff for ${HANDOFF_TAG} (run ${GITHUB_RUN_ID})"
           git push --force origin artifact-handoff
