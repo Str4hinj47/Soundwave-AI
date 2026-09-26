@@ -124,7 +124,20 @@ describe("Minecraft Background Pool & 60s Rotation Engine", () => {
     const poolDir = (backgroundPool as any).poolDir;
     fs.mkdirSync(poolDir, { recursive: true });
     const dummyClip = path.join(poolDir, `mc_clip_test_${Date.now()}_001.mp4`);
-    fs.writeFileSync(dummyClip, Buffer.alloc(300_000, 0));
+    // Structurally-valid mini MP4: consumption only copies + deletes, but the
+    // corrupt-file guard rejects raw garbage bytes, so the fixture must be a
+    // well-formed ftyp+moov container.
+    const mkBox = (type: string, body: Buffer): Buffer => {
+      const b = Buffer.alloc(8 + body.length);
+      b.writeUInt32BE(8 + body.length, 0);
+      b.write(type, 4, "ascii");
+      body.copy(b, 8);
+      return b;
+    };
+    fs.writeFileSync(
+      dummyClip,
+      Buffer.concat([mkBox("ftyp", Buffer.from("isomabcdisom")), mkBox("moov", mkBox("mvhd", Buffer.alloc(280_000, 0)))]),
+    );
 
     const initialStatus = backgroundPool.getStatus();
     const consumedClip = await backgroundPool.consumeNextClip();

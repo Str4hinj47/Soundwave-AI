@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
+import { isReadableMediaFile } from "./mediaFile.js";
 import { downloadVideo, fetchMetadata, type YtDownloadResult, type YtMetadata } from "./ytdlp.js";
 
 /** After this many consecutive failed imports a link is parked (skipped until the user re-adds it). */
@@ -201,20 +202,22 @@ export class MinecraftBackgroundPool {
     const clean = url.trim();
     if (!clean || BLACKLIST_URLS.some((b) => clean.includes(b))) return false;
     const hist = this.getHistory();
+    let changed = false;
     if (!hist.customUrls.includes(clean)) {
       hist.customUrls.push(clean);
-      this.saveHistory(hist);
-      return true;
+      changed = true;
     }
-    // Re-adding a link that previously failed clears its failure counter —
-    // pasting it again is an explicit "try this one" from the user.
+    // Re-adding a link is always an explicit "try this one" from the user —
+    // clear its failure/park counter even when it is no longer in the queue
+    // (e.g. it was purged by the copyright guard but the counter persisted).
+    // Otherwise a re-import would land already-parked and silently do nothing.
     if ((hist.failedAttempts?.[clean] ?? 0) > 0) {
       delete hist.failedAttempts[clean];
-      this.saveHistory(hist);
+      changed = true;
       console.log(`[BackgroundPool] Cleared failure history for re-imported link: ${clean}`);
-      return true;
     }
-    return false;
+    if (changed) this.saveHistory(hist);
+    return changed;
   }
 
   public getClipsInPool(): string[] {
@@ -272,12 +275,24 @@ export class MinecraftBackgroundPool {
 
     for (const m of masterCandidates) {
       if (fs.existsSync(m) && fs.statSync(m).size > 500_000) {
-        return m;
+        if (isReadableMediaFile(m)) return m;
+        // Truncated/corrupt master (e.g. an interrupted generation left a file
+        // without a moov atom) — never hand it to ffmpeg; delete and rebuild.
+        console.warn(`[BackgroundPool] Corrupt background master detected — deleting and regenerating: ${m}`);
+        try {
+          fs.unlinkSync(m);
+        } catch {}
       }
     }
 
     const targetMaster = masterCandidates[0]!;
     fs.mkdirSync(path.dirname(targetMaster), { recursive: true });
+    // Generate into a temp name and rename only after the output validates, so
+    // an interrupted run can never leave a half-written file at the real path.
+    const tmpMaster = path.join(path.dirname(targetMaster), "parkour_master_80s.generating.mp4");
+    try {
+      fs.unlinkSync(tmpMaster);
+    } catch {}
     console.log("[BackgroundPool] Local parkour master missing. Generating 60fps Minecraft parkour video...");
 
     const ffmpeg = resolveFfmpegPath();
@@ -315,7 +330,7 @@ export class MinecraftBackgroundPool {
           "-map", "[v]",
           "-t", "80",
           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-          targetMaster,
+          tmpMaster,
         ];
       } else if (still) {
         filterStr =
@@ -327,7 +342,7 @@ export class MinecraftBackgroundPool {
           "-filter_complex", filterStr,
           "-t", "80",
           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-          targetMaster,
+          tmpMaster,
         ];
       } else if (hud) {
         // Procedural motion + HUD (still better than bare color bars)
@@ -341,7 +356,7 @@ export class MinecraftBackgroundPool {
           "-map", "[v]",
           "-t", "80",
           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-          targetMaster,
+          tmpMaster,
         ];
       } else {
         // Last resort procedural motion — never testsrc2/color bars
@@ -351,7 +366,7 @@ export class MinecraftBackgroundPool {
           "-i", "cellauto=size=1080x1920:rate=60:rule=110:random_fill_ratio=0.02:scroll=1",
           "-t", "80",
           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-          targetMaster,
+          tmpMaster,
         ];
       }
 
@@ -360,7 +375,21 @@ export class MinecraftBackgroundPool {
       proc.on("error", () => resolve());
     });
 
-    return targetMaster;
+    // Only publish the master once it is structurally valid — an interrupted
+    // or failed generation must never leave a half-written file at the real
+    // path (that is exactly what causes "moov atom not found" later).
+    if (isReadableMediaFile(tmpMaster) && fs.statSync(tmpMaster).size > 500_000) {
+      fs.renameSync(tmpMaster, targetMaster);
+      console.log(`[BackgroundPool] Background master ready: ${targetMaster}`);
+      return targetMaster;
+    }
+    try {
+      fs.unlinkSync(tmpMaster);
+    } catch {}
+    throw new Error(
+      "Background video is corrupt or could not be regenerated: ffmpeg did not produce a valid video file. " +
+        "Restart the app to try again, and check that ffmpeg is installed and that the background_cache folder is writable.",
+    );
   }
 
   /**
@@ -591,12 +620,21 @@ export class MinecraftBackgroundPool {
         }
       }
 
-      // If online download failed or is offline sandbox, use high-res local master video.
+      // If the import failed, fall back to the local master video.
       // Do NOT treat this as consuming the source URL — it stays eligible for retry.
       if (!longVideoPath) {
-        longVideoPath = await this.ensureLocalMasterVideo();
+        try {
+          longVideoPath = await this.ensureLocalMasterVideo();
+        } catch (masterErr) {
+          // Master generation/validation failed (e.g. corrupt file + ffmpeg
+          // unavailable). Record the link failure and bail with a real reason.
+          console.error(`[BackgroundPool] Local master fallback failed: ${(masterErr as Error).message}`);
+          this.recordFailure(hist, targetUrl);
+          this.saveHistory(hist);
+          return false;
+        }
         console.warn(
-          `[BackgroundPool] Download did not produce footage for ${targetUrl ?? "pool"}. ` +
+          `[BackgroundPool] Import did not produce footage for ${targetUrl ?? "pool"}. ` +
             `Slicing local master instead; source URL was NOT marked used.`,
         );
       }
@@ -669,11 +707,21 @@ export class MinecraftBackgroundPool {
    * without blocking or timing out the user request.
    */
   public async consumeNextClip(): Promise<string> {
-    const clips = this.getClipsInPool();
+    // Serve the first structurally-valid clip; corrupt pool files (interrupted
+    // writes) are deleted on sight rather than handed to ffmpeg.
+    let clipToConsume: string | null = null;
+    for (const c of this.getClipsInPool()) {
+      if (isReadableMediaFile(c)) {
+        clipToConsume = c;
+        break;
+      }
+      console.warn(`[BackgroundPool] Discarding corrupt pool clip: ${path.basename(c)}`);
+      try {
+        fs.unlinkSync(c);
+      } catch {}
+    }
 
-    if (clips.length > 0) {
-      // Pick the first clip in order
-      const clipToConsume = clips[0]!;
+    if (clipToConsume) {
       const clipName = path.basename(clipToConsume);
 
       // Make an execution copy for the short render
@@ -686,7 +734,7 @@ export class MinecraftBackgroundPool {
       // DELETE the consumed clip from the pool as requested!
       try {
         fs.unlinkSync(clipToConsume);
-        console.log(`[BackgroundPool] Consumed and DELETED: ${clipName}. Remaining in pool: ${clips.length - 1}`);
+        console.log(`[BackgroundPool] Consumed and DELETED: ${clipName}. Remaining in pool: ${this.getClipsInPool().length}`);
         
         const hist = this.getHistory();
         hist.totalClipsConsumed += 1;
@@ -697,7 +745,7 @@ export class MinecraftBackgroundPool {
 
       // If pool is running low (<= 2 clips left), import the next pending
       // imported link asynchronously (no-op when no imported links are pending).
-      if (clips.length <= 2 && !this.isProcessing) {
+      if (this.getClipsInPool().length <= 2 && !this.isProcessing) {
         console.log("[BackgroundPool] Pool running low. Importing next pending link in background...");
         this.replenishPool().catch((e) => console.warn("[BackgroundPool] Background import error:", e.message));
       }

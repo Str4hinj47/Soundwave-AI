@@ -16,6 +16,7 @@ import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleC
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 import { backgroundPool, backgroundCacheRoot } from "../lib/backgroundPool.js";
+import { isReadableMediaFile } from "../lib/mediaFile.js";
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
 
@@ -141,11 +142,18 @@ export function findCachedChunk(): string | null {
     path.join(process.cwd(), "data", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
     path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
   ];
-  for (const p of masterCandidates) {
-    try {
-      if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000) return p;
-    } catch {}
-  }
+    for (const p of masterCandidates) {
+      try {
+        if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000 && isReadableMediaFile(p)) return p;
+        if (fs.existsSync(p) && !isReadableMediaFile(p)) {
+          // Self-heal: delete a corrupt master so ensureLocalMasterVideo regenerates it.
+          console.warn(`[findCachedChunk] Deleting corrupt master: ${p}`);
+          try {
+            fs.unlinkSync(p);
+          } catch {}
+        }
+      } catch {}
+    }
 
   const roots = [
     path.dirname(backgroundCacheRoot()), // parent of the (possibly env-overridden) cache root
@@ -179,13 +187,13 @@ export function findCachedChunk(): string | null {
           if (master) {
             const full = path.join(d, master);
             try {
-              if (fs.statSync(full).size > 1_000_000) return full;
+              if (fs.statSync(full).size > 1_000_000 && isReadableMediaFile(full)) return full;
             } catch {}
           }
           for (const f of files) {
             const fullPath = path.join(d, f);
             try {
-              if (fs.statSync(fullPath).size > 500_000) return fullPath;
+              if (fs.statSync(fullPath).size > 500_000 && isReadableMediaFile(fullPath)) return fullPath;
             } catch {}
           }
         }
