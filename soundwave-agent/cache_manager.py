@@ -327,6 +327,40 @@ def consume_next_clip() -> Optional[Path]:
 
     return working_path
 
+
+# ── Legacy aliases (old cache API names used by main.py, short_runner & plugins) ──
+
+def get_cache_dir() -> Path:
+    """Old name for get_pool_dir()."""
+    return get_pool_dir()
+
+
+def list_cached_clips() -> List[Path]:
+    """Old name for list_pool_clips()."""
+    return list_pool_clips()
+
+
+def get_random_cached_clip() -> Optional[Path]:
+    """Pick a clip from the pool without consuming it (replenishes if empty)."""
+    clips = list_pool_clips()
+    if not clips:
+        replenish_pool()
+        clips = list_pool_clips()
+    return clips[0] if clips else None
+
+
+def build_cache_clip(youtube_url: Optional[str] = None) -> Optional[Path]:
+    """Legacy 'Download & Slice' entry point → replenish the clip pool."""
+    try:
+        ok = replenish_pool(specific_url=youtube_url)
+    except TypeError:
+        ok = replenish_pool()
+    if not ok:
+        return None
+    clips = list_pool_clips()
+    return clips[0] if clips else None
+
+
 if __name__ == "__main__":
     clips = list_pool_clips()
     hist = load_history()

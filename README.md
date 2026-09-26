@@ -1,6 +1,15 @@
 # Soundwave AI
 
-**Production-grade, client-side AI text-to-speech and video compositing studio.**
+**Production-grade, client-side AI text-to-speech and video compositing studio —
+plus a Taby-style desktop companion.**
+
+Two surfaces:
+
+- **Web** — the content generation platform stays on the web: voice studio,
+  subtitle editor, video compositor, projects (see `frontend/`).
+- **Desktop** — **Soundwave Companion**, a heytaby.com-style drop-down buddy
+  that lives at the top of your screen with chat, tasks, notes, habits, focus,
+  calendar and a reactive little face (see `desktop/`).
 
 Generate studio-quality voiceovers with **Microsoft Neural voices** (via the
 free, key-less Edge TTS service) or with **your own cloned voice** (OmniVoice
@@ -13,6 +22,7 @@ and export finished MP4/WebM with FFmpeg.
 
 | Layer | Stack |
 | --- | --- |
+| Desktop Companion | Electron + Vite + React 18 + Tailwind — top-edge drop-down buddy, dual brain (local-first + `/api/v1/agent/chat`), local-first store |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
 | Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
 | TTS | Server-side **Microsoft Neural voices** via `node-edge-tts` (24 kHz mono MP3 + word timings), offline formant fallback |
@@ -21,12 +31,17 @@ and export finished MP4/WebM with FFmpeg.
 
 ```
 soundwave-ai/
+├── desktop/             # Soundwave Companion — Taby-style desktop buddy
+│   ├── electron/        # frameless top-of-screen window, hover, shortcut, tray
+│   ├── src/components/  # BuddyFace, Panel, Onboarding, views (Today/Chat/Tasks/…)
+│   ├── src/lib/         # local brain, cloud brain, schedule, voice
+│   └── build/icon.png
 ├── soundwave-agent/     # Autonomous Desktop Shorts Agent & 2026 Viral Engine
 │   ├── viral_engine.py  # 7 High-performing niches & 6 viral hook frameworks
 │   ├── short_runner.py  # 1-Click & batch vertical video pipeline orchestrator
 │   ├── hud.py           # Futuristic acoustic visualizer HUD (no weird 3D avatar)
 │   ├── cache_manager.py # 80s Minecraft parkour gameplay chunk caching
-│   ├── main.py          # Unified CLI & GUI desktop launcher
+│   ├── main.py          # Unified CLI & GUI desktop launcher (--companion, --gui)
 │   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA
 │   ├── src/pages/       # AgentHub, Studio, SubtitleEditor, VideoCompositor, Projects, ...
@@ -65,6 +80,28 @@ npm run dev                   # http://localhost:5173 (proxies /api → :4000)
 
 Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 (`server/data/store.json`) so the full product works locally with zero infra.
+
+### Desktop Companion (the agent, like Hey Taby)
+
+```bash
+# from the repo root — browser preview of the drop-down buddy
+./start_companion.sh                 # Windows: start_companion.bat
+
+# the real desktop app (Electron)
+./start_companion.sh --electron      # Ctrl/Cmd + Alt + Space toggles it
+
+# or through the Python agent launcher
+python soundwave_agent.py --companion
+```
+
+The companion hangs from the **top center of your screen**: hover the top edge
+(or hit the hotkey) and it drops down; move away and it tucks away. It ships
+with an on-device brain (free, offline — tasks, notes, habits, focus,
+calendar, day plans) and an optional **Soundwave Cloud** brain that connects to
+the API for viral scripts, 1-click shorts, neural voices and workstation
+commands. Everything you write stays on your computer. The content generation
+platform itself remains on the web at `frontend/`. See
+[`desktop/README.md`](desktop/README.md) for packaging installers.
 
 > **Windows:** the commands are the same in PowerShell or `cmd`. Install
 > [Node.js 20+](https://nodejs.org), and for video export install FFmpeg once

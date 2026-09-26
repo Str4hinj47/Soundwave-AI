@@ -1,0 +1,226 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme palettes ────────────────────────────────────────────────────────
+   Warm, creamy, rounded — the heytaby look, wearing Soundwave's coral. */
+:root,
+:root[data-theme="cream"] {
+  --card-rgb: 255 255 255;
+  --sunken-rgb: 243 236 221;
+  --ink-rgb: 38 32 25;
+  --faint-rgb: 179 169 152;
+  --accent-rgb: 239 106 60;
+  --good-rgb: 63 174 122;
+
+  --panel: #fbf6ec;
+  --card: #ffffff;
+  --sunken: #f3ecdd;
+  --ink: #262019;
+  --muted: #8a8175;
+  --faint: #b3a998;
+  --line: rgba(60, 45, 25, 0.1);
+  --accent: #ef6a3c;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(239, 106, 60, 0.12);
+  --good: #3fae7a;
+  --wall: #e7d7bd;
+  --wall-2: #f3ead9;
+  --bubble-user: #2f2b26;
+  --bubble-user-ink: #fbf6ec;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --card-rgb: 42 37 33;
+  --sunken-rgb: 25 22 19;
+  --ink-rgb: 244 238 228;
+  --faint-rgb: 123 114 102;
+  --accent-rgb: 255 127 82;
+  --good-rgb: 82 201 149;
+
+  --panel: #211d19;
+  --card: #2a2521;
+  --sunken: #191613;
+  --ink: #f4eee4;
+  --muted: #a89e90;
+  --faint: #7b7266;
+  --line: rgba(255, 244, 226, 0.09);
+  --accent: #ff7f52;
+  --accent-ink: #241a12;
+  --accent-soft: rgba(255, 127, 82, 0.16);
+  --good: #52c995;
+  --wall: #17140f;
+  --wall-2: #2c241a;
+  --bubble-user: #ff7f52;
+  --bubble-user-ink: #241a12;
+  color-scheme: dark;
+}
+
+:root[data-theme="ocean"] {
+  --card-rgb: 255 255 255;
+  --sunken-rgb: 226 239 235;
+  --ink-rgb: 23 39 36;
+  --faint-rgb: 157 177 172;
+  --accent-rgb: 20 152 127;
+  --good-rgb: 20 152 127;
+
+  --panel: #eff7f4;
+  --card: #ffffff;
+  --sunken: #e2efeb;
+  --ink: #172724;
+  --muted: #748883;
+  --faint: #9db1ac;
+  --line: rgba(15, 55, 47, 0.1);
+  --accent: #14987f;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(20, 152, 127, 0.12);
+  --good: #14987f;
+  --wall: #b9d8d1;
+  --wall-2: #dff0ec;
+  --bubble-user: #103c34;
+  --bubble-user-ink: #eff7f4;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  background: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: transparent;
+  color: var(--ink);
+  overflow: hidden;
+  user-select: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Thin, quiet scrollbars */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The fake desktop wallpaper (browser preview only) */
+.wallpaper {
+  background:
+    radial-gradient(1200px 700px at 15% -10%, color-mix(in srgb, var(--wall-2) 90%, white), transparent 60%),
+    radial-gradient(900px 600px at 110% 20%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    linear-gradient(160deg, var(--wall-2), var(--wall));
+}
+
+/* Buddy face motion */
+.face .eyes,
+.face .pupils {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.face-idle .eyes {
+  animation: blink 5.5s ease-in-out infinite;
+}
+.face-idle .pupils {
+  animation: glance 7s ease-in-out infinite;
+}
+.face-thinking .pupils {
+  animation: glance 3.4s ease-in-out infinite;
+}
+.face-listening .pupils {
+  animation: glance 1.8s ease-in-out infinite;
+}
+.bob {
+  animation: bob 3.6s ease-in-out infinite;
+}
+.ring-pulse {
+  animation: ringpulse 1.4s ease-out infinite;
+}
+.talk-bar {
+  transform-origin: center;
+  animation: talkbar 0.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.06);
+  }
+  97% {
+    transform: scaleY(1);
+  }
+}
+@keyframes glance {
+  0%,
+  36%,
+  100% {
+    transform: translateX(0);
+  }
+  44%,
+  56% {
+    transform: translateX(3.5px);
+  }
+  66%,
+  78% {
+    transform: translateX(-3.5px);
+  }
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes ringpulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+@keyframes talkbar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Glassy drag region for the panel header (Electron) */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}

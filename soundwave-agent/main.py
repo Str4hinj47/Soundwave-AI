@@ -100,8 +100,74 @@ def run_interactive_cli():
             print("Exiting Soundwave Agent.")
             break
 
+def _companion_port_open(port: int = 5174) -> bool:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.4)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def launch_companion():
+    """
+    Launch the Soundwave Companion — the Taby-style desktop buddy
+    (desktop/ Electron + Vite app). Starts the renderer dev server if it
+    isn't running, then opens a native frameless window (pywebview) or the
+    default browser as a fallback.
+    """
+    import subprocess
+    import webbrowser
+
+    root = Path(__file__).resolve().parent.parent
+    desktop = root / "desktop"
+    if not desktop.exists():
+        print("[Companion] desktop/ folder not found.")
+        return
+
+    is_windows = sys.platform.startswith("win")
+    npm = "npm.cmd" if is_windows else "npm"
+
+    if not (desktop / "node_modules").exists():
+        print("[Companion] Installing desktop app dependencies (first run)...")
+        subprocess.run([npm, "install"], cwd=str(desktop), shell=is_windows)
+
+    if not _companion_port_open():
+        print("[Companion] Starting renderer on http://localhost:5174 ...")
+        subprocess.Popen(
+            [npm, "run", "dev"],
+            cwd=str(desktop),
+            shell=is_windows,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        import time
+        for _ in range(60):
+            time.sleep(0.5)
+            if _companion_port_open():
+                break
+
+    url = "http://localhost:5174"
+    try:
+        import webview  # type: import-not-found
+
+        webview.create_window(
+            "Soundwave Companion",
+            url,
+            width=472,
+            height=780,
+            frameless=True,
+            easy_drag=False,
+            on_top=True,
+            resizable=False,
+        )
+        webview.start()
+    except Exception:
+        print(f"[Companion] Opening {url} in your browser (hover the top edge to drop the panel down).")
+        webbrowser.open(url)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Soundwave AI Autonomous Shorts & Voice Agent")
+    parser.add_argument("--companion", action="store_true", help="Launch the Taby-style Soundwave Companion desktop buddy")
     parser.add_argument("--gui", action="store_true", help="Launch the reactive Soundwave desktop HUD")
     parser.add_argument("--native", action="store_true", help="Launch the GPU-accelerated Ultra-HD native desktop window")
     parser.add_argument("--niche", type=str, help="Generate a short for a specific niche (psychology, facts, history, finance, ai, motivation, horror)")
@@ -113,6 +179,10 @@ def main():
     parser.add_argument("--status", action="store_true", help="Check server health and cache statistics")
 
     args = parser.parse_args()
+
+    if args.companion:
+        launch_companion()
+        return
 
     if args.native:
         from ui import launch_native_desktop_window
