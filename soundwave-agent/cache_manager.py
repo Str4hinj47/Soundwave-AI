@@ -96,16 +96,15 @@ def save_history(hist: Dict[str, Any]) -> None:
     except Exception as e:
         print(f"[CacheManager] Failed to write history: {e}")
 
-def find_tools() -> Tuple[Optional[str], Optional[str]]:
-    """Locate yt-dlp and ffmpeg binaries."""
+def find_tools() -> Tuple[Optional[str], Optional[Path]]:
+    """Locate ffmpeg and the vendored yt-download engine bridge."""
     repo_root = Path(__file__).parent.parent
     vendored_ffmpeg = repo_root / "vendor" / "ffmpeg" / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
-    vendored_ytdlp = repo_root / "vendor" / "yt-dlp" / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+    engine_bridge = repo_root / "vendor" / "yt-download" / "bridge.py"
 
     ffmpeg_bin = str(vendored_ffmpeg) if vendored_ffmpeg.exists() else shutil.which("ffmpeg")
-    ytdlp_bin = str(vendored_ytdlp) if vendored_ytdlp.exists() else shutil.which("yt-dlp")
 
-    return ffmpeg_bin, ytdlp_bin
+    return ffmpeg_bin, (engine_bridge if engine_bridge.exists() else None)
 
 def list_pool_clips() -> List[Path]:
     """Return all remaining 60-second clips in pool directory sorted in order."""
@@ -241,28 +240,34 @@ def replenish_pool(specific_url: Optional[str] = None) -> bool:
 
     print(f"[CacheManager] Selected new long video: {target_url}")
 
-    ffmpeg_bin, ytdlp_bin = find_tools()
+    ffmpeg_bin, engine_bridge = find_tools()
     long_video = None
     downloads_dir = get_base_dir() / "downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
 
-    if ytdlp_bin and target_url:
-        dl_target = downloads_dir / f"long_{int(time.time())}.mp4"
+    if engine_bridge and target_url:
+        dl_base = f"long_{int(time.time())}"
         cmd = [
-            ytdlp_bin,
-            "-f", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "--no-playlist",
-            "--download-sections", "*0-600",
-            "--force-keyframes-at-cuts",
-            "-o", str(dl_target),
-            target_url,
+            sys.executable, str(engine_bridge),
+            "download", target_url,
+            "-q", "1080",
+            "-o", str(downloads_dir),
+            "--basename", dl_base,
+            "--start", "0", "--end", "600",
         ]
+        if ffmpeg_bin:
+            cmd += ["--ffmpeg", str(ffmpeg_bin)]
         try:
-            p = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
-            if p.returncode == 0 and dl_target.exists() and dl_target.stat().st_size > 1_000_000:
-                long_video = dl_target
+            p = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+            produced = next(
+                (f for f in sorted(downloads_dir.glob(f"{dl_base}.*"))
+                 if f.suffix.lstrip(".") in ("mp4", "webm", "mkv") and f.stat().st_size > 1_000_000),
+                None,
+            )
+            if p.returncode == 0 and produced:
+                long_video = produced
         except Exception as e:
-            print(f"[CacheManager] yt-dlp download skipped: {e}")
+            print(f"[CacheManager] yt-download engine download skipped: {e}")
 
     # Fallback to local master file if offline or download failed
     if not long_video:

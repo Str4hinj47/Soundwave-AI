@@ -76,10 +76,9 @@ class ClippingConfig:
     output_dir: Path = field(default_factory=lambda: Path("output"))
     max_videos: int = 1
     """How many of the top-scored sources to download + clip."""
-    video_format: str = (
-        "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
-        "best[height<=1080][ext=mp4]/best[height<=1080]/best"
-    )
+    max_height: int = 1080
+    """Resolution cap for downloads (the engine picks H.264 ≤ this height,
+    falling back to AV1/VP9 or the nearest lower height when needed)."""
     reencode: bool = True
     """True  = frame-accurate libx264 re-encode (default, recommended).
     False = stream copy, faster but cuts snap to keyframes."""
@@ -89,8 +88,9 @@ class ClippingConfig:
     """Keep the downloaded source file after clipping."""
     ffmpeg_path: Optional[str] = None
     """Explicit ffmpeg binary; defaults to `ffmpeg` on PATH."""
-    cookies_file: Optional[str] = None
-    """Optional Netscape-format cookies.txt for age-restricted uploads."""
+    proxy: Optional[str] = None
+    """Optional HTTP(S) proxy for the download engine (hard IP blocks,
+    age-restricted uploads). Same knob as YT_DOWNLOADER_PROXY."""
     socket_timeout: int = 20
     retries: int = 3
 

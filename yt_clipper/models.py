@@ -28,27 +28,41 @@ class VideoCandidate:
         return None
 
     @classmethod
-    def from_ytdlp_entry(cls, entry: Dict[str, Any]) -> "VideoCandidate":
-        """Build a candidate from a yt-dlp info dict (flat or full)."""
-        video_id = str(entry.get("id") or "")
-        formats = entry.get("formats") or []
-        max_height = None
-        for fmt in formats:
-            h = fmt.get("height")
-            if isinstance(h, (int, float)):
-                max_height = max(max_height or 0, int(h))
-        max_height = max_height or None
-        upload_date = entry.get("upload_date")
+    def from_invidious_entry(cls, entry: Dict[str, Any]) -> "VideoCandidate":
+        """Build a candidate from an Invidious API search entry or video dict.
+
+        Search entries carry id/title/duration/views only; the per-video
+        detail fetch adds like counts, publish date and available resolutions.
+        """
+        import datetime as _dt
+
+        video_id = str(entry.get("videoId") or entry.get("id") or "")
+        max_height: Optional[int] = None
+        for fmt in entry.get("adaptiveFormats") or []:
+            res = str(fmt.get("resolution") or "").rstrip("p")
+            if res.isdigit():
+                max_height = max(max_height or 0, int(res))
+            else:
+                size = str(fmt.get("size") or "")
+                if "x" in size:
+                    try:
+                        max_height = max(max_height or 0, int(size.split("x")[1]))
+                    except (ValueError, IndexError):
+                        pass
+        upload_date = None
+        published = _as_int(entry.get("published"))
+        if published:
+            upload_date = _dt.datetime.fromtimestamp(published, tz=_dt.timezone.utc).strftime("%Y%m%d")
         return cls(
             video_id=video_id,
             title=str(entry.get("title") or ""),
             url=str(entry.get("url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")),
-            duration=_as_float(entry.get("duration")),
-            view_count=_as_int(entry.get("view_count")),
-            like_count=_as_int(entry.get("like_count")),
-            upload_date=str(upload_date) if upload_date else None,
-            channel=entry.get("channel") or entry.get("uploader") or None,
-            channel_follower_count=_as_int(entry.get("channel_follower_count")),
+            duration=_as_float(entry.get("lengthSeconds") if entry.get("lengthSeconds") is not None else entry.get("duration")),
+            view_count=_as_int(entry.get("viewCount") if entry.get("viewCount") is not None else entry.get("view_count")),
+            like_count=_as_int(entry.get("likeCount") if entry.get("likeCount") is not None else entry.get("like_count")),
+            upload_date=upload_date,
+            channel=entry.get("author") or entry.get("channel") or None,
+            channel_follower_count=_as_int(entry.get("subCountText") if isinstance(entry.get("subCountText"), int) else None),
             max_height=max_height,
             extra={"resolution": entry.get("resolution")},
         )

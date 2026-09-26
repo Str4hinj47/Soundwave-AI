@@ -66,7 +66,8 @@ services:
       VOICECLONE_URL: ${VOICECLONE_URL:-}
       VOICECLONE_TOKEN: ${VOICECLONE_TOKEN:-}
       VOICECLONE_MIN_PLAN: ${VOICECLONE_MIN_PLAN:-FREE}
-      # The container image installs ffmpeg/yt-dlp from apk (multi-arch).
+      # The container image installs ffmpeg/python3+requests from apk and ships
+      # the vendored yt-download engine (YouTube import) at /app/vendor/yt-download.
       FFMPEG_PATH: /usr/bin/ffmpeg
       DATA_DIR: /app/data
       UPLOADS_DIR: /app/data/uploads

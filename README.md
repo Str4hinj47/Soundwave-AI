@@ -36,13 +36,13 @@ soundwave-ai/
 │   └── src/store/       # Zustand: auth, studio, toast
 ├── server/              # Express API
 │   ├── src/routes/      # agent, auth, voices, tts, projects, upload, export, billing, ...
-│   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytdlp, plans, security
+│   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytengine, plans, security
 │   ├── prisma/schema.prisma
 │   └── scripts/generate-samples.ts
 ├── deploy/              # Dockerfile.api, nginx.conf
 ├── voiceclone/          # optional OmniVoice voice-cloning sidecar (see its README)
 ├── docker-compose.yml
-└── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import)
+└── vendor/              # static ffmpeg (export) + yt-download engine (YouTube import — custom Innertube, no yt-dlp)
 ```
 
 ---
@@ -71,8 +71,8 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > with `winget install ffmpeg` (then restart the terminal) or point
 > `FFMPEG_PATH` at `ffmpeg.exe`. YouTube import needs Python 3
 > ([python.org](https://www.python.org/downloads/) or `winget install
-> Python.Python.3.12`) — the vendored `vendor/yt-dlp/yt-dlp` zipapp is
-> launched through it automatically; `pip install yt-dlp` works too.
+> Python.Python.3.12`) with `pip install requests` — the vendored
+> `vendor/yt-download/` engine is launched through it automatically.
 > Copy the env file with `copy .env.example .env` and fill in the two JWT
 > secrets (any random strings in dev).
 
@@ -81,13 +81,21 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > static build has no `drawtext` filter, so the export watermark is rendered
 > through the `libass` filter (same path as subtitle burn-in).
 >
-> **YouTube import** (Video Compositor → "Import from YouTube") uses
-> [yt-dlp](https://github.com/yt-dlp/yt-dlp). A prebuilt zipapp lives in
-> `vendor/yt-dlp/yt-dlp` and is auto-detected — it only needs `python3`. To
-> override, install yt-dlp yourself (`pip install yt-dlp` / `brew install
-> yt-dlp`) or point `YTDLP_PATH` at the binary. `YTDLP_COOKIES` accepts a
-> cookies.txt export for bot/age-gated videos, and `YTDLP_MAX_DURATION`
-> (seconds) caps the length of importable videos.
+> **YouTube import** (Video Compositor → "Import from YouTube") uses the
+> vendored [**yt-download**](https://github.com/Str4hinj47/yt-download)
+> engine in `vendor/yt-download/` — a custom, dependency-light
+> [Innertube](https://github.com/Str4hinj47/yt-download) client (no yt-dlp, no
+> page scraping). yt-dlp asks YouTube's API as the *web browser* client, which
+> server IPs now meet with **"Sign in to confirm you're not a bot"**; the same
+> API asked as the **Android/iOS app client** returns full stream URLs from
+> the same IP. The engine adds parallel ranged downloads with resume,
+> CDN-edge failover, codec-aware picking (H.264 → AV1 → VP9, MP4 whenever the
+> combo allows) and muxes with ffmpeg. It needs `python3` + `pip install
+> requests` and is auto-detected; point `YT_ENGINE_PATH` at another
+> `bridge.py` to override, and route stubborn IPs (age-gated videos, hard
+> blocks) through `YT_DOWNLOADER_PROXY`. Diagnostics: `python3
+> vendor/yt-download/engine/probe.py <video_id>`; standalone CLI: `python3
+> vendor/yt-download/cli.py <url> -q 1080`.
 >
 > **Portrait video** is a first-class export style: pick 9:16 in the Video
 > Compositor to render vertical video optimized for YouTube Shorts, TikTok,
@@ -125,7 +133,7 @@ cd frontend && npm run build     # production build
 | GET/POST | `/api/v1/projects` | ✓ | cloud projects (Pro+ for save) |
 | PATCH/DELETE | `/api/v1/projects/:id` | ✓ | update / soft-delete |
 | POST | `/api/v1/upload/video\|audio\|avatar` | ✓ | magic-byte validated uploads |
-| POST | `/api/v1/upload/youtube` | ✓ | import a background video straight from a YouTube URL (yt-dlp) |
+| POST | `/api/v1/upload/youtube` | ✓ | import a background video straight from a YouTube URL (yt-download engine) |
 | GET | `/api/v1/upload/file/:key` | ✓ | stream an imported/uploaded video (Range supported, for previews) |
 | POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
 | GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |

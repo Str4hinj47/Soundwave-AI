@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { config } from "../config.js";
 import { resolveFfmpegPath } from "./ffmpeg.js";
-import { downloadVideo } from "./ytdlp.js";
+import { downloadVideo } from "./ytengine.js";
 
 export const CURATED_LONG_PARKOUR_VIDEOS = [
   "https://www.youtube.com/watch?v=tiOl_mcAsF4", // 1 Hour 2026 4K 60fps Parkour
@@ -463,7 +463,7 @@ export class MinecraftBackgroundPool {
 
       if (targetUrl) {
         try {
-          console.log(`[BackgroundPool] Attempting YouTube download via yt-dlp...`);
+          console.log(`[BackgroundPool] Attempting YouTube download via the yt-download engine...`);
           // Download a fast 3-minute section (e.g. 00:30 to 03:30) with 45s max timeout
           const dlResult = await downloadVideo(targetUrl, `long_${Date.now()}`, 500_000_000, undefined, "*00:30-03:30", 45_000);
           if (dlResult && dlResult.filePath && fs.existsSync(dlResult.filePath)) {

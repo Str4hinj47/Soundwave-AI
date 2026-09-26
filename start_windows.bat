@@ -77,27 +77,26 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
-:: Check for yt-dlp
-where yt-dlp >nul 2>&1
-if %ERRORLEVEL% EQU 0 goto :ytdlp_ready
-
-if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
-
-:: Download standalone portable yt-dlp.exe via PowerShell script
-if exist scripts\download_ytdlp.ps1 (
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
+:: Check for Python 3 — the vendored yt-download engine (YouTube import) runs through it
+where python >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [WARN] Python 3 not found on PATH. YouTube import will be unavailable.
+    echo [WARN] Install it with: winget install Python.Python.3.12
+    goto :continue_boot
 )
 
-if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
-goto :continue_boot
+:: Ensure the engine's only Python dependency (requests) is importable
+python -c "import requests" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [INFO] Installing Python dependency: requests ...
+    python -m pip install --quiet requests
+)
 
-:ytdlp_vendored
-set "PATH=%CD%\vendor\yt-dlp;%PATH%"
-set "YTDLP_PATH=%CD%\vendor\yt-dlp\yt-dlp.exe"
-echo [INFO] Using vendored yt-dlp at vendor\yt-dlp\yt-dlp.exe.
-
-:ytdlp_ready
-echo [INFO] yt-dlp is ready.
+if exist vendor\yt-download\bridge.py (
+    echo [INFO] yt-download engine is ready (vendor\yt-download).
+) else (
+    echo [WARN] vendor\yt-download is missing — YouTube import will be unavailable.
+)
 
 :continue_boot
 :: Prepare server .env if missing

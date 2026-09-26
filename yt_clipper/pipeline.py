@@ -164,13 +164,15 @@ def make_clips_for(
 
     result = PipelineResult()
     src = download_video(vid, sources_dir, cfg, ffmpeg)
-    # We need the title for nice clip names - a detail fetch is cheap and cached in yt-dlp.
-    import yt_dlp
-
+    # We need the title for nice clip names - the engine's get_info is cheap.
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True}) as ydl:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
-        title = (info or {}).get("title") or vid
+        import sys as _sys
+        _engine_dir = Path(__file__).resolve().parent.parent / "vendor" / "yt-download"
+        if str(_engine_dir) not in _sys.path:
+            _sys.path.insert(0, str(_engine_dir))
+        from engine import innertube as _yt
+
+        title = _yt.get_info(f"https://www.youtube.com/watch?v={vid}", getattr(cfg, "proxy", None)).get("title") or vid
     except Exception:  # noqa: BLE001
         title = vid
 

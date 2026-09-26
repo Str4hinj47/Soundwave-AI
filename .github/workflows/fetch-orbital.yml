@@ -102,20 +102,12 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           yt-dlp --version
           deno --version | head -1
-      - name: Clone yt-download engine (custom Innertube, no yt-dlp)
+      - name: Validate vendored yt-download engine (custom Innertube, no yt-dlp)
         run: |
-          git clone --depth 1 https://github.com/Str4hinj47/yt-download /tmp/yt-download
-          cd /tmp/yt-download
-          # The repo currently ships flat, but cli.py/app.py import `engine.*`
-          # and Flask wants templates/index.html (README layout). Shim it here
-          # until the repo layout itself is fixed.
-          if [ ! -d engine ]; then
-            mkdir -p engine templates
-            cp -f __init__.py innertube.py probe.py engine/
-            [ -f index.html ] && cp -f index.html templates/ || true
-          fi
+          # The engine is vendored in the repo with the engine/ + templates/
+          # layout cli.py/app.py expect — no runtime clone needed.
           python -m pip install -q requests pysocks
-          python3 cli.py -h | head -3
+          python3 vendor/yt-download/cli.py -h | head -3
       - name: Start PO-token provider
         run: |
           docker run -d --name bgutil -p 127.0.0.1:4416:4416 --init \
@@ -175,7 +167,7 @@ jobs:
             # port reset connections in run 36201914511).
             ENGINE_PROXY=(--proxy "socks5h://127.0.0.1:1080")
           fi
-          if timeout 300 python3 /tmp/yt-download/cli.py \
+          if timeout 300 python3 vendor/yt-download/cli.py \
               "https://www.youtube.com/watch?v=${VID}" -q 720 -o /tmp/ytd \
               "${ENGINE_PROXY[@]}" \
               > /tmp/ytcli.log 2>&1; then
@@ -191,7 +183,7 @@ jobs:
           else
             echo "engine cli failed rc=$?" | tee -a /tmp/attempts.log
             # Which Innertube contexts does this IP have? (diagnostic)
-            timeout 60 python3 /tmp/yt-download/probe.py "$VID" >> /tmp/ytcli.log 2>&1 || true
+            timeout 60 python3 vendor/yt-download/engine/probe.py "$VID" >> /tmp/ytcli.log 2>&1 || true
           fi
           tail -c 4000 /tmp/ytcli.log >> /tmp/attempts.log 2>/dev/null || true
 

@@ -1,3 +1,5 @@
 # Soundwave AI Python Agent & YouTube Parkour Clipper Dependencies
-yt-dlp>=2024.12.13
 requests>=2.31.0
+# The YouTube download engine is vendored in vendor/yt-download/ (custom
+# Innertube client, no yt-dlp) and only needs `requests` + ffmpeg.
+# Optional: `flask` to run the vendored standalone web app (app.py).

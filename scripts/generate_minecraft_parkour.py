@@ -3,7 +3,7 @@
 Soundwave AI — Minecraft Parkour Background Generator
 Ensures high-definition 60fps vertical 9:16 continuous Minecraft gameplay background.
 NEVER uses static images or shaking camera hacks.
-1. Downloads genuine 60fps Minecraft parkour runs via yt-dlp / yt_clipper.
+1. Downloads genuine 60fps Minecraft parkour runs via the vendored yt-download engine.
 2. Fallback: Renders procedural continuous 60fps forward-motion 3D game perspective with authentic HUD.
 """
 
@@ -39,47 +39,38 @@ def find_ffmpeg() -> str:
     found = shutil.which("ffmpeg")
     return found or "ffmpeg"
 
-def find_ytdlp() -> str:
-    candidates = [
-        ROOT_DIR / "vendor" / "yt-dlp" / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp"),
-    ]
-    for c in candidates:
-        if c.exists() and not c.is_dir():
-            return str(c)
-    found = shutil.which("yt-dlp")
-    return found or "yt-dlp"
+def find_engine_bridge() -> Path:
+    """The vendored yt-download engine bridge (custom Innertube, no yt-dlp)."""
+    return ROOT_DIR / "vendor" / "yt-download" / "bridge.py"
 
 def download_genuine_footage() -> bool:
-    ytdlp_bin = find_ytdlp()
+    bridge = find_engine_bridge()
     ffmpeg_bin = find_ffmpeg()
-    
-    # Check if yt-dlp actually works
-    try:
-        ver = subprocess.run([ytdlp_bin, "--version"], capture_output=True, text=True, timeout=5)
-        if ver.returncode != 0:
-            return False
-    except Exception:
+
+    if not bridge.exists():
         return False
 
     for url in CURATED_URLS[:2]:
-        print(f"[generate_minecraft_parkour] Attempting yt-dlp download: {url}...")
+        print(f"[generate_minecraft_parkour] Attempting yt-download engine download: {url}...")
         cmd = [
-            ytdlp_bin,
-            "--no-playlist",
-            "--no-warnings",
-            "--format", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b",
-            "--download-sections", "*0-90",
-            "--force-keyframes-at-cuts",
-            "-o", str(OUTPUT_FILE),
-            url,
+            sys.executable, str(bridge),
+            "download", url,
+            "-q", "1080",
+            "-o", str(CACHE_DIR),
+            "--basename", OUTPUT_FILE.stem,
+            "--ffmpeg", ffmpeg_bin,
+            "--start", "0", "--end", "90",
         ]
-        ffmpeg_dir = str(Path(ffmpeg_bin).parent)
-        if ffmpeg_dir and ffmpeg_dir != ".":
-            cmd.extend(["--ffmpeg-location", ffmpeg_dir])
-            
         try:
-            r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20)
-            if r.returncode == 0 and OUTPUT_FILE.exists() and OUTPUT_FILE.stat().st_size > 1_000_000:
+            r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=90)
+            produced = OUTPUT_FILE if OUTPUT_FILE.exists() else next(
+                (p for p in sorted(CACHE_DIR.glob(f"{OUTPUT_FILE.stem}.*"))
+                 if p.suffix.lstrip(".") in ("mp4", "webm", "mkv") and p.stat().st_size > 1_000_000),
+                None,
+            )
+            if r.returncode == 0 and produced and produced.stat().st_size > 1_000_000:
+                if produced != OUTPUT_FILE:
+                    shutil.move(str(produced), str(OUTPUT_FILE))
                 print(f"✓ Downloaded genuine Minecraft parkour video: {OUTPUT_FILE}")
                 DATA_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
                 SERVER_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)

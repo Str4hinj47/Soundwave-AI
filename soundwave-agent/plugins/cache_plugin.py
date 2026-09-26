@@ -58,7 +58,7 @@ class BackgroundCachePlugin(SoundwavePlugin):
             if out_clip:
                 return f"Successfully sliced 80s background clip: {out_clip.name}"
             else:
-                return "Failed to download or slice clip. Ensure yt-dlp is available."
+                return "Failed to download or slice clip. Ensure the yt-download engine (python3 + requests) and ffmpeg are available."
 
         return f"Unknown cache action: {action}"
 

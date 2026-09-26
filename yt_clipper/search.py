@@ -1,16 +1,22 @@
-"""YouTube discovery via yt-dlp's search (no API key required).
+"""YouTube discovery via public Invidious instances (no API key, no yt-dlp).
 
-Two stages:
-  1. Flat search per query - cheap, gives id/title/duration/views.
+The yt-download engine handles downloads but deliberately does not scrape
+search pages, so candidate discovery talks to Invidious instead — free,
+keyless JSON endpoints that mirror YouTube search. Instances are rotated and
+tried in order; a dead instance degrades to a warning, never a failed run.
+
+Two stages (same shape as before):
+  1. Search per query - cheap, gives id/title/duration/views.
   2. Detail fetch for the strongest coarse candidates - adds like counts,
      upload date and resolution, which the quality scorer needs.
 """
 from __future__ import annotations
 
 import logging
+import time
 from typing import Dict, List, Optional
 
-import yt_dlp
+import requests
 
 from .config import ClippingConfig
 from .models import VideoCandidate
@@ -18,52 +24,67 @@ from .quality import passes_hard_filters
 
 log = logging.getLogger(__name__)
 
-_FLAT_OPTS = {
-    "quiet": True,
-    "no_warnings": True,
-    "skip_download": True,
-    "extract_flat": "in_playlist",
-    "noplaylist": True,
-}
+# Public Invidious instances with the JSON API enabled. The list is refreshed
+# occasionally; dead/slow ones are skipped at runtime.
+INSTANCES: List[str] = [
+    "https://inv.nadeko.net",
+    "https://invidious.nerdvpn.de",
+    "https://inv.tux.pizza",
+    "https://invidious.f5.si",
+    "https://iv.melmac.space",
+    "https://invidious.instance.ovh",
+]
 
-_DETAIL_OPTS = {
-    "quiet": True,
-    "no_warnings": True,
-    "skip_download": True,
-    "noplaylist": True,
-}
+_UA = {"User-Agent": "soundwave-ai/yt-clipper (+https://github.com/Str4hinj47/Soundwave-AI)"}
 
 
 class VideoSearcher:
     def __init__(self, cfg: ClippingConfig):
         self.cfg = cfg
+        self._session = requests.Session()
+        self._session.headers.update(_UA)
+        if cfg.proxy:
+            self._session.proxies.update({"https": cfg.proxy, "http": cfg.proxy})
 
-    def _ydl_opts(self, base: Dict, extra: Optional[Dict] = None) -> Dict:
-        opts = dict(base)
-        opts["socket_timeout"] = self.cfg.socket_timeout
-        opts["retries"] = self.cfg.retries
-        if self.cfg.cookies_file:
-            opts["cookiefile"] = self.cfg.cookies_file
-        if extra:
-            opts.update(extra)
-        return opts
+    # ------------------------------------------------------------- plumbing
+    def _get(self, path: str, params: Optional[Dict] = None):
+        """Try each Invidious instance until one answers with usable JSON."""
+        last_exc: Optional[Exception] = None
+        for base in INSTANCES:
+            try:
+                r = self._session.get(
+                    f"{base}{path}", params=params, timeout=self.cfg.socket_timeout
+                )
+                if r.status_code != 200:
+                    raise ValueError(f"HTTP {r.status_code}")
+                return r.json()
+            except Exception as exc:  # noqa: BLE001 - try the next instance
+                last_exc = exc
+                log.debug("invidious instance %s failed for %s: %s", base, path, exc)
+                time.sleep(0.3)
+        raise RuntimeError(f"no Invidious instance answered {path}: {last_exc}")
 
+    # -------------------------------------------------------------- stage 1
     def search_query(self, query: str, limit: Optional[int] = None) -> List[VideoCandidate]:
-        """Flat-search one query; returns whatever YouTube returns."""
+        """Search one query; returns whatever the API returns."""
         limit = limit or self.cfg.max_results_per_query
-        url = f"ytsearch{limit}:{query}"
         log.info("searching: %r", query)
         try:
-            with yt_dlp.YoutubeDL(self._ydl_opts(_FLAT_OPTS)) as ydl:
-                info = ydl.extract_info(url, download=False)
+            page1 = self._get("/api/v1/search", {"q": query, "type": "video", "page": 1})
+            entries = [e for e in (page1 or []) if isinstance(e, dict) and e.get("type", "video") == "video"]
+            if len(entries) < limit:  # pull a second page when the first is thin
+                try:
+                    page2 = self._get("/api/v1/search", {"q": query, "type": "video", "page": 2})
+                    entries += [e for e in (page2 or []) if isinstance(e, dict) and e.get("type", "video") == "video"]
+                except Exception:  # noqa: BLE001 - page 2 is best-effort
+                    pass
         except Exception as exc:  # noqa: BLE001 - report, don't kill the run
             log.warning("search %r failed: %s", query, exc)
             return []
-        entries = (info or {}).get("entries") or []
-        out = []
-        for entry in entries:
+        out: List[VideoCandidate] = []
+        for entry in entries[:limit]:
             try:
-                cand = VideoCandidate.from_ytdlp_entry(entry)
+                cand = VideoCandidate.from_invidious_entry(entry)
             except Exception as exc:  # noqa: BLE001
                 log.warning("skipping unparseable entry: %s", exc)
                 continue
@@ -71,18 +92,17 @@ class VideoSearcher:
                 out.append(cand)
         return out
 
+    # -------------------------------------------------------------- stage 2
     def fetch_details(self, video_id: str) -> Optional[VideoCandidate]:
-        """Full extract for one video (likes, upload date, resolution)."""
-        url = f"https://www.youtube.com/watch?v={video_id}"
+        """Detail fetch for one video (likes, upload date, resolution)."""
         try:
-            with yt_dlp.YoutubeDL(self._ydl_opts(_DETAIL_OPTS)) as ydl:
-                info = ydl.extract_info(url, download=False)
+            info = self._get(f"/api/v1/videos/{video_id}")
         except Exception as exc:  # noqa: BLE001
             log.warning("detail fetch for %s failed: %s", video_id, exc)
             return None
-        if not info or not info.get("id"):
+        if not info or not info.get("videoId"):
             return None
-        return VideoCandidate.from_ytdlp_entry(info)
+        return VideoCandidate.from_invidious_entry(info)
 
     def gather(self, queries: Optional[List[str]] = None) -> List[VideoCandidate]:
         """Full two-stage candidate gathering.
@@ -108,10 +128,10 @@ class VideoSearcher:
         for cand in coarse[: self.cfg.detail_fetch_limit]:
             detail = self.fetch_details(cand.video_id) or cand
             ok, reason = passes_hard_filters(detail, self.cfg)
-            if not ok:
-                log.info("dropping %s: %s", cand.video_id, reason)
-                continue
-            finalists.append(detail)
+            if ok:
+                finalists.append(detail)
+            else:
+                log.info("dropping %s after detail fetch: %s", cand.video_id, reason)
         return finalists
 
 

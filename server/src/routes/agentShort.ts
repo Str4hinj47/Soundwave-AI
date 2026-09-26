@@ -13,7 +13,6 @@ import { dimensionsFor } from "../lib/plans.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
-import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
 import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
 import { youtubeService } from "../lib/youtube.js";

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
-import { resolveYtDlpPath } from "../lib/ytdlp.js";
+import { isYtEngineAvailable } from "../lib/ytengine.js";
 import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
@@ -319,7 +319,7 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
 // GET /status — check health, tool binaries, and cache state
 router.get("/status", async (_req, res) => {
   const ffmpeg = resolveFfmpegPath();
-  const ytdlp = resolveYtDlpPath();
+  const ytEngine = isYtEngineAvailable();
 
   const cacheDirs = [
     path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s"),
@@ -346,7 +346,7 @@ router.get("/status", async (_req, res) => {
     system: "Soundwave AI Autonomous Agent Engine",
     version: "2.0.0",
     ffmpegAvailable: Boolean(ffmpeg),
-    ytdlpAvailable: Boolean(ytdlp),
+    ytEngineAvailable: ytEngine,
     cachedBackgroundClips: cachedClipsCount,
     cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
     supportedNiches: Object.keys(VIRAL_SCRIPTS),

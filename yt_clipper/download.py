@@ -1,30 +1,40 @@
-"""Downloading via yt-dlp, with progress logged (no noise on stdout)."""
+"""Downloading via the vendored yt-download engine (custom Innertube, no yt-dlp).
+
+The engine lives in vendor/yt-download/ and talks to YouTube's player API with
+the Android/iOS app client contexts, which — unlike the web client used by
+yt-dlp — are not met with "Sign in to confirm you're not a bot" from server
+IPs. Progress is logged (no noise on stdout).
+"""
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
-import yt_dlp
+# Make the vendored engine importable (vendor/yt-download/{bridge.py,engine/}).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_VENDOR_ENGINE = _REPO_ROOT / "vendor" / "yt-download"
+if str(_VENDOR_ENGINE) not in sys.path:
+    sys.path.insert(0, str(_VENDOR_ENGINE))
+
+from engine import innertube as yt  # noqa: E402
+from bridge import download_to  # noqa: E402
 
 from .config import ClippingConfig
 
 log = logging.getLogger(__name__)
 
 
-def _progress_hook(cfg: ClippingConfig):
-    last = {"pct": -10}
-
-    def hook(d: Dict) -> None:
-        if d.get("status") == "downloading" and d.get("total_bytes"):
-            pct = int(d.get("downloaded_bytes", 0) * 100 / d["total_bytes"])
-            if pct >= last["pct"] + 10:
-                last["pct"] = pct
+def _progress_logger(state: dict):
+    def on_progress(done, total, speed) -> None:
+        if total:
+            pct = int(done * 100 / total)
+            if pct >= state["pct"] + 10:
+                state["pct"] = pct
                 log.info("download: %d%%", pct)
-        elif d.get("status") == "finished":
-            log.info("download finished, merging if needed")
 
-    return hook
+    return on_progress
 
 
 def video_id_from_ref(ref: str) -> str:
@@ -47,44 +57,35 @@ def download_video(
     cfg: ClippingConfig,
     ffmpeg: Optional[str] = None,
 ) -> Path:
-    """Download one video into out_dir as <video_id>.mp4. Returns its path.
-
-    Re-uses an existing complete file when present (idempotent runs).
+    """Download one video into out_dir as <video_id>.<ext> (mp4 preferred).
+    Returns its path. Re-uses an existing complete file when present
+    (idempotent runs).
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    dest = out_dir / f"{video_id}.mp4"
-    if dest.exists() and dest.stat().st_size > 0:
-        log.info("reusing existing download %s", dest)
-        return dest
-
-    opts: Dict = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "format": cfg.video_format,
-        "merge_output_format": "mp4",
-        "outtmpl": str(out_dir / f"{video_id}.%(ext)s"),
-        "retries": cfg.retries,
-        "socket_timeout": cfg.socket_timeout,
-        "progress_hooks": [_progress_hook(cfg)],
-    }
-    if cfg.cookies_file:
-        opts["cookiefile"] = cfg.cookies_file
-    if ffmpeg:
-        opts["ffmpeg_location"] = str(Path(ffmpeg).parent)
+    existing = sorted(
+        p for p in out_dir.glob(f"{video_id}.*")
+        if p.suffix.lstrip(".") in ("mp4", "webm", "mkv") and p.stat().st_size > 0
+    )
+    if existing:
+        log.info("reusing existing download %s", existing[0])
+        return existing[0]
 
     url = f"https://www.youtube.com/watch?v={video_id}"
-    log.info("downloading %s ...", url)
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-    title = (info or {}).get("title", video_id)
-    log.info("downloaded: %s", title)
+    log.info("downloading %s via the yt-download engine ...", url)
+    state = {"pct": -10}
+    try:
+        dest = download_to(
+            url,
+            str(cfg.max_height),
+            out_dir,
+            video_id,
+            proxy=cfg.proxy or None,
+            ffmpeg=ffmpeg,
+            on_progress=_progress_logger(state),
+        )
+    except yt.YouTubeError as exc:
+        raise RuntimeError(f"download failed for {video_id}: {exc}") from exc
 
-    if not dest.exists():
-        # non-mp4 merge edge case - find whatever came out
-        candidates = sorted(out_dir.glob(f"{video_id}.*"))
-        if not candidates:
-            raise RuntimeError(f"download produced no file for {video_id}")
-        dest = candidates[0]
+    log.info("downloaded: %s", dest.name)
     return dest

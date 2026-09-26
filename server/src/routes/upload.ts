@@ -10,7 +10,7 @@ import { ApiError } from "../middleware/error.js";
 import { uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
 import { PLANS } from "../lib/plans.js";
-import { parseYouTubeUrl, fetchMetadata, downloadVideo } from "../lib/ytdlp.js";
+import { parseYouTubeUrl, fetchMetadata, downloadVideo } from "../lib/ytengine.js";
 import { config } from "../config.js";
 
 const router = Router();
@@ -115,7 +115,7 @@ router.post("/youtube", optionalAuth, uploadLimiter, validate({ body: youtubeSch
     const maxBytes = 2048 * 1024 * 1024;
     const uuid = crypto.randomUUID();
     const result = await downloadVideo(target, uuid, maxBytes).catch((e: Error & { status?: number; code?: string }) => {
-      if (e.message.includes("yt-dlp is not installed")) {
+      if (e.message.includes("download engine is unavailable") || e.message.includes("Python 3 is not installed")) {
         throw new ApiError(503, "YOUTUBE_IMPORT_UNAVAILABLE", e.message);
       }
       throw new ApiError(502, "YOUTUBE_DOWNLOAD_FAILED", e.message);
