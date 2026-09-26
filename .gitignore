@@ -7,6 +7,12 @@ frontend/dist/
 server/dist/
 *.tsbuildinfo
 
+# desktop packaging (assembled tree + installer output; binaries fetched at build time)
+desktop/app/
+desktop/release/
+desktop/bin/*
+!desktop/bin/.gitkeep
+
 # env
 .env
 .env.*

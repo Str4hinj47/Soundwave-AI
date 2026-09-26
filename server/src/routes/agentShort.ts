@@ -15,7 +15,7 @@ import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
-import { backgroundPool, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
+import { backgroundPool, backgroundCacheRoot, CURATED_LONG_PARKOUR_VIDEOS } from "../lib/backgroundPool.js";
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
 
@@ -137,6 +137,7 @@ const CACHE_CHUNK_SECS = 80;
 
 export function findCachedChunk(): string | null {
   const masterCandidates = [
+    path.join(backgroundCacheRoot(), "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
     path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
     path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
     path.join(process.cwd(), "..", "data", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
@@ -150,6 +151,7 @@ export function findCachedChunk(): string | null {
   }
 
   const roots = [
+    path.dirname(backgroundCacheRoot()), // parent of the (possibly env-overridden) cache root
     path.join(process.cwd(), ".."),
     process.cwd(),
     config.dataDir,

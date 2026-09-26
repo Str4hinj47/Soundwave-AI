@@ -1,0 +1,22 @@
+{
+  "name": "soundwave-ai-desktop",
+  "productName": "Soundwave AI",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Soundwave AI studio — neural TTS, subtitles and video compositing in one desktop app.",
+  "author": {
+    "name": "Soundwave AI"
+  },
+  "license": "UNLICENSED",
+  "main": "src/main.js",
+  "scripts": {
+    "assemble": "node assemble.mjs",
+    "smoke": "node smoke.mjs",
+    "dist:win": "electron-builder --win",
+    "dist:dir": "electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  }
+}

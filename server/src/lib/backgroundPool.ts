@@ -13,6 +13,19 @@ export const ORBITAL_NCG_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG/vide
 /** After this many consecutive failed downloads a link is parked until the cycle resets. */
 export const MAX_FAILED_ATTEMPTS = 3;
 
+/**
+ * Root of the background-video cache. Packaged desktop builds override this
+ * with BACKGROUND_CACHE_DIR (pointed at the user-data folder) so nothing is
+ * ever written into the install directory. Dev keeps the repo layout.
+ */
+export function backgroundCacheRoot(): string {
+  const envRoot = process.env.BACKGROUND_CACHE_DIR;
+  if (envRoot && envRoot.length > 0) return envRoot;
+  const cwd = process.cwd();
+  const repoRoot = cwd.endsWith("server") ? path.resolve(cwd, "..") : cwd;
+  return path.join(repoRoot, "background_cache");
+}
+
 export const CURATED_LONG_PARKOUR_VIDEOS = [
   "https://www.youtube.com/watch?v=fw_eWpb7uCE", // Orbital NCG — Vertical 4 HOURS
   "https://www.youtube.com/watch?v=zeyy5Yj-A4I", // Orbital NCG — 4 HOURS
@@ -53,7 +66,7 @@ export class MinecraftBackgroundPool {
 
   constructor() {
     this.repoRoot = process.cwd().endsWith("server") ? path.resolve(process.cwd(), "..") : process.cwd();
-    const base = path.resolve(this.repoRoot, "background_cache", "minecraft_parkour");
+    const base = path.join(backgroundCacheRoot(), "minecraft_parkour");
 
     this.poolDir = path.join(base, "pool");
     this.downloadsDir = path.join(base, "downloads");
@@ -95,6 +108,7 @@ export class MinecraftBackgroundPool {
         }
       }
       const legacyMasters = [
+        path.join(backgroundCacheRoot(), "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
         path.join(path.dirname(this.poolDir), "80s", "parkour_master_80s.mp4"),
         path.resolve(process.cwd(), "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
         path.resolve(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
@@ -264,6 +278,7 @@ export class MinecraftBackgroundPool {
    */
   public async ensureLocalMasterVideo(): Promise<string> {
     const masterCandidates = [
+      path.join(backgroundCacheRoot(), "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
       path.resolve(process.cwd(), "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
       path.resolve(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
       path.resolve(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
@@ -763,6 +778,7 @@ export class MinecraftBackgroundPool {
    */
   public getMasterVideosDetails() {
     const masterCandidates = [
+      path.join(backgroundCacheRoot(), "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
       path.resolve(this.repoRoot, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
       path.resolve(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
     ];

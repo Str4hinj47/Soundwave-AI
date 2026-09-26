@@ -74,6 +74,26 @@ export function createApp() {
     app.use("/voice-samples", express.static(samplesDir, { maxAge: "7d", immutable: true }));
   }
 
+  // Packaged/desktop mode: serve the built SPA from this same origin (WEB_DIST).
+  // Hashed assets are immutable; index.html is the history fallback and never
+  // shadows /api (API 404s keep returning JSON from the notFound handler).
+  if (config.webDist && fs.existsSync(config.webDist)) {
+    app.use(
+      express.static(config.webDist, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }),
+    );
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(config.webDist, "index.html"));
+    });
+  }
+
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

@@ -17,6 +17,9 @@ export const config = {
   env: env.NODE_ENV ?? "development",
   isProd: (env.NODE_ENV ?? "development") === "production",
   port: int("PORT", 4000),
+  // Interface to bind. Desktop/packaged builds set 127.0.0.1 so the local API
+  // is never reachable from the LAN.
+  bindHost: str("BIND_HOST", "0.0.0.0"),
   appUrl: str("APP_URL", "http://localhost:5173"),
   databaseUrl: str("DATABASE_URL", ""),
   // In production these MUST be present (validated at startup).
@@ -62,6 +65,9 @@ export const config = {
   })(),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
+  // Absolute path to a built frontend (frontend/dist). Packaged/desktop builds
+  // set this so Express serves the SPA from one origin — no Vite, no second port.
+  webDist: str("WEB_DIST", ""),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)

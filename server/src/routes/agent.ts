@@ -6,6 +6,7 @@ import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
+import { backgroundCacheRoot } from "../lib/backgroundPool.js";
 import { getStore } from "../lib/store.js";
 import { config } from "../config.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, CURATED_MINECRAFT_PARKOUR, buildShortVideo } from "./agentShort.js";
@@ -322,6 +323,7 @@ router.get("/status", async (_req, res) => {
   const ytdlp = resolveYtDlpPath();
 
   const cacheDirs = [
+    path.join(backgroundCacheRoot(), "minecraft_parkour", "80s"),
     path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s"),
     path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s"),
     path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s"),

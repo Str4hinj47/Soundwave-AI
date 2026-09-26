@@ -19,7 +19,7 @@ async function main() {
   // Video export needs FFmpeg — warn loudly at boot when it's missing so a
   // Windows user sees the fix before the first export attempt.
   const ffmpeg = resolveFfmpegPath();
-  const probe = spawnSync(ffmpeg, ["-version"], { stdio: "pipe", encoding: "utf8" });
+  const probe = spawnSync(ffmpeg, ["-version"], { stdio: "pipe", encoding: "utf8", windowsHide: true });
   if (probe.status === 0) {
     const firstLine = (probe.stdout ?? "").split("\n")[0]?.trim() ?? "found";
     console.log(`[soundwave] ffmpeg: ${firstLine}`);
@@ -30,8 +30,8 @@ async function main() {
   }
 
   const app = createApp();
-  app.listen(config.port, "0.0.0.0", () => {
-    console.log(`[soundwave] API listening on http://0.0.0.0:${config.port} (${config.env})`);
+  app.listen(config.port, config.bindHost, () => {
+    console.log(`[soundwave] API listening on http://${config.bindHost}:${config.port} (${config.env})`);
   });
 }
 

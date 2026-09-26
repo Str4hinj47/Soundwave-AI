@@ -9,6 +9,22 @@ and export finished MP4/WebM with FFmpeg.
 
 ---
 
+## Get the app (Windows)
+
+Soundwave AI ships as a **native desktop app** — no terminal, no `.bat`, no
+Node/Python/FFmpeg to install:
+
+- **`SoundwaveAI-Setup-*.exe`** — installer with Start Menu + desktop
+  shortcut (double-click → install → launch).
+- **`SoundwaveAI-Portable-*.exe`** — single-file app, nothing to install.
+
+Both are built by CI from this repo (see [docs/RELEASING.md](docs/RELEASING.md)
+— including the code-signing steps that remove the Windows SmartScreen
+prompt). All your projects, uploads and settings live in
+`%APPDATA%\Soundwave AI\`.
+
+---
+
 ## Architecture
 
 | Layer | Stack |
