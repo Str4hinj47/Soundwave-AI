@@ -1,5 +1,7 @@
 @echo off
 title Soundwave AI Suite Launcher
+:: Run from the launcher's own folder so every relative path below resolves.
+cd /d "%~dp0"
 echo =================================================================
 echo   Waves Starting Soundwave AI Studio and Autonomous Agent
 echo =================================================================
@@ -109,30 +111,23 @@ if not exist server\.env (
 :: Ensure DATABASE_URL is disabled for zero-infra local JSON store (no postgres needed)
 powershell -NoProfile -Command "if (Test-Path 'server\.env') { (Get-Content 'server\.env') -replace '^DATABASE_URL=postgresql:', '#DATABASE_URL=postgresql:' | Set-Content 'server\.env' }"
 
-:: Install server dependencies if needed
-if not exist server\node_modules (
-    echo [INFO] Installing server dependencies...
-    cd server && call npm install && cd ..
-)
+:: Install or repair the server and frontend npm dependencies. Checking only
+:: whether node_modules exists misses installs that stopped part-way, which
+:: later break the dev server with errors like
+:: Failed to resolve import "lucide-react". The helper reinstalls from scratch
+:: when the last npm install did not finish, otherwise checks every package
+:: against package-lock.json and runs npm install when anything is missing,
+:: and re-runs install scripts that npm 12's allowScripts gate skipped.
+node scripts\ensure_node_deps.mjs server frontend
+if not errorlevel 1 goto :deps_ready
+echo.
+echo [ERROR] The npm dependencies could not be installed - see the messages above.
+echo         Close any open Soundwave server windows, check your internet
+echo         connection, then run start_windows.bat again.
+pause
+exit /b 1
 
-:: Install frontend dependencies if needed
-if not exist frontend\node_modules (
-    echo [INFO] Installing frontend dependencies...
-    cd frontend && call npm install && cd ..
-)
-
-:: npm 12 gates install scripts behind allowScripts (approvals committed in
-:: package.json). If a prior install ran with scripts skipped, the prisma
-:: client or esbuild binary is missing — re-run the install scripts now.
-if exist server\node_modules\.prisma\client\index.js if exist server\node_modules\@esbuild\win32-x64\bin\esbuild.exe if exist frontend\node_modules\@esbuild\win32-x64\bin\esbuild.exe goto :scripts_ok
-echo [INFO] Re-running dependency install scripts skipped by the npm allow-scripts gate...
-if exist server\node_modules (
-    cd server && call npm rebuild && cd ..
-)
-if exist frontend\node_modules (
-    cd frontend && call npm rebuild && cd ..
-)
-:scripts_ok
+:deps_ready
 
 :: Start Backend API Server in a new window
 echo [INFO] Starting Backend API Server on http://localhost:4000 ...

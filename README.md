@@ -81,6 +81,15 @@ npm run dev                   # http://localhost:5173 (proxies /api → :4000)
 Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 (`server/data/store.json`) so the full product works locally with zero infra.
 
+> **One-click launchers:** `start_windows.bat` (Windows) and `start.sh`
+> (macOS/Linux) do all of the above and open the Agent Hub. Before starting the
+> servers they run `node scripts/ensure_node_deps.mjs server frontend`, which
+> checks every package against `package-lock.json` and repairs the install, so
+> an interrupted first `npm install` no longer shows up later in the browser as
+> `Failed to resolve import "lucide-react"`. If you install by hand and hit that
+> error, delete that folder's `node_modules` and run `npm install` again — a
+> plain re-run cannot repair packages that were only half-extracted.
+
 > **Windows:** the commands are the same in PowerShell or `cmd`. Install
 > [Node.js 20+](https://nodejs.org), and for video export install FFmpeg once
 > with `winget install ffmpeg` (then restart the terminal) or point
