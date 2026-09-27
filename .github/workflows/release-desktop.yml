@@ -46,19 +46,31 @@ jobs:
             frontend/package-lock.json
             desktop/package-lock.json
 
-      - name: Build backend (typecheck + tests + tsc)
+      # One command per step: Windows' pwsh only reports a multi-line script's
+      # LAST exit code, which silently swallowed failing tests before.
+      - name: Install backend dependencies
         working-directory: server
-        run: |
-          npm ci
-          npm run typecheck
-          npm test
-          npm run build
+        run: npm ci
+
+      - name: Typecheck backend
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Test backend
+        working-directory: server
+        run: npm test
+
+      - name: Build backend
+        working-directory: server
+        run: npm run build
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
 
       - name: Build frontend (React → dist)
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       - name: Fetch runtime binaries (ffmpeg + yt-dlp)
         shell: pwsh

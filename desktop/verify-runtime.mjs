@@ -16,8 +16,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const TEST_VIDEO = "https://www.youtube.com/watch?v=Ey5YXBINl2Q"; // an Orbital NCG upload
 
+// On GitHub Actions, key results also become annotations on the run page.
+function annotate(level, title, message) {
+  if (process.env.GITHUB_ACTIONS !== "true") return;
+  const data = (v) => String(v).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  const prop = (v) => data(v).replace(/:/g, "%3A").replace(/,/g, "%2C");
+  console.log(`::${level} title=${prop(title)}::${data(message)}`);
+}
+
 function fail(message) {
   console.error(`[verify-runtime] ✗ FAIL: ${message}`);
+  annotate("error", "Desktop app as yt-dlp's JavaScript runtime", message);
   process.exit(1);
 }
 
@@ -76,16 +85,33 @@ for (const line of log.split(/\r?\n/)) {
   if (/yt-dlp version|JS runtimes|JS Challenge|\[jsc|challenge/i.test(line) || /^(WARNING|ERROR):/.test(line)) console.log(`    ${line}`);
 }
 
+const ytdlpVersion = /yt-dlp version (\S+)/.exec(log)?.[1] ?? "yt-dlp";
 const runtimes = /JS runtimes: (.*)/.exec(log)?.[1]?.trim() ?? "";
-if (!/\bnode-\d/.test(runtimes)) fail(`yt-dlp did not accept the packaged app as its node runtime (JS runtimes: ${runtimes || "?"})`);
-console.log(`[verify-runtime] ✓ yt-dlp detected the app as its JS runtime (${runtimes})`);
-if (/Error running node process/i.test(log)) fail("yt-dlp's challenge solver crashed under the packaged app (see the log above)");
+if (!/\bnode-\d/.test(runtimes)) fail(`${ytdlpVersion} did not accept the packaged app as its node runtime (JS runtimes: ${runtimes || "?"})`);
+console.log(`[verify-runtime] ✓ ${ytdlpVersion} detected the app as its JS runtime (${runtimes})`);
+// The runtime itself failing is fatal; other solver errors can be YouTube-side.
+const crash = /Error running node process[^\n]*/i.exec(log)?.[0];
+if (crash) fail(`yt-dlp's challenge solver crashed under the packaged app: ${crash}`);
+annotate("notice", "yt-dlp JavaScript runtime", `The packaged app runs as Node ${probe.version}; yt-dlp ${ytdlpVersion} uses it (JS runtimes: ${runtimes}).`);
 
+const solved = /Solving JS challenges using node/.test(log);
+const solveError = /Error solving [^\n]*"node" provider[^\n]*/.exec(log)?.[0];
+const lastError =
+  log
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith("ERROR:"))
+    .pop()
+    ?.replace(/^ERROR:\s*/, "")
+    .replace(/;\s*please report this issue.*$/i, "") ?? "";
+let summary;
 if (result.code === 0 && result.stdout.trim()) {
-  console.log(`[verify-runtime] ✓ extracted "${result.stdout.trim()}" with the app as the JS runtime`);
+  summary = `Extracted "${result.stdout.trim()}"${solved ? ", solving YouTube's JS challenges with the packaged app" : ""}.`;
+  console.log(`[verify-runtime] ✓ ${summary}`);
 } else {
-  console.log(
-    `[verify-runtime] – the extraction itself failed (exit ${result.code}); YouTube often blocks CI machines, so this is informational only.`,
-  );
+  summary = `The test extraction failed (exit ${result.code})${lastError ? `: ${lastError}` : ""} — YouTube often blocks CI machines, so this is informational only.`;
+  console.log(`[verify-runtime] – ${summary}`);
 }
+if (solveError) summary += ` Solver warning: ${solveError}`;
+else if (solved && result.code !== 0) summary += " (JS challenges were solved with the packaged app before that.)";
+annotate("notice", "YouTube test extraction", summary);
 console.log("[verify-runtime] PASS");

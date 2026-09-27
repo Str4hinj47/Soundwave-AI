@@ -259,7 +259,9 @@ describe("yt-dlp self-update (YTDLP_AUTO_UPDATE)", () => {
     expect(startYtDlpSelfUpdate("nightly")).toBe(update); // already running: no second updater
 
     await expect(fetchMetadata(URL_)).resolves.toMatchObject({ title: "Orbital gameplay" });
-    expect(fake.spawns[0]!.args).toEqual(["--update-to", "nightly"]);
+    // Nothing but the update itself (on Windows the vendored zipapp runs via Python, so its path comes first).
+    expect(fake.spawns[0]!.args.slice(-2)).toEqual(["--update-to", "nightly"]);
+    expect(fake.spawns[0]!.args).not.toContain("--js-runtimes");
     expect(fake.events).toEqual(["spawn:update", "close:update", "spawn:yt-dlp", "close:yt-dlp"]);
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Updated yt-dlp to nightly@2026.09.16.232951"));
   });

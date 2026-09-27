@@ -7,11 +7,16 @@ import { createApp } from "../src/app.js";
 import { JsonStore, setStoreForTests } from "../src/lib/store.js";
 import { config, resolveFfmpegPath } from "../src/config.js";
 
+// The test video is generated with ffmpeg; without it (e.g. CI runs the tests
+// before ffmpeg is fetched) every endpoint would just 404 on the missing file.
+const hasFfmpeg = spawnSync(resolveFfmpegPath(), ["-version"], { stdio: "ignore" }).status === 0;
+
 let app: ReturnType<typeof createApp>;
 const testKey = "11111111-2222-3333-4444-555555555555.mp4";
 let testVideoPath = "";
 
 beforeAll(async () => {
+  if (!hasFfmpeg) return;
   const store = new JsonStore();
   await store.init();
   setStoreForTests(store);
@@ -41,7 +46,7 @@ afterAll(() => {
   } catch {}
 });
 
-describe("Creator Studio API", () => {
+describe.skipIf(!hasFfmpeg)("Creator Studio API", () => {
   let detectedSpeechIntervals: Array<{ start: number; end: number; duration: number }> = [];
 
   it("detects dead-air pauses and returns silence analysis", async () => {
