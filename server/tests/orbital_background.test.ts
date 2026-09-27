@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listChannelVideos: vi.fn(),
   fetchMetadata: vi.fn(),
   downloadVideo: vi.fn(),
+  synthesizeEdgeTTS: vi.fn(),
 }));
 
 vi.mock("../src/lib/ytdlp.js", async (importOriginal) => {
@@ -22,10 +23,11 @@ vi.mock("../src/lib/ytdlp.js", async (importOriginal) => {
   };
 });
 
-// Edge TTS needs the network; the builder falls back to its local narration track.
+// Microsoft's voice service needs the network: the Soundwave voice is stubbed
+// with a locally generated recording (there is no offline stand-in voice).
 vi.mock("../src/lib/edgeTts.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/edgeTts.js")>();
-  return { ...actual, synthesizeEdgeTTS: vi.fn().mockRejectedValue(new Error("edge-tts offline in tests")) };
+  return { ...actual, synthesizeEdgeTTS: mocks.synthesizeEdgeTTS };
 });
 
 const { config, resolveFfmpegPath } = await import("../src/config.js");
@@ -36,7 +38,7 @@ const { parseShortRequest } = await import("../src/routes/agent.js");
 const { createApp } = await import("../src/app.js");
 const { JsonStore, setStoreForTests, getStore } = await import("../src/lib/store.js");
 
-// The builder's local narration fallback and the renderer both need ffmpeg.
+// The renderer needs ffmpeg.
 const ffmpegPath = resolveFfmpegPath();
 const hasFfmpeg = (() => {
   try {
@@ -85,10 +87,27 @@ function metadataFor(url: string) {
   };
 }
 
+/** Stand-in for the Soundwave voice's MP3 (a 2 s tone when ffmpeg is around). */
+let narrationMp3 = Buffer.alloc(1200);
+
+function fakeNarration({ text }: { text: string }) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const step = 2 / Math.max(1, words.length);
+  return {
+    audioBase64: narrationMp3.toString("base64"),
+    mimeType: "audio/mpeg" as const,
+    duration: 2,
+    wordTimings: words.map((word, i) => ({ word, start: i * step, end: (i + 1) * step })),
+  };
+}
+
 beforeAll(async () => {
   const store = new JsonStore();
   await store.init();
   setStoreForTests(store);
+  if (hasFfmpeg) {
+    narrationMp3 = execFileSync(ffmpegPath, ["-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=2", "-c:a", "libmp3lame", "-b:a", "48k", "-f", "mp3", "pipe:1"]);
+  }
 });
 
 beforeEach(() => {
@@ -97,6 +116,7 @@ beforeEach(() => {
   mocks.listChannelVideos.mockReset().mockResolvedValue({ channelId: "UCorbital", channelName: "Orbital - No Copyright Gameplay", videos: [VIDEO_A, VIDEO_B] });
   mocks.fetchMetadata.mockReset().mockImplementation(async (url: string) => metadataFor(url));
   mocks.downloadVideo.mockReset().mockImplementation(async (...args: DownloadArgs) => writeFakeDownload(...args));
+  mocks.synthesizeEdgeTTS.mockReset().mockImplementation(async (input: { text: string }) => fakeNarration(input));
 });
 
 describe("Orbital NCG background picker", () => {
@@ -306,7 +326,6 @@ describe("Chat → YT short", () => {
     expect(res.body.reply).toMatch(/YouTube link importer/);
     expect(res.body.videoUrl).toBeUndefined();
 
-    if (!hasFfmpeg) return; // the job can't get past the narration step without ffmpeg
     const store = await getStore();
     let job = await store.getJob(res.body.jobId, "local-user");
     for (let i = 0; i < 150 && job?.status === "PROCESSING"; i++) {
@@ -317,6 +336,29 @@ describe("Chat → YT short", () => {
     expect(job?.errorMessage).toMatch(/Orbital NCG/);
     expect(orbital.getOrbitalStatus()).toMatchObject({ usedCount: 0, inProgress: 0 });
   }, 60_000);
+});
+
+describe("Short narration", () => {
+  it("fails the short clearly — with no robotic stand-in voice — when the Soundwave voice can't be reached", async () => {
+    mocks.synthesizeEdgeTTS.mockRejectedValue(
+      new Error("Couldn't reach the Soundwave voice service (Microsoft neural voices): Microsoft's voice service refused the connection (HTTP 403)."),
+    );
+    const steps: string[] = [];
+    await expect(
+      buildShortVideo({ topic: "facts", script: "Honey never spoils.", voice: "en-US-GuyNeural", autoPublishYouTube: false, onProgress: (_p, step) => step && steps.push(step) }),
+    ).rejects.toThrow(/Soundwave voice "Guy".*HTTP 403.*generate the short again/);
+
+    // The neural voice was asked for (with retries inside synthesizeEdgeTTS), nothing else.
+    expect(mocks.synthesizeEdgeTTS).toHaveBeenCalledTimes(1);
+    expect(mocks.synthesizeEdgeTTS).toHaveBeenCalledWith(
+      expect.objectContaining({ voice: "en-US-GuyNeural", text: "Honey never spoils." }),
+      expect.objectContaining({ attempts: 3 }),
+    );
+    // Failed before the background step: no Orbital video was touched.
+    expect(mocks.listChannelVideos).not.toHaveBeenCalled();
+    expect(orbital.getOrbitalStatus()).toMatchObject({ usedCount: 0, inProgress: 0 });
+    expect(steps.some((s) => /background/i.test(s))).toBe(false);
+  });
 });
 
 describe.skipIf(!hasFfmpeg)("Short builder with an Orbital background", () => {
@@ -340,6 +382,11 @@ describe.skipIf(!hasFfmpeg)("Short builder with an Orbital background", () => {
       onProgress: (_pct, step) => step && steps.push(step),
     });
 
+    // Narrated by a Soundwave voice (the default narrator when none is picked).
+    expect(mocks.synthesizeEdgeTTS).toHaveBeenCalledWith(
+      expect.objectContaining({ voice: "en-US-ChristopherNeural", text: "Your brain loves patterns." }),
+      expect.anything(),
+    );
     expect(result.background).toMatchObject({ source: "orbital_ncg", importer: "youtube_link_importer", channelUrl: "https://www.youtube.com/@OrbitalNCG" });
     expect([VIDEO_A.url, VIDEO_B.url]).toContain(result.background.url);
     expect(steps.some((s) => s.includes(`Pasting ${result.background.url} into the YouTube link importer`))).toBe(true);
@@ -353,6 +400,8 @@ describe.skipIf(!hasFfmpeg)("Short builder with an Orbital background", () => {
     const job = await (await getStore()).getJob(result.jobId, "agent-local");
     expect(job?.status).toBe("COMPLETED");
     expect((job?.settings as unknown as { background?: { url: string } }).background?.url).toBe(result.background.url);
+    // The shorts library (Projects / Overview) reads these from the job.
+    expect(job?.settings).toMatchObject({ topic: "psychology", voice: "en-US-ChristopherNeural", duration: 2, youtubeUrl: null });
 
     for (const f of [`soundwave_short_${result.jobId}.mp4`, path.join("jobs", `${result.jobId}.mp4`)]) {
       fs.rmSync(path.join(config.uploadsDir, f), { force: true });

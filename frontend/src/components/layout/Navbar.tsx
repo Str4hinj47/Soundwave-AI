@@ -123,7 +123,7 @@ export function Navbar() {
                   }}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-center text-xs font-medium text-white"
                 >
-                  {user ? "Open Studio" : "Get Started"}
+                  {user ? "Open Command Center" : "Get Started"}
                 </button>
               </div>
             </nav>

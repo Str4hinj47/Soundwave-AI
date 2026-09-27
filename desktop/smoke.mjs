@@ -76,6 +76,17 @@ try {
   const voices = await get(`${appUrl}/api/v1/voices`);
   assert(voices.status === 200, "GET /api/v1/voices → 200");
 
+  // The agent's Soundwave voice streams from this same origin. The page's CSP
+  // must allow that (a data: URL used to be blocked here, and the browser's
+  // robotic built-in voice read the replies instead).
+  const csp = String(spa.headers["content-security-policy"] || "");
+  assert(/media-src 'self'/.test(csp) && !/media-src[^;]*data:/.test(csp), "CSP plays same-origin speech (media-src 'self')");
+  const speak = await get(`${appUrl}/api/v1/agent/speak/stream`);
+  assert(
+    speak.status === 400 && /json/.test(speak.headers["content-type"] || ""),
+    "GET /api/v1/agent/speak/stream → 400 without text (the voice route is live)",
+  );
+
   // yt-dlp runs from a writable copy in the user-data folder (the desktop
   // shell lets the server keep it updated) — and that copy must execute.
   const ytdlpName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
@@ -92,7 +103,7 @@ try {
     console.log(`[smoke] – no bundled yt-dlp in ${binDir}; skipping the yt-dlp copy check`);
   }
 
-  console.log("[smoke] PASS — assembled app boots and serves the studio.");
+  console.log("[smoke] PASS — assembled app boots and serves the Command Center.");
   process.exit(0);
 } catch (err) {
   console.error("[smoke] ✗ FAIL:", err);

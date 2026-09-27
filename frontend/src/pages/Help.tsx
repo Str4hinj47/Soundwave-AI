@@ -16,21 +16,21 @@ export function Help() {
         {/* Soundwave Agent */}
         <Section icon={<Bot className="h-4 w-4" />} title="Soundwave Agent — Autonomous Viral Shorts">
           <p className="text-sm text-gray-300">
-            Soundwave AI includes an integrated <span className="text-cyan-300 font-semibold">Soundwave Agent</span> — an autonomous engine designed to generate high-retention, faceless vertical videos (YouTube Shorts, TikTok, Reels) in one click or automated batches.
+            The <span className="text-cyan-300 font-semibold">Soundwave Agent</span> in the Command Center is the one that makes videos — high-retention, faceless vertical shorts (YouTube Shorts, TikTok, Reels). Press Generate or just tell it "make a short about…" in the chat.
           </p>
           <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">Research-Backed Hooks:</strong> Built-in 2026 viral hooks (Did you know, Only 1% know, 3 mistakes, You're doing X wrong, Curiosity loop, Contrarian take).</li>
             <li><strong className="text-white">7 Proven Niches:</strong> Psychology & Dark Mind Tricks, Mind-Bending Facts, Untold History, Money & Wealth, AI & Future Tech, Deep Motivation, and Cosmic Horror.</li>
-            <li><strong className="text-white">1-Click Full Pipeline:</strong> Script generation → Neural Voiceover (Jenny/Guy/Ryan) → TikTok dynamic #8B5CF6 subtitles → Orbital NCG gameplay background (imported via the YouTube link importer) → FFmpeg 9:16 export → Instant download.</li>
+            <li><strong className="text-white">1-Click Full Pipeline:</strong> Script generation → narration in your Soundwave voice → word-by-word captions → Orbital NCG gameplay background (imported via the YouTube link importer) → FFmpeg 9:16 render → instant download.</li>
             <li><strong className="text-white">Batch Mode:</strong> Single-click generation of all 7 niches simultaneously with automated export tracking.</li>
           </ul>
           <Link to="/agent" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white hover:from-cyan-400 hover:to-violet-500 shadow-md shadow-violet-500/20">
-            <Bot className="h-4 w-4" /> Open Soundwave Agent Hub
+            <Bot className="h-4 w-4" /> Open the Command Center
           </Link>
         </Section>
 
-        {/* Video Compositor */}
-        <Section icon={<Clapperboard className="h-4 w-4" />} title="Video Compositing & Dynamic Subtitles">
+        {/* How the agent renders */}
+        <Section icon={<Clapperboard className="h-4 w-4" />} title="How the Agent Renders a Short">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">TikTok Subtitle Styling:</strong> Auto-synced word cues rendered in bold Montserrat 800 with high-contrast violet backgrounds (#8B5CF6) and dynamic center scaling.</li>
             <li><strong className="text-white">Fresh Orbital NCG Backgrounds:</strong> For every short the agent picks a video from youtube.com/@OrbitalNCG it has never used before, pastes its link into the YouTube link importer, and imports just the gameplay the short needs.</li>
@@ -38,12 +38,12 @@ export function Help() {
           </ul>
         </Section>
 
-        {/* Voiceover Studio */}
-        <Section icon={<Mic className="h-4 w-4" />} title="Voiceover & Neural TTS Studio">
+        {/* The agent's voice */}
+        <Section icon={<Mic className="h-4 w-4" />} title="The Agent's Voice">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
-            <li><strong className="text-white">Microsoft Neural Voices:</strong> Crystal-clear, zero-lag Edge TTS with natural inflection, adjustable speed, pitch, and word-level alignment.</li>
-            <li><strong className="text-white">Studio Neural Voices:</strong> Studio-grade speech synthesis powered by 24kHz Microsoft Neural voices with human conversational pacing.</li>
-            <li><strong className="text-white">Segment History:</strong> Full project history tracks every take and script revision.</li>
+            <li><strong className="text-white">Soundwave voices only:</strong> the agent speaks its replies and narrates every short in the voice picked in the Command Center (or in the Voice Library / Settings) — Guy, Christopher, Ryan, Jenny, Ana or Sonia, Microsoft's neural voices.</li>
+            <li><strong className="text-white">Starts talking right away:</strong> replies are streamed while they're synthesized, so there's no wait for the whole answer.</li>
+            <li><strong className="text-white">Needs the internet:</strong> the voices come from Microsoft's online speech service. If it can't be reached, the app says why instead of falling back to a robotic computer voice — and a short is never rendered with a stand-in voice.</li>
           </ul>
         </Section>
 

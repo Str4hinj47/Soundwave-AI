@@ -60,6 +60,15 @@ jobs:
         working-directory: server
         run: npm test
 
+      # The agent's Soundwave voices come from Microsoft's live Edge TTS
+      # service. Check them from a real Windows machine on every build —
+      # non-blocking (a service hiccup shouldn't stop a build), but any
+      # failure shows up as an annotation on the run.
+      - name: Check the Soundwave voices (live Microsoft Edge TTS)
+        working-directory: server
+        continue-on-error: true
+        run: npx tsx scripts/edge-tts-smoke.ts
+
       - name: Build backend
         working-directory: server
         run: npm run build

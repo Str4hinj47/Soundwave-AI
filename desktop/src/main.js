@@ -1,7 +1,7 @@
 // Soundwave AI — desktop shell.
 //
 // Boots the bundled Express server IN-PROCESS (all dependencies are pure JS),
-// then opens the studio in a native window. No terminal, no .bat, no admin
+// then opens the Command Center in a native window. No terminal, no .bat, no admin
 // prompts — everything a customer needs ships in the installer. The one
 // runtime download is yt-dlp keeping its user-data copy current (YouTube
 // breaks old builds), and yt-dlp's JavaScript runtime is this very binary

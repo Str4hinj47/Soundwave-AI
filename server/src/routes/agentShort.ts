@@ -2,16 +2,13 @@ import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { getStore } from "../lib/store.js";
 import { dimensionsFor } from "../lib/plans.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
-import { synthesizeClone } from "../lib/voiceclone.js";
-import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
+import { runFfmpegExport, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
 import { config } from "../config.js";
 import {
   ORBITAL_CHANNEL_NAME,
@@ -136,139 +133,35 @@ export function cuesFromTimings(
   return cues;
 }
 
-// ── Resilient Audio Synthesis ──────────────────────────────────────────────
-async function synthesizeWindowsNativeTTS(text: string): Promise<Buffer | null> {
-  if (process.platform !== "win32") return null;
-  const tmpDir = fs.mkdtempSync(path.join(tmpdir(), "swsapi-"));
-  const wavPath = path.join(tmpDir, "voice.wav");
-  const cleanText = text.replace(/["`$\\]/g, " ").replace(/\s+/g, " ").trim();
-  const psScript = `
-    Add-Type -AssemblyName System.Speech;
-    $s = New-Object System.Speech.Synthesis.SpeechSynthesizer;
-    $s.Rate = -1;
-    $s.Volume = 100;
-    try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male); } catch {}
-    $s.SetOutputToWaveFile('${wavPath}');
-    $s.Speak('${cleanText}');
-    $s.Dispose();
-  `;
-  return new Promise((resolve) => {
-    const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psScript]);
-    proc.on("close", (code) => {
-      if (code === 0 && fs.existsSync(wavPath) && fs.statSync(wavPath).size > 1000) {
-        const buf = fs.readFileSync(wavPath);
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-        resolve(buf);
-      } else {
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-        resolve(null);
-      }
-    });
-    proc.on("error", () => resolve(null));
-  });
+// ── Narration: always a Soundwave (Microsoft neural) voice ─────────────────
+// No robotic stand-ins: the old Windows SAPI voice (slower, estimated captions)
+// and the voiceless music bed are gone. If the neural voice can't be reached,
+// the short fails with a clear message and no Orbital video is used up.
+const NARRATOR_FALLBACK_VOICE = "en-US-ChristopherNeural";
+
+function voiceDisplayName(voice: string): string {
+  return /-([A-Za-z]+)Neural$/.exec(voice)?.[1] ?? voice;
 }
 
-async function generateResilientSpeechTrack(seconds: number): Promise<Buffer> {
-  const ffmpeg = resolveFfmpegPath();
-  const dur = Math.max(1.0, seconds).toFixed(2);
-  const musicCandidates = [
-    path.resolve(process.cwd(), "..", "scripts", "assets", "music", "epic-motivation.mp3"),
-    path.resolve(process.cwd(), "scripts", "assets", "music", "epic-motivation.mp3"),
-  ];
-  const actualMusic = musicCandidates.find((p) => fs.existsSync(p)) ?? null;
-
-  return new Promise((resolve, reject) => {
-    let args: string[];
-    if (actualMusic) {
-      // Warm, professional ducked backing narration track with zero robotic sine alarms
-      args = [
-        "-y",
-        "-stream_loop", "-1", "-i", actualMusic,
-        "-filter_complex", `[0:a]volume=0.85,afade=t=in:ss=0:d=0.5,afade=t=out:st=${Math.max(0, Number(dur) - 0.8)}:d=0.8[a]`,
-        "-map", "[a]",
-        "-t", dur,
-        "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", "pipe:1"
-      ];
-    } else {
-      // Harmonic warm acoustic resonance (gentle formant frequencies, never an alien sine buzzer)
-      args = [
-        "-y",
-        "-f", "lavfi", "-i", `anoisesrc=d=${dur}:c=pink:r=44100:a=0.04,bandpass=f=350:width_type=h:w=140,volume=1.8`,
-        "-t", dur,
-        "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", "pipe:1"
-      ];
-    }
-
-    const child = spawn(ffmpeg, args, { stdio: ["ignore", "pipe", "pipe"] });
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (c: Buffer) => chunks.push(c));
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0 && chunks.length > 0) resolve(Buffer.concat(chunks));
-      else reject(new Error("Resilient speech audio synthesis failed"));
-    });
-  });
-}
-
-export async function synthesizeResilientAudio(
-  userId: string,
+export async function synthesizeNarration(
   text: string,
-  voice: string = "en-US-ChristopherNeural"
+  voice: string = NARRATOR_FALLBACK_VOICE,
 ): Promise<{
   audioBase64: string;
   duration: number;
   wordTimings: { word: string; start: number; end: number }[];
 }> {
-  // 1. Studio-grade Microsoft Edge Neural TTS (Natural human pacing with speed=0.95 and clause pauses)
+  const selectedVoice = voice && !voice.startsWith("clone:") ? voice : NARRATOR_FALLBACK_VOICE;
   try {
-    const selectedVoice = voice && !voice.startsWith("clone:") ? voice : "en-US-ChristopherNeural";
-    const edgeRes = await synthesizeEdgeTTS({
-      text,
-      voice: selectedVoice,
-      speed: 0.95, // 95% rate gives human authoritative conversational weight
-      pitch: -1,
-    });
-    if (edgeRes && edgeRes.audioBase64 && edgeRes.duration > 0.5) {
-      return edgeRes;
-    }
+    const result = await synthesizeEdgeTTS({ text, voice: selectedVoice, speed: 0.95 }, { attempts: 3 });
+    if (!result.audioBase64 || result.duration < 0.5) throw new Error("the voice service returned an empty recording");
+    return result;
   } catch (err) {
-    console.warn(`[agentShort] Edge TTS unavailable (${(err as Error).message}), attempting local speech synthesizer.`);
+    throw new Error(
+      `Couldn't record the voiceover with the Soundwave voice "${voiceDisplayName(selectedVoice)}" — ` +
+        `${(err as Error).message}. Check the internet connection and generate the short again.`,
+    );
   }
-
-  // 2. Windows Native SAPI Speech Synthesizer (Crystal-clear offline human voice on PC)
-  try {
-    const winWav = await synthesizeWindowsNativeTTS(text);
-    if (winWav) {
-      const words = text.split(/\s+/).filter(Boolean);
-      const estDur = Math.max(2.5, Math.round((words.length / 2.3) * 10) / 10);
-      const wordTimings = words.map((w, i) => ({
-        word: w,
-        start: Math.round((i * (estDur / words.length)) * 100) / 100,
-        end: Math.round(((i + 1) * (estDur / words.length)) * 100) / 100,
-      }));
-      return {
-        audioBase64: winWav.toString("base64"),
-        duration: estDur,
-        wordTimings,
-      };
-    }
-  } catch {}
-
-  // 3. Resilient Narration Track with rhythmic timings
-  const words = text.split(/\s+/).filter(Boolean);
-  const duration = Math.max(2.5, Math.round((words.length / 2.25) * 10) / 10);
-  const wordTimings = words.map((w, i) => ({
-    word: w,
-    start: Math.round((i * (duration / words.length)) * 100) / 100,
-    end: Math.round(((i + 1) * (duration / words.length)) * 100) / 100,
-  }));
-
-  const audioBuf = await generateResilientSpeechTrack(duration);
-  return {
-    audioBase64: audioBuf.toString("base64"),
-    duration,
-    wordTimings,
-  };
 }
 
 // ── End-to-End Short Video Builder ─────────────────────────────────────────
@@ -381,7 +274,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     // 2. Voiceover Synthesis (28% -> 40%)
     stage = "voice";
     await reportProgress(28, "Synthesizing neural voiceover with natural pacing...");
-    const ttsResult = await synthesizeResilientAudio(userId, script, voice);
+    const ttsResult = await synthesizeNarration(script, voice);
     const audioBuf = Buffer.from(ttsResult.audioBase64, "base64");
     const audioFileKey = `${crypto.randomUUID()}.audio`;
     const audioPath = path.join(config.uploadsDir, audioFileKey);
@@ -519,7 +412,8 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
       progress: 100,
       outputUrl: finalUrl,
       completedAt: new Date().toISOString(),
-      settings: { ...jobSettings, step: finalStep } as any,
+      // Shown by Projects / Overview (the agent's shorts library).
+      settings: { ...jobSettings, step: finalStep, voice, duration: ttsResult.duration, youtubeUrl: ytResult?.youtubeUrl ?? null } as any,
     });
 
     emitJob(jobId, {
@@ -551,7 +445,7 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
     let failure: Error = err instanceof Error ? err : new Error(String(err ?? "Short generation failed"));
     const errText = failure.message || "Short generation failed";
     if (
-      (stage === "render" || stage === "voice") &&
+      stage === "render" &&
       (err?.code === "ENOENT" || errText.includes("ENOENT") || errText.includes("spawn ffmpeg"))
     ) {
       failure = new Error("FFmpeg not found on system. Please run 'winget install ffmpeg' in PowerShell or launch via 'start_windows.bat'.");

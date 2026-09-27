@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { 
   Sparkles, 
   Download, 
@@ -28,6 +29,7 @@ import { Button } from "../components/ui/Button";
 import { toast } from "../store/toast";
 import { ThinkingOrbVisualizer, ALL_ORB_STATES } from "../components/agent/ThinkingOrbVisualizer";
 import type { OrbState } from "thinking-orbs";
+import { AGENT_VOICES, agentVoiceLabel, displayNameFor, isSoundwaveVoice, loadAgentVoice, saveAgentVoice } from "../lib/voices";
 
 interface NicheInfo {
   id: string;
@@ -109,6 +111,25 @@ function formatClock(secs: number): string {
 function describeSection(section: { start: number; end: number } | null | undefined): string {
   return section ? `${formatClock(section.start)}–${formatClock(section.end)}` : "full video";
 }
+
+/** What the agent reads aloud: no links or markdown, and cut at a sentence end. */
+function speechTextFor(text: string, max = 1200): string {
+  const clean = text
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[*_#`>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return (end > max * 0.5 ? cut.slice(0, end + 1) : cut).trim();
+}
+
+/** The center column (orb + dock) never scrolls: the orb shrinks to fit the window. */
+const ORB_MAX = 300;
+const ORB_MIN = 120;
+/** Height the center column needs besides the orb: name, status, dock, spacing. */
+const CENTER_RESERVED_PX = 214;
 
 interface ChatMessage {
   id: string;
@@ -202,18 +223,13 @@ export function AgentHub() {
   // Shorts Generator State
   const [selectedNiche, setSelectedNiche] = useState<string>("psychology");
   const [customTopic, setCustomTopic] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("soundwave_voice") || "en-US-GuyNeural";
-    }
-    return "en-US-GuyNeural";
-  });
+  // The agent's Soundwave voice: replies AND shorts (shared with Settings / Voice Library).
+  const [selectedVoice, setSelectedVoice] = useState<string>(() => loadAgentVoice());
 
   const handleVoiceChange = (v: string) => {
+    if (!isSoundwaveVoice(v)) return;
     setSelectedVoice(v);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("soundwave_voice", v);
-    }
+    saveAgentVoice(v);
   };
 
   const [resolution, setResolution] = useState<"720p" | "1080p">("720p");
@@ -265,7 +281,16 @@ export function AgentHub() {
   const [voiceFeedback, setVoiceFeedback] = useState(true);
 
   // Refs
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  /** The chat's own scroll box — the only thing (besides the left column) that scrolls. */
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const centerColumnRef = useRef<HTMLDivElement | null>(null);
+  const [orbSize, setOrbSize] = useState(280);
+  /** Left column: fade its bottom edge while more cards wait below (it scrolls). */
+  const leftColumnRef = useRef<HTMLDivElement | null>(null);
+  const [leftMoreBelow, setLeftMoreBelow] = useState(false);
+
+  // ?tab=generator (sidebar "Generate Short") and ?voice=… (Voice Library)
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Status Fetchers
   const fetchOrbitalStatus = async () => {
@@ -304,7 +329,7 @@ export function AgentHub() {
       .then((d) => setMacrosList(d.macros || []))
       .catch(() => {});
 
-    fetch("/api/v1/export/jobs")
+    fetch("/api/v1/agent/jobs?status=COMPLETED&kind=short&limit=1")
       .then((r) => (r.ok ? r.json() : { jobs: [] }))
       .then((d) => {
         const jobs = d.jobs || [];
@@ -348,130 +373,166 @@ export function AgentHub() {
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Speech Output Helper (Neural Edge TTS 24kHz + Natural Speech Fallback)
+  // ── Agent speech: always a Soundwave voice ─────────────────────────────
+  // Replies stream from /api/v1/agent/speak/stream while Microsoft renders
+  // them, so the agent starts talking almost at once. It's same-origin audio,
+  // which the desktop app's CSP allows (the old data: URL was blocked there,
+  // and the browser's robotic built-in voice read the reply instead). There is
+  // no non-neural fallback: if the voice service is down, a toast says why.
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
-  const browserVoicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const speechTokenRef = useRef(0);
+  const lastVoiceErrorAtRef = useRef(0);
+  // Latest picks, for callbacks that outlive a render (e.g. a short finishing minutes later).
+  const selectedVoiceRef = useRef(selectedVoice);
+  selectedVoiceRef.current = selectedVoice;
+  const voiceFeedbackRef = useRef(voiceFeedback);
+  voiceFeedbackRef.current = voiceFeedback;
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const updateVoices = () => {
-      const v = window.speechSynthesis.getVoices();
-      if (v && v.length > 0) {
-        browserVoicesRef.current = v;
-      }
-    };
-    updateVoices();
-    window.speechSynthesis.onvoiceschanged = updateVoices;
-  }, []);
+  const idleState = () => (activeJobIdRef.current ? "GENERATING" : "STANDBY");
 
-  const fallbackNaturalBrowser = (cleanText: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setAssistantState("STANDBY");
-      return;
-    }
-    try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(cleanText);
-      const voices =
-        browserVoicesRef.current.length > 0
-          ? browserVoicesRef.current
-          : window.speechSynthesis.getVoices();
-
-      const isMale =
-        selectedVoice.includes("Guy") ||
-        selectedVoice.includes("Christopher") ||
-        selectedVoice.includes("Ryan");
-
-      // Prioritize high-definition natural neural voices matching requested gender
-      const naturalVoice = isMale
-        ? voices.find(
-            (v) =>
-              (v.name.includes("Guy") ||
-                v.name.includes("Christopher") ||
-                v.name.includes("Ryan") ||
-                v.name.includes("George") ||
-                v.name.includes("Male") ||
-                v.name.includes("Daniel") ||
-                v.name.includes("David")) &&
-              v.lang.startsWith("en")
-          ) ||
-          voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
-          voices.find((v) => v.lang.startsWith("en"))
-        : voices.find(
-            (v) =>
-              (v.name.includes("Jenny") ||
-                v.name.includes("Aria") ||
-                v.name.includes("Sonia") ||
-                v.name.includes("Female") ||
-                v.name.includes("Samantha") ||
-                v.name.includes("Karen") ||
-                v.name.includes("Zira")) &&
-              v.lang.startsWith("en")
-          ) ||
-          voices.find((v) => v.name.includes("Online (Natural)") && v.lang.startsWith("en")) ||
-          voices.find((v) => v.lang.startsWith("en"));
-
-      if (naturalVoice) {
-        utter.voice = naturalVoice;
-      }
-      utter.rate = 1.0;
-      utter.pitch = 1.0;
-      utter.onstart = () => setAssistantState("SPEAKING");
-      utter.onend = () => setAssistantState("STANDBY");
-      utter.onerror = () => setAssistantState("STANDBY");
-      window.speechSynthesis.speak(utter);
-    } catch {
-      setAssistantState("STANDBY");
-    }
+  const stopSpeaking = () => {
+    const audio = activeAudioRef.current;
+    activeAudioRef.current = null;
+    if (!audio) return;
+    audio.onplaying = null;
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    // Dropping the source aborts the stream, so the server stops synthesizing.
+    audio.removeAttribute("src");
+    audio.load();
   };
 
-  const speakText = (text: string) => {
-    if (!voiceFeedback || typeof window === "undefined") return;
-    const clean = text
-      .replace(/https?:\/\/\S+/g, " ")
-      .replace(/[*_#`\n]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 320);
+  useEffect(() => () => stopSpeaking(), []);
+
+  const reportVoiceProblem = async () => {
+    const now = Date.now();
+    if (now - lastVoiceErrorAtRef.current < 15_000) return;
+    lastVoiceErrorAtRef.current = now;
+    let reason = "Couldn't reach Microsoft's neural voice service. Check the internet connection and try again.";
+    try {
+      const res = await fetch("/api/v1/agent/speak/status");
+      const health = await res.json();
+      if (health?.lastError) reason = health.lastError;
+    } catch {}
+    toast.error("Soundwave voice unavailable", reason);
+  };
+
+  /** Speak `text`. Pass `voice` to speak even when "Speak replies aloud" is off (explicit replay/test). */
+  const speakText = (text: string, voiceOverride?: string) => {
+    if (typeof window === "undefined") return;
+    if (!voiceFeedbackRef.current && !voiceOverride) return;
+    const clean = speechTextFor(text);
     if (!clean) return;
 
-    if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
+    stopSpeaking();
+    const token = ++speechTokenRef.current;
+    const isCurrent = () => speechTokenRef.current === token;
+    const current = selectedVoiceRef.current;
+    const voice = isSoundwaveVoice(voiceOverride) ? voiceOverride : isSoundwaveVoice(current) ? current : loadAgentVoice();
+
+    const audio = new Audio(`/api/v1/agent/speak/stream?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(clean)}`);
+    audio.preload = "auto";
+    activeAudioRef.current = audio;
+    audio.onplaying = () => {
+      if (isCurrent()) setAssistantState("SPEAKING");
+    };
+    audio.onended = () => {
+      if (!isCurrent()) return;
       activeAudioRef.current = null;
-    }
-
-    setAssistantState("THINKING");
-
-    fetch("/api/v1/agent/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: clean,
-        voice: selectedVoice || "en-US-GuyNeural",
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && data.audioBase64) {
-          const snd = new Audio(`data:${data.mimeType || "audio/mpeg"};base64,${data.audioBase64}`);
-          activeAudioRef.current = snd;
-          snd.onplay = () => setAssistantState("SPEAKING");
-          snd.onended = () => setAssistantState("STANDBY");
-          snd.onerror = () => fallbackNaturalBrowser(clean);
-          snd.play().catch(() => fallbackNaturalBrowser(clean));
-        } else {
-          fallbackNaturalBrowser(clean);
-        }
-      })
-      .catch(() => {
-        fallbackNaturalBrowser(clean);
-      });
+      setAssistantState(idleState());
+    };
+    audio.onerror = () => {
+      if (!isCurrent()) return;
+      activeAudioRef.current = null;
+      setAssistantState(idleState());
+      void reportVoiceProblem();
+    };
+    audio.play().catch((err: DOMException) => {
+      if (!isCurrent() || err?.name === "AbortError") return;
+      if (err?.name === "NotAllowedError") {
+        setAssistantState(idleState());
+        toast.info("Click anywhere to let Soundwave talk", "The browser blocks sound until you interact with the page.");
+      }
+      // Anything else surfaces through onerror.
+    });
   };
 
-  // Scroll to bottom of conversation
+  // Turning replies off also silences the current one.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!voiceFeedback) stopSpeaking();
+  }, [voiceFeedback]);
+
+  // Sidebar "Generate Short" (?tab=generator) and the Voice Library's
+  // "Use in Command Center" (?voice=…) land here.
+  const handledSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    const voice = searchParams.get("voice");
+    const openGenerator = searchParams.get("tab") === "generator";
+    if (!voice && !openGenerator) {
+      handledSearchRef.current = null;
+      return;
+    }
+    // React's dev double-run of effects must not toast twice.
+    if (handledSearchRef.current === searchParams.toString()) return;
+    handledSearchRef.current = searchParams.toString();
+    if (isSoundwaveVoice(voice)) {
+      handleVoiceChange(voice);
+      toast.success("Voice selected", `${displayNameFor(voice)} now speaks for the agent and narrates your shorts.`);
+    }
+    if (openGenerator) setGeneratorModalOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("voice");
+    if (openGenerator) next.delete("tab");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Keep the newest message in view — scrolling only the chat box, never the page.
+  useEffect(() => {
+    const box = chatScrollRef.current;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   }, [chatMessages]);
+
+  const updateLeftFade = () => {
+    const el = leftColumnRef.current;
+    if (el) setLeftMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  };
+
+  useEffect(() => {
+    const el = leftColumnRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    updateLeftFade();
+    const observer = new ResizeObserver(updateLeftFade);
+    observer.observe(el);
+    for (const card of Array.from(el.children)) observer.observe(card);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedVideoUrl]);
+
+  // Size the orb from the space the center column really has, so the dock
+  // under it is always on screen (down to the desktop app's 1024×640 minimum).
+  useEffect(() => {
+    const el = centerColumnRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const update = () => {
+      const { width, height } = el.getBoundingClientRect();
+      const byWidth = width - 72;
+      // Below lg the page scrolls normally and the column's height follows the orb.
+      const byHeight = wide.matches ? height - CENTER_RESERVED_PX : 280;
+      const next = Math.round(Math.max(ORB_MIN, Math.min(ORB_MAX, byWidth, byHeight)));
+      setOrbSize((prev) => (Math.abs(prev - next) >= 2 ? next : prev));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    wide.addEventListener("change", update);
+    return () => {
+      observer.disconnect();
+      wide.removeEventListener("change", update);
+    };
+  }, []);
 
   // Format seconds to HH:MM:SS
   const formatUptime = (secs: number) => {
@@ -964,9 +1025,11 @@ export function AgentHub() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#070B14] text-gray-100 select-none font-sans p-3 sm:p-5 space-y-4">
+    // lg+: exactly the window's height — nothing on the page scrolls except the
+    // left column's cards and the conversation. The middle (orb + dock) is fixed.
+    <div className="flex flex-col gap-3 bg-[#070B14] text-gray-100 select-none font-sans p-3 sm:p-4 lg:h-full lg:min-h-0 lg:overflow-hidden">
       {/* ── 1. TOP HUD STATUS BAR ─────────────────────────────────────── */}
-      <header className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl border border-[#14233D] bg-[#0A1224]/80 backdrop-blur-md">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-xl border border-[#14233D] bg-[#0A1224]/80 backdrop-blur-md">
         {/* Left: Assistant Title & Online Status */}
         <div className="flex items-center gap-3">
           <span className="text-sm sm:text-base font-extrabold tracking-[0.25em] text-cyan-400 font-mono">
@@ -982,26 +1045,27 @@ export function AgentHub() {
         <div className="flex items-center gap-2 rounded-full border border-[#172A4A] bg-[#0C172E] px-4 py-1 text-xs text-gray-300 font-mono shadow-inner">
           <Clock className="h-3.5 w-3.5 text-cyan-400" />
           <span className="text-white font-semibold">{currentTimeStr || "2:52:27 PM"}</span>
-          <span className="text-gray-500">|</span>
-          <span className="text-gray-300">{currentDateStr || "September 20, 2026"}</span>
+          <span className="hidden text-gray-500 xl:inline">|</span>
+          <span className="hidden text-gray-300 xl:inline">{currentDateStr || "September 20, 2026"}</span>
         </div>
 
         {/* Right: Voice Capsule, Orbital Background Capsule & Settings Gear Button */}
         <div className="flex items-center gap-2">
-          {/* Quick Male Voice Selector Capsule */}
+          {/* Soundwave voice (replies + shorts) */}
           <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-2.5 py-1 text-xs text-gray-300 font-mono">
             <Volume2 className="h-3.5 w-3.5 text-cyan-400" />
             <select
               value={selectedVoice}
               onChange={(e) => handleVoiceChange(e.target.value)}
               className="bg-transparent text-cyan-400 font-semibold focus:outline-none cursor-pointer text-xs"
-              title="Select Assistant Voice"
+              title="The agent's Soundwave voice — used for replies and for the shorts it makes"
+              aria-label="Agent voice"
             >
-              <option value="en-US-ChristopherNeural" className="bg-[#0A1224] text-white">Christopher (US Male - Studio)</option>
-              <option value="en-US-GuyNeural" className="bg-[#0A1224] text-white">Guy (US Male - Deep)</option>
-              <option value="en-US-EricNeural" className="bg-[#0A1224] text-white">Eric (US Male - Narrator)</option>
-              <option value="en-GB-RyanNeural" className="bg-[#0A1224] text-white">Ryan (UK Male - British)</option>
-              <option value="en-US-AndrewNeural" className="bg-[#0A1224] text-white">Andrew (US Male - Warm)</option>
+              {AGENT_VOICES.map((v) => (
+                <option key={v.id} value={v.id} className="bg-[#0A1224] text-white">
+                  {agentVoiceLabel(v.id)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -1016,7 +1080,7 @@ export function AgentHub() {
           >
             <Youtube className="h-3.5 w-3.5 text-red-500" />
             <span className="text-white font-semibold">{orbitalStatus?.available ?? "—"}</span>
-            <span className="hidden sm:inline text-gray-400">unused Orbital videos</span>
+            <span className="hidden xl:inline text-gray-400">unused Orbital videos</span>
           </button>
 
           <button
@@ -1031,9 +1095,15 @@ export function AgentHub() {
       </header>
 
       {/* ── 2. THREE-COLUMN WORKSPACE DECK ────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
-        {/* ── LEFT COLUMN: SYSTEM TELEMETRY & WIDGETS (3.5 cols) ──────── */}
-        <div className="lg:col-span-3 space-y-3 flex flex-col justify-between">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)] lg:flex-1 lg:min-h-0">
+        {/* ── LEFT COLUMN: SYSTEM TELEMETRY & WIDGETS — scrolls on its own ── */}
+        <div
+          ref={leftColumnRef}
+          onScroll={updateLeftFade}
+          className={`lg:col-span-3 flex flex-col gap-3 [&>*]:shrink-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1 ${
+            leftMoreBelow ? "sw-fade-bottom" : ""
+          }`}
+        >
           {/* Card 1: System Stats */}
           <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-3 font-mono">
             <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
@@ -1090,7 +1160,10 @@ export function AgentHub() {
               </div>
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
                 <span className="text-[10px] text-gray-400 block">Disk</span>
-                <span className="text-xs font-bold text-white">{stats.diskUsedGB}/{stats.diskTotalGB} GB</span>
+                <span className="block text-xs font-bold leading-tight text-white">
+                  {stats.diskUsedGB}/<wbr />
+                  {stats.diskTotalGB} GB
+                </span>
               </div>
             </div>
           </div>
@@ -1368,14 +1441,14 @@ export function AgentHub() {
           </div>
         </div>
 
-        {/* ── CENTER COLUMN: ARC REACTOR ORB & DOCK (5.5 cols) ────────── */}
-        <div className="lg:col-span-5 flex flex-col items-center justify-between py-6 px-4">
-          <div className="flex-1 flex flex-col items-center justify-center w-full">
+        {/* ── CENTER COLUMN: ORB & DOCK — fixed, never scrolls ─────────── */}
+        <div ref={centerColumnRef} className="lg:col-span-5 flex flex-col items-center px-4 py-4 lg:min-h-0 lg:overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center w-full">
             {/* Jakubantalik Thinking Orb Visualizer (9 Hand-Tuned Cognitive States) */}
             <ThinkingOrbVisualizer
               assistantState={assistantState}
               isMicActive={isMicActive}
-              size={280}
+              size={orbSize}
               orbMode={orbMode}
               className="my-3"
               onOrbClick={() => {
@@ -1399,7 +1472,7 @@ export function AgentHub() {
                   : assistantState === "THINKING"
                   ? "Neural processing..."
                   : assistantState === "SPEAKING"
-                  ? "Synthesizing voice response..."
+                  ? `Speaking as ${displayNameFor(selectedVoice)}...`
                   : assistantState === "GENERATING" || isGenerating
                   ? `Rendering short (${progressPercent}%)...`
                   : "Listening for wake word..."}
@@ -1408,7 +1481,7 @@ export function AgentHub() {
           </div>
 
           {/* Bottom Dock Control Buttons (Shorts, Mic, Automation, Settings) */}
-          <div className="flex items-center gap-3 mt-8">
+          <div className="flex shrink-0 items-center gap-3 pt-4">
             <button
               onClick={() => setGeneratorModalOpen(true)}
               className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#172A4A] bg-[#0C172E] text-cyan-400 hover:border-cyan-500/50 hover:text-white transition-all cursor-pointer shadow-md shadow-cyan-950/20"
@@ -1457,9 +1530,9 @@ export function AgentHub() {
         </div>
 
         {/* ── RIGHT COLUMN: CONVERSATION STREAM & INPUT (3.5 cols) ─────── */}
-        <div className="lg:col-span-4 rounded-xl border border-[#14233D] bg-[#0A1224] p-4 flex flex-col h-[700px] justify-between font-mono">
+        <div className="lg:col-span-4 rounded-xl border border-[#14233D] bg-[#0A1224] p-4 flex flex-col h-[640px] lg:h-auto lg:min-h-0 font-mono">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#14233D] pb-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#14233D] pb-3">
             <h3 className="text-sm font-semibold text-white">Conversation</h3>
             <div className="flex items-center gap-2">
               <button
@@ -1479,7 +1552,8 @@ export function AgentHub() {
                 title="Clear conversation"
               >
                 <Trash2 className="h-3 w-3" />
-                <span>Clear</span>
+                {/* Icon-only while the chat column is narrow (lg, below xl). */}
+                <span className="lg:hidden xl:inline">Clear</span>
               </button>
 
               <button
@@ -1488,13 +1562,14 @@ export function AgentHub() {
                 title="Extract and download conversation"
               >
                 <Download className="h-3 w-3" />
-                <span>Extract Conversation</span>
+                <span className="hidden xl:inline 2xl:hidden">Export</span>
+                <span className="lg:hidden 2xl:inline">Extract Conversation</span>
               </button>
             </div>
           </div>
 
-          {/* Messages Feed */}
-          <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1 text-xs">
+          {/* Messages Feed — the conversation scrolls inside its own box */}
+          <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-3 py-3 pr-1 text-xs">
             {chatMessages.map((msg) => (
               <div
                 key={msg.id}
@@ -1587,7 +1662,7 @@ export function AgentHub() {
                   <div className="flex items-center gap-1.5">
                     {msg.sender === "assistant" && (
                       <button
-                        onClick={() => speakText(msg.text)}
+                        onClick={() => speakText(msg.text, selectedVoice)}
                         title="Replay Voice Speech"
                         className="text-gray-400 hover:text-cyan-400 transition-colors"
                       >
@@ -1599,11 +1674,10 @@ export function AgentHub() {
                 </div>
               </div>
             ))}
-            <div ref={chatEndRef} />
           </div>
 
           {/* Command Prompt Input Bar */}
-          <div className="pt-2 border-t border-[#14233D] space-y-2">
+          <div className="shrink-0 pt-2 border-t border-[#14233D] space-y-2">
             {/* Live short progress (Generate button or chat request) */}
             {isGenerating && (
               <div className="rounded-lg border border-cyan-500/30 bg-[#070D18] px-2.5 py-1.5 space-y-1 font-mono">
@@ -1716,16 +1790,17 @@ export function AgentHub() {
             {/* Voice & Resolution */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-gray-300 font-semibold">Voice Talent</label>
+                <label className="text-gray-300 font-semibold">Narrator (Soundwave voice)</label>
                 <select
                   value={selectedVoice}
-                  onChange={(e) => setSelectedVoice(e.target.value)}
+                  onChange={(e) => handleVoiceChange(e.target.value)}
                   className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
                 >
-                  <option value="en-US-JennyNeural">Jenny (en-US Female)</option>
-                  <option value="en-US-GuyNeural">Guy (en-US Male)</option>
-                  <option value="en-US-ChristopherNeural">Christopher (en-US Authority)</option>
-                  <option value="en-US-AriaNeural">Aria (en-US Expressive)</option>
+                  {AGENT_VOICES.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {agentVoiceLabel(v.id)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -2051,12 +2126,17 @@ export function AgentHub() {
                 <div className="space-y-2 p-3 rounded-lg border border-[#172A4A] bg-[#070D18]">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-bold text-white">Neural Voice Talent</p>
-                      <p className="text-[10px] text-gray-400">High-fidelity 24kHz Studio Speech Engine (Natural Male Pacing)</p>
+                      <p className="text-xs font-bold text-white">Soundwave Voice</p>
+                      <p className="text-[10px] text-gray-400">Microsoft neural voice for the agent's replies and for the shorts it narrates</p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => speakText("Voice system operational. Natural neural synthesis online.")}
+                      onClick={() =>
+                        speakText(
+                          `Hi, I'm ${displayNameFor(selectedVoice)}. This is the voice I'll use for my replies and for your shorts.`,
+                          selectedVoice,
+                        )
+                      }
                       className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all flex items-center gap-1 cursor-pointer"
                     >
                       <Volume2 className="h-3 w-3" /> Test Voice
@@ -2068,18 +2148,18 @@ export function AgentHub() {
                     onChange={(e) => handleVoiceChange(e.target.value)}
                     className="w-full rounded-lg border border-[#172A4A] bg-[#0C172E] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
                   >
-                    <option value="en-US-ChristopherNeural">Christopher (en-US Male - Studio JARVIS)</option>
-                    <option value="en-US-GuyNeural">Guy (en-US Male - Deep & Natural)</option>
-                    <option value="en-US-EricNeural">Eric (en-US Male - Dynamic Narrator)</option>
-                    <option value="en-GB-RyanNeural">Ryan (en-GB Male - British Sophisticated)</option>
-                    <option value="en-US-AndrewNeural">Andrew (en-US Male - Warm Storyteller)</option>
+                    {AGENT_VOICES.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {agentVoiceLabel(v.id)}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
                   <div>
-                    <p className="text-xs font-bold text-white">Voice Speech Synthesis</p>
-                    <p className="text-[10px] text-gray-400">Speak assistant replies aloud via browser speech audio</p>
+                    <p className="text-xs font-bold text-white">Speak Replies Aloud</p>
+                    <p className="text-[10px] text-gray-400">Reads every reply in the selected Soundwave voice</p>
                   </div>
                   <button
                     type="button"

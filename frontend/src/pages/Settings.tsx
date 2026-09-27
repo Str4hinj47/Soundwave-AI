@@ -14,15 +14,14 @@ import { useAuth } from "../store/auth";
 import { toast } from "../store/toast";
 import { http } from "../lib/api";
 import { cn } from "../lib/cn";
-import { formatBytes, formatNumber } from "../lib/format";
+import { formatNumber } from "../lib/format";
 import { PLANS, type Plan } from "../lib/plans";
 import { Button } from "../components/ui/Button";
 import { TextField } from "../components/ui/TextField";
 import { Select } from "../components/ui/Select";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
-import { idbUsage } from "../lib/idb";
-import { DEFAULT_VOICES } from "../lib/voices";
+import { AGENT_VOICES, agentVoiceLabel, loadAgentVoice, saveAgentVoice } from "../lib/voices";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
@@ -261,18 +260,12 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 
 // ── Preferences ─────────────────────────────────────────────────────────────
 function PreferencesTab() {
-  const [defaultVoice, setDefaultVoice] = useState(() => localStorage.getItem("sw.default_voice") ?? "en-US-ChristopherNeural");
-  const [exportQuality, setExportQuality] = useState(() => localStorage.getItem("sw.export_quality") ?? "medium");
+  // Same setting as the Command Center's voice picker.
+  const [agentVoice, setAgentVoice] = useState(() => loadAgentVoice());
   const [orbMode, setOrbMode] = useState(() => localStorage.getItem("soundwave_orb_mode") ?? "auto");
-  const [storageUsage, setStorageUsage] = useState(0);
-
-  useEffect(() => {
-    void idbUsage().then(setStorageUsage);
-  }, []);
 
   const savePrefs = () => {
-    localStorage.setItem("sw.default_voice", defaultVoice);
-    localStorage.setItem("sw.export_quality", exportQuality);
+    saveAgentVoice(agentVoice);
     localStorage.setItem("soundwave_orb_mode", orbMode);
     toast.success("Preferences saved");
   };
@@ -298,13 +291,14 @@ function PreferencesTab() {
       <Card title="Defaults & Agent Appearance" icon={<Palette className="h-4 w-4" />}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default voice (Male default)</label>
+            <label className="mb-1.5 block text-sm text-gray-300">Agent voice</label>
             <Select
-              value={defaultVoice}
-              onChange={setDefaultVoice}
-              options={DEFAULT_VOICES.map((v) => ({ value: v.id, label: `${v.displayName} (${v.gender}, ${v.accent})` }))}
-              ariaLabel="Default voice"
+              value={agentVoice}
+              onChange={setAgentVoice}
+              options={AGENT_VOICES.map((v) => ({ value: v.id, label: agentVoiceLabel(v.id) }))}
+              ariaLabel="Agent voice"
             />
+            <p className="mt-1 text-xs text-gray-500">The Soundwave voice the agent speaks with and narrates your shorts in.</p>
           </div>
           <div>
             <label className="mb-1.5 block text-sm text-gray-300">Thinking Orb Visualizer Mode</label>
@@ -326,15 +320,6 @@ function PreferencesTab() {
               ariaLabel="Orb mode"
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm text-gray-300">Default export quality</label>
-            <Select
-              value={exportQuality}
-              onChange={setExportQuality}
-              options={[{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }]}
-              ariaLabel="Default export quality"
-            />
-          </div>
           <Button onClick={savePrefs}>Save preferences</Button>
         </div>
       </Card>
@@ -348,9 +333,6 @@ function PreferencesTab() {
             </div>
             <Button size="sm" variant="outline" icon={<Download className="h-4 w-4" />} onClick={downloadData}>Export</Button>
           </div>
-          <p className="text-xs text-gray-500">
-            This browser is using <span className="text-white">{formatBytes(storageUsage)}</span> for local audio and projects.
-          </p>
         </div>
       </Card>
     </>

@@ -8,27 +8,31 @@ import { getStore } from "../lib/store.js";
 import { ORBITAL_CHANNEL_URL, getOrbitalCatalog, getOrbitalStatus } from "../lib/orbitalBackground.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, getActiveShortJobs, startShortJob } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
-import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
+import { DEFAULT_AGENT_VOICE, getVoiceHealth, normalizeVoiceId, streamEdgeTTS, synthesizeEdgeTTS } from "../lib/edgeTts.js";
 
 const router = Router();
 
 // Re-export / mount agentShort routes under /api/v1/agent
 router.use("/", agentShortRouter);
 
-// ── POST /speak — High-Fidelity 24kHz Neural Edge TTS Stream ────────────────
+// ── Agent speech: always a Soundwave (Microsoft neural) voice ───────────────
+// There is no browser/OS voice fallback: if the voice service can't be
+// reached the app shows why instead of reading replies in a robotic voice.
+
+/** Longest reply the agent reads aloud in one go. */
+const MAX_SPOKEN_CHARS = 1500;
+
+// POST /speak — whole utterance as base64 JSON (the Python desktop runner uses this).
 const speakSchema = z.object({
   text: z.string().min(1).max(3000),
-  voice: z.string().optional().default("en-US-GuyNeural"),
+  voice: z.string().optional().default(DEFAULT_AGENT_VOICE),
 });
 
 router.post("/speak", optionalAuth, validate({ body: speakSchema }), async (req, res, next) => {
   try {
     const { text, voice } = req.body as z.infer<typeof speakSchema>;
     try {
-      const result = await synthesizeEdgeTTS({
-        text,
-        voice: voice || "en-US-GuyNeural",
-      });
+      const result = await synthesizeEdgeTTS({ text, voice: normalizeVoiceId(voice), speed: 1 }, { attempts: 2 });
       return res.json({
         success: true,
         audioBase64: result.audioBase64,
@@ -36,15 +40,63 @@ router.post("/speak", optionalAuth, validate({ body: speakSchema }), async (req,
         duration: result.duration,
       });
     } catch (edgeError) {
-      return res.json({
-        success: false,
-        error: (edgeError as Error).message,
-        fallbackToBrowser: true,
-      });
+      return res.status(502).json({ success: false, error: (edgeError as Error).message });
     }
   } catch (e) {
     next(e);
   }
+});
+
+// GET /speak/stream?text=…&voice=… — MP3 streamed while Microsoft synthesizes
+// it, so the Command Center starts talking within a fraction of a second.
+// Same-origin audio, so the desktop app's CSP (media-src 'self') allows it.
+router.get("/speak/stream", optionalAuth, async (req, res) => {
+  const text = typeof req.query.text === "string" ? req.query.text.replace(/\s+/g, " ").trim().slice(0, MAX_SPOKEN_CHARS) : "";
+  if (!text) {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Nothing to say: pass ?text=" } });
+  }
+  const voice = normalizeVoiceId(req.query.voice);
+
+  const controller = new AbortController();
+  // A new reply (or leaving the page) closes this request: stop synthesizing.
+  res.on("close", () => {
+    if (!res.writableFinished) controller.abort();
+  });
+
+  let started = false;
+  try {
+    await streamEdgeTTS(
+      { text, voice, speed: 1 },
+      {
+        signal: controller.signal,
+        onAudio: (chunk) => {
+          if (!started) {
+            started = true;
+            res.status(200);
+            res.setHeader("Content-Type", "audio/mpeg");
+            res.setHeader("Cache-Control", "no-store");
+            res.setHeader("X-Soundwave-Voice", voice);
+            res.flushHeaders();
+          }
+          res.write(chunk);
+        },
+      },
+    );
+    res.end();
+  } catch (err) {
+    if (controller.signal.aborted) return;
+    if (started) {
+      res.end(); // keep what was already spoken
+      return;
+    }
+    console.warn(`[voice] ${voice}: ${(err as Error).message}`);
+    res.status(502).json({ error: { code: "VOICE_UNAVAILABLE", message: (err as Error).message } });
+  }
+});
+
+// GET /speak/status — why the last reply couldn't be spoken (shown in the app).
+router.get("/speak/status", (_req, res) => {
+  res.json(getVoiceHealth());
 });
 
 // ── POST /chat — Intelligent Conversational Agent & Tool Dispatcher ──────────
@@ -476,13 +528,24 @@ router.post("/generate-script", validate({ body: scriptSchema }), (req, res) => 
   });
 });
 
-// GET /jobs — recent agent automation jobs
+// GET /jobs — recent agent jobs, newest first.
+//   ?status=COMPLETED  only jobs in that state
+//   ?kind=short        only shorts the agent made (they carry a topic)
+//   ?limit=100         at most 200
+const JOB_STATUSES = new Set(["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]);
+
 router.get("/jobs", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
     const userId = req.user?.id ?? "agent-local";
-    const jobs = await store.listJobs(userId);
-    res.json({ jobs: jobs.slice(0, 20) });
+    const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
+    const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query.limit ?? ""), 10) || 20));
+    let jobs = await store.listJobs(userId);
+    if (JOB_STATUSES.has(status)) jobs = jobs.filter((j) => j.status === status);
+    if (req.query.kind === "short") {
+      jobs = jobs.filter((j) => typeof (j.settings as { topic?: unknown } | null)?.topic === "string");
+    }
+    res.json({ jobs: jobs.slice(0, limit) });
   } catch (e) {
     next(e);
   }

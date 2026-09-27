@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "../components/layout/Navbar";
 import { Badge } from "../components/ui/Badge";
-import { DEFAULT_VOICES } from "../lib/voices";
+import { DEFAULT_VOICES, loadAgentVoice } from "../lib/voices";
 import { cn } from "../lib/cn";
 
 type GenderFilter = "all" | "Female" | "Male";
@@ -23,6 +23,7 @@ export function VoiceLibrary({ standalone = true }: { standalone?: boolean }) {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const navigate = useNavigate();
+  const agentVoice = loadAgentVoice();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,13 +69,13 @@ export function VoiceLibrary({ standalone = true }: { standalone?: boolean }) {
               Neural Voice Library
             </h1>
             <p className="mt-1 max-w-2xl text-xs sm:text-sm text-gray-400">
-              Explore ultra-realistic 24kHz neural speech models and expressive narrators engineered for viral shorts and storytelling.
+              The Soundwave voices. Pick one with “Use in Command Center” and the agent replies in it and narrates your shorts with it.
             </p>
           </div>
 
           <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-950/20 px-3 py-1.5 text-xs text-cyan-300 font-mono">
             <Volume2 className="h-4 w-4 text-cyan-400" />
-            <span>24kHz Studio Neural Voices Ready</span>
+            <span>Agent voice: {DEFAULT_VOICES.find((v) => v.id === agentVoice)?.displayName ?? agentVoice}</span>
           </div>
         </div>
 
@@ -149,12 +150,17 @@ export function VoiceLibrary({ standalone = true }: { standalone?: boolean }) {
                 <div className="flex items-center gap-1.5">
                   <Badge tone={v.gender === "Male" ? "blue" : "violet"}>{v.gender}</Badge>
                   <Badge tone="gray">{v.accent}</Badge>
+                  {v.id === agentVoice && (
+                    <Badge tone="green" dot>
+                      Agent's voice
+                    </Badge>
+                  )}
                 </div>
                 <button
                   onClick={() => navigate(`/agent?voice=${v.id}`)}
                   className="mt-auto flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-gray-700 bg-[#070D18] text-xs font-semibold text-gray-300 transition-all hover:border-cyan-500 hover:text-white cursor-pointer"
                 >
-                  <Mic className="h-3.5 w-3.5 text-cyan-400" /> Use in Command Center
+                  <Mic className="h-3.5 w-3.5 text-cyan-400" /> {v.id === agentVoice ? "Open Command Center" : "Use in Command Center"}
                 </button>
               </div>
             ))}

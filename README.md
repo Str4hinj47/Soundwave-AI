@@ -1,11 +1,13 @@
 # Soundwave AI
 
-**Production-grade, client-side AI text-to-speech and video compositing studio.**
+**An AI agent that writes, narrates and renders viral shorts.**
 
-Generate studio-quality voiceovers with **Microsoft Neural voices** (via the
-free, key-less Edge TTS service) or with **your own cloned voice** (OmniVoice
-voice cloning, optional local sidecar), style and burn subtitles into video,
-and export finished MP4/WebM with FFmpeg.
+The app opens on the agent's **Command Center**. Press Generate — or tell the
+agent "make a short about…" — and it writes the script, narrates it in a
+**Soundwave voice** (Microsoft's neural voices via the free, key-less Edge TTS
+service), burns word-by-word captions, and renders it over an Orbital NCG
+gameplay video it hasn't used before. The agent is the only thing in the app
+that makes videos; it also answers in the chat, out loud, in the same voice.
 
 ---
 
@@ -37,7 +39,7 @@ JavaScript runtime yt-dlp needs — no Node or Deno install required.
 | --- | --- |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
 | Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
-| TTS | Server-side **Microsoft Neural voices** via `node-edge-tts` (24 kHz mono MP3 + word timings), offline formant fallback |
+| Voice | **Soundwave voices** = Microsoft neural voices (Edge TTS). A direct WebSocket client streams replies as they are synthesized (24 kHz mono MP3 + word timings); `node-edge-tts` is the backup engine. No robotic fallback voice: if the service is unreachable the app says why |
 | Backend | Express 5 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
 | Media | FFmpeg (`libx264`/`libvpx-vp9`, `libass` subtitles + ASS watermark, volume/fades, media probing) |
 
@@ -50,11 +52,10 @@ soundwave-ai/
 │   ├── main.py          # Unified CLI & GUI desktop launcher
 │   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA
-│   ├── src/pages/       # AgentHub, Studio, SubtitleEditor, VideoCompositor, Projects, ...
-│   ├── src/components/  # ui/ primitives, layout/, VoicePicker, Waveform, …
-│   ├── src/hooks/       # useTTS (edge-tts API call + offline fallback)
-│   ├── src/lib/         # audio, ttsEngine, voices, subtitlePresets, idb, api, …
-│   └── src/store/       # Zustand: auth, studio, toast
+│   ├── src/pages/       # AgentHub (Command Center), Dashboard, Projects, VoiceLibrary, ...
+│   ├── src/components/  # ui/ primitives, layout/, agent/ (orb, short cards)
+│   ├── src/lib/         # voices, agentShorts, api, format, …
+│   └── src/store/       # Zustand: auth, toast
 ├── server/              # Express API
 │   ├── src/routes/      # agent, auth, voices, tts, projects, upload, export, billing, ...
 │   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytdlp, plans, security
@@ -110,12 +111,12 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > Copy the env file with `copy .env.example .env` and fill in the two JWT
 > secrets (any random strings in dev).
 
-> **FFmpeg** is required only for *video export*. In dev, point `FFMPEG_PATH`
+> **FFmpeg** is required only for *rendering shorts*. In dev, point `FFMPEG_PATH`
 > at a static binary (e.g. `vendor/ffmpeg/ffmpeg`) or install ffmpeg. Note: the
 > static build has no `drawtext` filter, so the export watermark is rendered
 > through the `libass` filter (same path as subtitle burn-in).
 >
-> **YouTube import** (Video Compositor → "Import from YouTube") uses
+> **YouTube import** (the agent's Orbital NCG backgrounds) uses
 > [yt-dlp](https://github.com/yt-dlp/yt-dlp). A prebuilt zipapp lives in
 > `vendor/yt-dlp/yt-dlp` and is auto-detected — it only needs `python3`. To
 > override, install yt-dlp yourself (`pip install yt-dlp` / `brew install
@@ -127,14 +128,15 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > retries with the `web_embedded`/`web_safari` clients and, if cookies are
 > configured, once without cookies.
 >
-> **Portrait video** is a first-class export style: pick 9:16 in the Video
-> Compositor to render vertical video optimized for YouTube Shorts, TikTok,
-> and Instagram Reels (all resolutions supported, e.g. 1080p → 1080×1920).
+> **Voices** come from Microsoft's online Edge TTS service, so the agent needs
+> the internet to talk. `cd server && npx tsx scripts/edge-tts-smoke.ts` checks
+> every Soundwave voice against the live service (CI runs it on each desktop
+> build).
 
 ### Tests
 
 ```bash
-cd server && npm test            # vitest: 18 unit + API tests
+cd server && npm test            # vitest: unit + API tests
 cd frontend && npm run typecheck # tsc --noEmit
 cd frontend && npm run build     # production build
 ```
@@ -165,15 +167,18 @@ cd frontend && npm run build     # production build
 | POST | `/api/v1/upload/video\|audio\|avatar` | ✓ | magic-byte validated uploads |
 | POST | `/api/v1/upload/youtube` | ✓ | import a background video straight from a YouTube URL (yt-dlp) |
 | GET | `/api/v1/upload/file/:key` | ✓ | stream an imported/uploaded video (Range supported, for previews) |
-| POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
-| GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |
-| GET | `/api/v1/export/jobs/:id/download` | ✓ | download finished export |
+| GET | `/api/v1/export/jobs/:id` | — | a short's render status (SSE stream at `/events`) |
+| GET | `/api/v1/export/jobs/:id/download` | — | download a finished short |
 | POST | `/api/v1/agent/generate-short` | — | 1-click viral short generation (script + voice + TikTok captions + an unused Orbital NCG video imported via the YouTube link importer) |
 | GET | `/api/v1/agent/defaults` | — | default 9:16 vertical short configuration & presets |
 | GET | `/api/v1/agent/status` | — | agent status, binary availability & Orbital NCG background counts |
 | GET | `/api/v1/agent/orbital` | — | Orbital NCG background history: used videos, unused count, skipped videos |
 | POST | `/api/v1/agent/orbital/refresh` | — | re-list the Orbital NCG channel (picks up new uploads) |
 | POST | `/api/v1/agent/orbital/reset` | — | forget which Orbital NCG videos were used |
+| GET | `/api/v1/agent/jobs` | — | the agent's shorts, newest first (`?status=COMPLETED&kind=short&limit=`) |
+| GET | `/api/v1/agent/speak/stream` | — | the agent's reply as streamed MP3 in a Soundwave voice (`?text=&voice=`) |
+| POST | `/api/v1/agent/speak` | — | same, as base64 JSON (used by the Python desktop runner) |
+| GET | `/api/v1/agent/speak/status` | — | why the last reply couldn't be spoken (if it couldn't) |
 | GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
 | POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
 | GET | `/api/v1/ghost/macros` | — | list built-in and user custom automation macros |
@@ -206,7 +211,8 @@ State-changing requests require the `X-CSRF-Token` header matching the
 - **CSRF**: double-submit token cookie/header on all mutating routes.
 - **Headers** (Helmet): HSTS, `X-Content-Type-Options`, `X-Frame-Options`,
   referrer policy, and a strict CSP — `script-src 'self'`, `connect-src
-  'self'` (TTS is server-side, so no model CDN or WebAssembly is needed).
+  'self'`, `media-src 'self' blob:` (speech is server-side and streamed from
+  the app's own origin, so no model CDN, WebAssembly or data: audio is needed).
 - **Passwords**: bcrypt (cost 12). Reset/verification tokens are SHA-256 hashed
   at rest, single-use, 1-hour TTL.
 - **Uploads**: magic-byte validation, size caps, UUIDv7 file keys, extension
@@ -256,19 +262,19 @@ OAuth identity; new OAuth users are created email-verified with no password.
 | --- | --- | --- |
 | Postgres | not installed | JSON-file store, identical API |
 | Redis | not installed | in-process rate limiting |
-| FFmpeg | not installed | export jobs fail with a clear message; everything else works |
+| FFmpeg | not installed | shorts fail with a clear message; everything else works |
 | SMTP | not configured | emails are logged to stdout |
 | Stripe | not configured | billing returns 501 stubs |
-| Edge TTS (Microsoft) | unreachable | `/tts/synthesize` returns an error; the frontend falls back to the built-in demo voice |
-| Voice cloning | `VOICECLONE_URL` unset or sidecar down | "Cloned voices" tab is hidden / shows an offline notice; neural voices unaffected |
+| Edge TTS (Microsoft) | unreachable | the agent shows why it can't speak (no robotic stand-in voice); a short fails with a clear message instead of being narrated by another voice |
+| Voice cloning | `VOICECLONE_URL` unset or sidecar down | `/tts/clone*` answers with a clear error; the Soundwave voices are unaffected |
 
 ### Voice cloning (OmniVoice)
 
 An optional sidecar in [`voiceclone/`](voiceclone/README.md) runs
 [OmniVoice](https://github.com/k2-fsa/OmniVoice) (zero-shot voice cloning,
-600+ languages) next to the app. Upload a 3–10 s reference clip in the
-Studio's **Cloned voices** tab, generate with your cloned voice, and the audio
-flows through the exact same subtitles + video pipeline.
+600+ languages) next to the app. It is API-only (`/api/v1/tts/clone*`): the
+app no longer has a voiceover page — the agent is the only thing that makes
+videos, and it narrates with the Soundwave voices.
 
 - **Multi-user safe.** Cloned voices are owned per-user by this API (reference
   clips under `<dataDir>/voice-clips/<userId>/`); the sidecar is stateless and
@@ -278,7 +284,7 @@ flows through the exact same subtitles + video pipeline.
   behind a free Cloudflare Tunnel. See
   [voiceclone/README.md](voiceclone/README.md#4-free-hosting-no-home-pc-required).
   Set `VOICECLONE_TOKEN` on both ends whenever it's not localhost.
-- **Degrades gracefully.** Unset/offline sidecar → the UI hides the tab.
+- **Degrades gracefully.** Unset/offline sidecar → the clone endpoints say so.
 - **Controllable cost.** Same character quota as neural voices, plus
   `VOICECLONE_MIN_PLAN` (default `FREE`) if you want to reserve cloning for
   paying tiers.

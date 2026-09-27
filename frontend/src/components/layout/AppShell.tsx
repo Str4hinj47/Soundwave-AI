@@ -16,10 +16,7 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   X,
-  Plus,
   Activity,
-  Film,
-  Volume2,
 } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { LogoMark } from "../Logo";
@@ -43,10 +40,9 @@ const workspaceNav: NavItem[] = [
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-4 w-4" /> },
 ];
 
+// The agent is the only thing in the app that makes videos.
 const createNav: NavItem[] = [
   { to: "/agent?tab=generator", label: "Generate Short", icon: <Sparkles className="h-4 w-4" /> },
-  { to: "/studio/video", label: "Compose Video", icon: <Film className="h-4 w-4" /> },
-  { to: "/studio", label: "Generate Voiceover", icon: <Volume2 className="h-4 w-4" /> },
 ];
 
 const manageNav: NavItem[] = [
@@ -72,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     try {
       await signOut();
     } catch {}
-    navigate("/studio/video");
+    navigate("/agent");
     toast.info("Signed out", "You have been signed out of Soundwave AI.");
   };
 
@@ -89,15 +85,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (path.startsWith("/dashboard")) return { section: "Workspace", current: "Overview" };
     if (path.startsWith("/projects")) return { section: "Workspace", current: "Projects" };
     if (path.startsWith("/voices")) return { section: "Workspace", current: "Voice Library" };
-    if (path.startsWith("/studio/video")) return { section: "Create", current: "Compose Video" };
-    if (path.startsWith("/studio/subtitles")) return { section: "Create", current: "Subtitles" };
-    if (path.startsWith("/studio")) return { section: "Create", current: "Generate Voiceover" };
     if (path.startsWith("/settings")) return { section: "Manage", current: "Settings" };
     if (path.startsWith("/help")) return { section: "Manage", current: "Help & Support" };
-    return { section: "Workspace", current: "Studio" };
+    return { section: "Workspace", current: "Command Center" };
   };
 
   const breadcrumb = getBreadcrumb();
+  // The Command Center fills exactly one window on desktop-sized screens: the
+  // page itself never scrolls (its left column and chat scroll on their own).
+  const isCommandCenter = location.pathname.startsWith("/agent");
 
   const sidebar = (
     <div className="flex h-full flex-col bg-[#0F1017] text-gray-300 select-none">
@@ -216,7 +212,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[#0C0D12] text-gray-100 flex flex-col">
+    <div
+      className={cn(
+        "min-h-screen bg-[#0C0D12] text-gray-100 flex flex-col",
+        isCommandCenter && "lg:h-screen lg:min-h-0 lg:overflow-hidden",
+      )}
+    >
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 border-r border-white/[0.06] bg-[#0F1017] lg:block">
         {sidebar}
@@ -247,9 +248,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </AnimatePresence>
 
       {/* Main column */}
-      <div className="lg:pl-60 flex-1 flex flex-col">
+      <div className={cn("lg:pl-60 flex-1 flex flex-col", isCommandCenter && "lg:min-h-0")}>
         {/* Header Bar */}
-        <header className="sticky top-0 z-10 h-14 border-b border-white/[0.06] bg-[#0C0D12]/90 backdrop-blur-md">
+        <header className="sticky top-0 z-10 h-14 shrink-0 border-b border-white/[0.06] bg-[#0C0D12]/90 backdrop-blur-md">
           <div className="flex h-full items-center justify-between px-4 sm:px-6">
             {/* Left: Mobile trigger & Breadcrumbs */}
             <div className="flex items-center gap-3">
@@ -270,14 +271,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             {/* Right: Quick actions */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate("/agent?tab=generator")}
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 active:bg-blue-700 transition-colors shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Create with Agent</span>
-              </button>
-
               <button
                 onClick={() => navigate("/help")}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/[0.06] hover:text-white transition-colors"
@@ -303,8 +296,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           className={cn(
             "flex-1 w-full mx-auto",
-            location.pathname.startsWith("/agent")
-              ? "max-w-none px-2 sm:px-4 py-3"
+            isCommandCenter
+              ? "max-w-none px-2 sm:px-4 py-3 lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:[&>*]:flex-1"
               : "max-w-7xl px-4 py-6 sm:px-6 lg:px-8"
           )}
         >
