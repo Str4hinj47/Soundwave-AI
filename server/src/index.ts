@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { config, validateConfig, resolveFfmpegPath } from "./config.js";
 import { createApp } from "./app.js";
 import { getStore } from "./lib/store.js";
+import { startYtDlpSelfUpdate } from "./lib/ytdlp.js";
+import { ytDlpJsRuntime } from "./lib/jsRuntime.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[soundwave] Handled asynchronous rejection:", reason);
@@ -28,6 +30,12 @@ async function main() {
       `[soundwave] ⚠ ffmpeg NOT found (tried "${ffmpeg}") — video export will not work until it is installed. On Windows: \`winget install ffmpeg\`, then open a NEW terminal and restart this server.`,
     );
   }
+
+  // yt-dlp housekeeping, both in the background: the desktop app updates its
+  // own yt-dlp copy (YTDLP_AUTO_UPDATE) and checks that it can serve as
+  // yt-dlp's JavaScript runtime — done before the first import needs either.
+  startYtDlpSelfUpdate();
+  void ytDlpJsRuntime();
 
   const app = createApp();
   app.listen(config.port, config.bindHost, () => {

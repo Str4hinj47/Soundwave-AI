@@ -12,6 +12,12 @@ directories:
 # Everything ships as real files (no asar): the bundled server chdirs here and
 # spawns ffmpeg/yt-dlp against these paths.
 asar: false
+
+# yt-dlp uses the app binary itself as its JavaScript runtime for YouTube
+# (ELECTRON_RUN_AS_NODE — see server/src/lib/jsRuntime.ts), so never disable
+# Electron's RunAsNode fuse (electronFuses.runAsNode: false). The app would
+# fall back to a system node/deno that most customers don't have; CI's
+# verify-runtime.mjs step fails the build if that happens.
 npmRebuild: false
 
 files:

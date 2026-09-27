@@ -47,6 +47,11 @@ export const config = {
   ytDlpBrowser: str("YTDLP_BROWSER", ""),
   ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
+  // Run `yt-dlp --update-to <channel>` in the background at startup
+  // ("nightly", "stable", or channel@tag). The desktop app sets it for its
+  // writable user-data copy; the Windows launcher updates the vendored exe
+  // itself. Empty/"off" = never self-update.
+  ytDlpAutoUpdate: str("YTDLP_AUTO_UPDATE", ""),
   // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
   voiceCloneUrl: str("VOICECLONE_URL", ""),
   elevenLabsApiKey: str("ELEVENLABS_API_KEY", ""),

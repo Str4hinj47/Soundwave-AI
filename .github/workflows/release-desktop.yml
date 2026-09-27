@@ -1,5 +1,8 @@
 # Build the sellable Windows desktop app on a real Windows VM.
-# Trigger: push a tag (v*) or run manually from the Actions tab.
+# Trigger: push a tag (v*) to build AND publish a GitHub Release. Pushing app
+#          changes to any branch builds test installers too — uploaded as
+#          workflow artifacts only (Actions run page), nothing is published.
+#          Manual runs work once this file is on the default branch.
 # Produces: SoundwaveAI-Setup-<version>.exe (NSIS installer)
 #           SoundwaveAI-Portable-<version>.exe (single-file portable app)
 # Signing:  set repo secrets CSC_LINK + CSC_KEY_PASSWORD (base64 .pfx) and
@@ -9,10 +12,24 @@ name: Release Desktop
 on:
   push:
     tags: ["v*"]
+    branches: ["**"]
+    # Branch pushes only build when the app changed (GitHub ignores path
+    # filters for tag pushes, so every v* tag still builds).
+    paths:
+      - "server/**"
+      - "frontend/**"
+      - "desktop/**"
+      - "scripts/assets/**"
+      - ".github/workflows/release-desktop.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# A newer push supersedes an unfinished branch build; tag builds always finish.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   windows:
@@ -52,7 +69,25 @@ jobs:
           $ff = Get-ChildItem -Recurse -Filter ffmpeg.exe ffmpeg-extract | Select-Object -First 1
           if (-not $ff) { throw "ffmpeg.exe not found in essentials zip" }
           Copy-Item $ff.FullName desktop/bin/ffmpeg.exe -Force
-          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile desktop/bin/yt-dlp.exe
+          # yt-dlp from the nightly channel — YouTube fixes land there first and
+          # yt-dlp recommends it for regular users; stable is the fallback. The
+          # app keeps its user-data copy updated after install as well.
+          $ytdlpSources = @(
+            "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe",
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+          )
+          $gotYtDlp = $false
+          foreach ($src in $ytdlpSources) {
+            try {
+              Invoke-WebRequest -Uri $src -OutFile desktop/bin/yt-dlp.exe
+              $gotYtDlp = $true
+              break
+            } catch {
+              Write-Warning "yt-dlp download failed from ${src}: $_"
+            }
+          }
+          if (-not $gotYtDlp) { throw "could not download yt-dlp.exe" }
+          Write-Host "yt-dlp $(& desktop/bin/yt-dlp.exe --version)"
           Get-ChildItem desktop/bin | Format-Table Name, Length
 
       - name: Install desktop tooling (Electron + electron-builder)
@@ -73,6 +108,12 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npx electron-builder --win --publish never
+
+      # yt-dlp's JavaScript runtime (YouTube challenges) is the app binary
+      # itself running as Node — prove the packaged exe can do that.
+      - name: Verify yt-dlp can use the packaged app as its JavaScript runtime
+        working-directory: desktop
+        run: node verify-runtime.mjs
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { config, resolveFfmpegPath } from "../config.js";
+import { ytDlpJsRuntime } from "./jsRuntime.js";
 
 // ── YouTube import via yt-dlp ───────────────────────────────────────────────
 // Lets users attach a compositing background straight from a YouTube URL,
@@ -117,17 +118,99 @@ function ytDlpSpawn(): { command: string; prefixArgs: string[] } {
   return { command: bin, prefixArgs: [] };
 }
 
+// ── Background self-update ──────────────────────────────────────────────────
+// YouTube changes break older yt-dlp builds within weeks, and the fixes land
+// in yt-dlp's nightly channel first. With YTDLP_AUTO_UPDATE=<channel> (the
+// desktop app sets it for its writable copy in the user-data folder; the
+// Windows launcher updates the vendored exe itself) the server runs
+// `yt-dlp --update-to <channel>` once per start. yt-dlp calls wait for it —
+// bounded — so no import races the executable being replaced.
+
+const SELF_UPDATE_TIMEOUT_MS = 180_000;
+const SELF_UPDATE_MAX_WAIT_MS = 90_000;
+let selfUpdate: Promise<void> | null = null;
+
+/** Channel to update to, or "" when disabled (unset, "off", "0", "false", "no"). */
+function updateChannel(value: string): string {
+  const channel = value.trim();
+  return /^(off|0|false|no)$/i.test(channel) ? "" : channel;
+}
+
+/** Start the background self-update (no-op when disabled or already started). */
+export function startYtDlpSelfUpdate(channelSetting: string = config.ytDlpAutoUpdate): Promise<void> | null {
+  const channel = updateChannel(channelSetting);
+  if (!channel) return null;
+  if (selfUpdate) return selfUpdate;
+
+  selfUpdate = new Promise<void>((resolve) => {
+    const { command, prefixArgs } = ytDlpSpawn();
+    let output = "";
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (message: string, ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (ok) console.log(`[yt-dlp] ${message}`);
+      else console.warn(`[yt-dlp] ${message}`);
+      resolve();
+    };
+    console.log(`[yt-dlp] updating ${command} to the latest ${channel} build in the background…`);
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, [...prefixArgs, "--update-to", channel], { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      finish(`self-update could not start: ${(e as Error).message}`, false);
+      return;
+    }
+    timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(`self-update timed out after ${SELF_UPDATE_TIMEOUT_MS / 1000}s; keeping the current version`, false);
+    }, SELF_UPDATE_TIMEOUT_MS);
+    child.stdout?.on("data", (d: Buffer) => (output += d.toString()));
+    child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
+    child.on("error", (e) => finish(`self-update could not start: ${e.message}`, false));
+    child.on("close", (code) => {
+      // e.g. "Updated yt-dlp to nightly@2026.09.16.232951 …" / "yt-dlp is up to date (…)"
+      const last = output.trim().split(/\r?\n/).filter(Boolean).pop() ?? "";
+      if (code === 0) finish(`self-update: ${last || "done"}`, true);
+      else finish(`self-update failed (exit ${code}): ${last || "no output"}; keeping the current version`, false);
+    });
+  });
+  return selfUpdate;
+}
+
+/** Wait for a running self-update, but never block imports for too long. */
+async function selfUpdateSettled(): Promise<void> {
+  if (!selfUpdate) return;
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([selfUpdate, new Promise<void>((r) => (timer = setTimeout(r, SELF_UPDATE_MAX_WAIT_MS)))]);
+  clearTimeout(timer);
+}
+
+export function _resetYtDlpSelfUpdateForTests(): void {
+  selfUpdate = null;
+}
+
 interface RunResult {
   stdout: string;
   stderr: string;
 }
 
-function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => void): Promise<RunResult> {
+async function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => void): Promise<RunResult> {
+  // Never race a background self-update that is replacing the executable.
+  await selfUpdateSettled();
+  const runtime = await ytDlpJsRuntime();
   return new Promise((resolve, reject) => {
     const { command, prefixArgs } = ytDlpSpawn();
     let child;
     try {
-      child = spawn(command, [...prefixArgs, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+      child = spawn(command, [...prefixArgs, ...runtime.args, ...args], {
+        stdio: ["ignore", "pipe", "pipe"],
+        // Inside the desktop app the JS runtime is the app itself running as
+        // Node; the switch must reach the node process yt-dlp spawns.
+        ...(Object.keys(runtime.env).length > 0 ? { env: { ...process.env, ...runtime.env } } : {}),
+      });
     } catch (e) {
       reject(e);
       return;
@@ -199,12 +282,20 @@ function jsRuntimeHint(): string {
   return ` yt-dlp also needs Node.js 22 or newer (this server runs Node ${process.versions.node}) or Deno to solve YouTube's JavaScript challenges — installing Node 22+ may fix this.`;
 }
 
+function updateHint(): string {
+  // The desktop app updates its own copy at every start (YTDLP_AUTO_UPDATE).
+  if (updateChannel(config.ytDlpAutoUpdate)) {
+    return "Soundwave updates yt-dlp automatically each time it starts — restart the app to pick up a fix once yt-dlp releases one.";
+  }
+  return "Updating yt-dlp usually fixes it (start_windows.bat updates it on every start).";
+}
+
 function clientRejectedMessage(reason: string, tried: string[] = []): string {
   const clients = tried.length > 1 ? ` with every player client tried (${tried.join("; ")})` : "";
   return (
     `YouTube rejected yt-dlp's request${reason ? ` ("${reason}")` : ""}${clients}. ` +
     "This is a YouTube-side change that breaks yt-dlp from time to time, not a problem with this video. " +
-    "Updating yt-dlp usually fixes it (start_windows.bat updates it on every start)." +
+    updateHint() +
     jsRuntimeHint()
   );
 }
@@ -305,22 +396,8 @@ function rememberStrategy(url: string, label: string): void {
   workedForUrl.set(url, { label, at: now });
 }
 
-/**
- * yt-dlp only enables Deno by default. Offer the Node running this server too,
- * by absolute path so PATH order can't substitute an older node (yt-dlp
- * accepts Node 22+ since 2026.06). Under Electron (desktop app) execPath is
- * the app itself, so fall back to a `node` on PATH there. yt-dlp splits the
- * value at the first colon only, so Windows drive letters are safe.
- */
-export function jsRuntimeArgs(runtime: { execPath?: string; electron?: string } = {
-  execPath: process.execPath,
-  electron: process.versions.electron,
-}): string[] {
-  const node = runtime.execPath && !runtime.electron ? `node:${runtime.execPath}` : "node";
-  // Comma-joined values are rejected; yt-dlp wants one flag per runtime.
-  return ["--js-runtimes", node, "--js-runtimes", "deno"];
-}
-
+// The JS runtime (`--js-runtimes …`, see jsRuntime.ts) is added by run() for
+// every call, because inside the desktop app it needs a one-time probe.
 function baseArgs(opts: { playlist?: boolean; strategy?: ClientStrategy } = {}): string[] {
   const strategy = opts.strategy ?? CLIENT_STRATEGIES[0]!;
   const args = [
@@ -329,7 +406,6 @@ function baseArgs(opts: { playlist?: boolean; strategy?: ClientStrategy } = {}):
     "--no-warnings",
     "--ignore-config",
     "--restrict-filenames",
-    ...jsRuntimeArgs(),
   ];
   if (strategy.extractorArgs) args.push("--extractor-args", strategy.extractorArgs);
   if (strategy.cookies) {
@@ -546,7 +622,7 @@ export async function downloadVideo(
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());
   if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
-  // The JS runtime for YouTube's challenges comes from baseArgs (jsRuntimeArgs).
+  // The JS runtime for YouTube's challenges is added by run() (jsRuntime.ts).
   args.push("--newline", "-o", template, url);
 
   const cleanup = () => {

@@ -23,6 +23,12 @@ Both are built by CI from this repo (see [docs/RELEASING.md](docs/RELEASING.md)
 prompt). All your projects, uploads and settings live in
 `%APPDATA%\Soundwave AI\`.
 
+The app's YouTube import keeps working through YouTube changes: its yt-dlp
+lives in `%APPDATA%\Soundwave AI\bin\` and updates itself to the latest
+nightly build each time the app starts (just restart the app if an import
+fails with a YouTube-side error), and it uses the app itself as the
+JavaScript runtime yt-dlp needs — no Node or Deno install required.
+
 ---
 
 ## Architecture

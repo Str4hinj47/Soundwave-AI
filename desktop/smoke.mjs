@@ -8,6 +8,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
@@ -74,6 +75,22 @@ try {
 
   const voices = await get(`${appUrl}/api/v1/voices`);
   assert(voices.status === 200, "GET /api/v1/voices → 200");
+
+  // yt-dlp runs from a writable copy in the user-data folder (the desktop
+  // shell lets the server keep it updated) — and that copy must execute.
+  const ytdlpName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const bundledYtDlp = path.join(binDir, ytdlpName);
+  if (fs.existsSync(bundledYtDlp)) {
+    const copy = path.join(userDataDir, "bin", ytdlpName);
+    assert(
+      process.env.YTDLP_PATH === copy && fs.statSync(copy).size === fs.statSync(bundledYtDlp).size,
+      "yt-dlp runs from its writable user-data copy",
+    );
+    const version = execFileSync(copy, ["--version"], { encoding: "utf8", timeout: 60_000, windowsHide: true }).trim();
+    assert(/^\d{4}\.\d{2}\.\d{2}/.test(version), `user-data yt-dlp copy executes (version ${version})`);
+  } else {
+    console.log(`[smoke] – no bundled yt-dlp in ${binDir}; skipping the yt-dlp copy check`);
+  }
 
   console.log("[smoke] PASS — assembled app boots and serves the studio.");
   process.exit(0);

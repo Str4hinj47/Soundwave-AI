@@ -12,10 +12,17 @@ gh run watch                    # or watch the Actions tab
 gh run download -n soundwave-ai-windows -D dist/
 ```
 
+**Test builds without releasing:** every push to a branch that changes the
+app (`server/`, `frontend/`, `desktop/`, `scripts/assets/`, or the workflow)
+runs the same build and attaches the installers to that Actions run as the
+`soundwave-ai-windows` artifact — nothing is published. Only `v*` tags create
+a GitHub Release.
+
 CI (GitHub Actions, `windows-latest`) runs: typecheck + tests → frontend
-build → downloads ffmpeg/yt-dlp into `desktop/bin/` → assembles the app tree
-→ **smoke-tests the real assembled app on Windows** → `electron-builder`
-produces:
+build → downloads ffmpeg and the **nightly** yt-dlp into `desktop/bin/` →
+assembles the app tree → **smoke-tests the real assembled app on Windows** →
+`electron-builder` → **verifies the packaged exe works as yt-dlp's JavaScript
+runtime** (`desktop/verify-runtime.mjs`) → produces:
 
 | Artifact | What it is |
 | --- | --- |
@@ -26,6 +33,28 @@ The customer needs **nothing preinstalled**: no Node, no Python, no ffmpeg,
 no terminal, no `.bat`. Node runtime (inside Electron), ffmpeg, and yt-dlp all
 ship in the package; first run generates its own JWT secrets and uses
 `%APPDATA%\Soundwave AI\` for all data.
+
+## YouTube import (yt-dlp) in the desktop app
+
+YouTube changes regularly break older yt-dlp builds (e.g. "The page needs to
+be reloaded", Aug 2026), so the desktop app handles yt-dlp specially:
+
+- **Self-updating copy.** yt-dlp runs from
+  `%APPDATA%\Soundwave AI\bin\yt-dlp.exe`, copied from the installer on first
+  run (and again when an app update ships a newer build). Each start, the
+  server updates that copy to yt-dlp's **nightly** channel in the background
+  (`YTDLP_AUTO_UPDATE=nightly`); imports wait for the update so none races the
+  exe being replaced. Customers get YouTube fixes by restarting the app — no
+  new release needed. Set `YTDLP_AUTO_UPDATE=off` (or `stable`) in the
+  environment to change that.
+- **Built-in JavaScript runtime.** yt-dlp needs Node 22+ or Deno to solve
+  YouTube's JS challenges. The app hands yt-dlp its own exe with
+  `ELECTRON_RUN_AS_NODE=1` (Electron then behaves as plain Node), after a
+  startup probe that replays yt-dlp's exact commands; if that fails it falls
+  back to a node/deno on PATH. **Keep Electron's RunAsNode fuse enabled** —
+  CI's verify step fails the build otherwise.
+- The server log shows both: `[yt-dlp] self-update: …` and
+  `[yt-dlp] JavaScript runtime: this app running as Node v… (Electron …)`.
 
 ## Local build (any OS with network access)
 
@@ -46,8 +75,10 @@ What this repo already guarantees (no extra action needed):
 - **No `.bat` / PowerShell downloaders** anywhere in the customer path.
 - **No console windows** (child processes spawn with `windowsHide`).
 - **No admin/UAC prompt** (`requestedExecutionLevel: asInvoker`).
-- **No runtime `npm install` / downloads of executables** — binaries are in
-  the installer, fetched at build time.
+- **No runtime `npm install`** — binaries are in the installer, fetched at
+  build time. The one deliberate runtime download is yt-dlp updating its own
+  copy in `%APPDATA%\Soundwave AI\bin\` (see above) — the same thing every
+  yt-dlp front-end does, because YouTube breaks old versions within weeks.
 - Proper exe metadata (product name, version, icon, company copyright).
 
 What **no app can avoid without a certificate**: Windows SmartScreen shows

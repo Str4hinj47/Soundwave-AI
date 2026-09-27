@@ -47,8 +47,48 @@ function loadSecrets(secretsFile) {
 }
 
 /**
+ * yt-dlp breaks whenever YouTube changes something, and the copy inside the
+ * installer is frozen at build time. So it runs from a writable copy in the
+ * user-data folder, which the server keeps current (YTDLP_AUTO_UPDATE): the
+ * install folder may be read-only, and the portable build's is a temporary
+ * extraction that is gone after exit.
+ *
+ * The bundled exe is (re)copied when there is no copy yet, when the copy is
+ * damaged (empty), or when an app update ships a build newer than the copy.
+ * Returns { path, writable }, or null when no yt-dlp is bundled at all.
+ */
+function prepareYtDlp({ binDir, userDataDir }) {
+  const name = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const bundled = path.join(binDir, name);
+  if (!fs.existsSync(bundled)) return null;
+  const local = path.join(userDataDir, "bin", name);
+  try {
+    const source = fs.statSync(bundled);
+    let copy = null;
+    try {
+      copy = fs.statSync(local);
+    } catch {
+      /* first run */
+    }
+    if (!copy || copy.size === 0 || source.mtimeMs > copy.mtimeMs) {
+      fs.mkdirSync(path.dirname(local), { recursive: true });
+      const tmp = `${local}.${process.pid}.tmp`;
+      fs.copyFileSync(bundled, tmp);
+      if (process.platform !== "win32") fs.chmodSync(tmp, 0o755);
+      fs.renameSync(tmp, local);
+    }
+    return { path: local, writable: true };
+  } catch (err) {
+    console.warn(`[soundwave-desktop] running the bundled yt-dlp (could not copy it to ${local}: ${err.message})`);
+    return { path: bundled, writable: false };
+  }
+}
+
+/**
  * Apply the packaged-mode environment and chdir into the bundled server.
  * Returns { serverRoot, appUrl, port } once configured (server not started yet).
+ * `autoUpdateYtDlp` (the desktop shell sets it) lets the server update the
+ * user-data yt-dlp copy to the nightly build in the background at startup.
  *
  * Layout (both installed and unpackaged):
  *   appRoot/
@@ -57,8 +97,10 @@ function loadSecrets(secretsFile) {
  *     scripts/assets bundled static assets (music, …)
  *   binDir/
  *     ffmpeg.exe, yt-dlp.exe                              (runtime binaries)
+ *   userDataDir/bin/
+ *     yt-dlp.exe                  writable copy that runs (see prepareYtDlp)
  */
-async function applyServerEnv({ appRoot, binDir, userDataDir }) {
+async function applyServerEnv({ appRoot, binDir, userDataDir, autoUpdateYtDlp = false }) {
   const serverRoot = path.join(appRoot, "server");
   const webDist = path.join(appRoot, "frontend", "dist");
 
@@ -95,9 +137,15 @@ async function applyServerEnv({ appRoot, binDir, userDataDir }) {
   // server's own resolver fall back to vendor/PATH with a clear boot warning.
   const isWin = process.platform === "win32";
   const ffmpegBin = path.join(binDir, isWin ? "ffmpeg.exe" : "ffmpeg");
-  const ytdlpBin = path.join(binDir, isWin ? "yt-dlp.exe" : "yt-dlp");
   if (fs.existsSync(ffmpegBin)) env.FFMPEG_PATH = ffmpegBin;
-  if (fs.existsSync(ytdlpBin)) env.YTDLP_PATH = ytdlpBin;
+  const ytdlp = prepareYtDlp({ binDir, userDataDir });
+  if (ytdlp) {
+    env.YTDLP_PATH = ytdlp.path;
+    // yt-dlp's nightly channel gets YouTube fixes first (yt-dlp recommends it
+    // for regular users). A YTDLP_AUTO_UPDATE already in the environment
+    // ("off", "stable", …) wins.
+    if (autoUpdateYtDlp && ytdlp.writable) env.YTDLP_AUTO_UPDATE = process.env.YTDLP_AUTO_UPDATE || "nightly";
+  }
 
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
   process.chdir(serverRoot);
@@ -105,4 +153,4 @@ async function applyServerEnv({ appRoot, binDir, userDataDir }) {
   return { serverRoot, webDist, appUrl, port, dataDir };
 }
 
-module.exports = { applyServerEnv, getFreePort, loadSecrets };
+module.exports = { applyServerEnv, getFreePort, loadSecrets, prepareYtDlp };
