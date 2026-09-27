@@ -91,9 +91,13 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > plain re-run cannot repair packages that were only half-extracted.
 
 > **Windows:** the commands are the same in PowerShell or `cmd`. Install
-> [Node.js 20+](https://nodejs.org), and for video export install FFmpeg once
+> [Node.js 22+](https://nodejs.org) (yt-dlp needs Node 22+ to solve YouTube's
+> JavaScript challenges), and for video export install FFmpeg once
 > with `winget install ffmpeg` (then restart the terminal) or point
-> `FFMPEG_PATH` at `ffmpeg.exe`. YouTube import needs Python 3
+> `FFMPEG_PATH` at `ffmpeg.exe`. `start_windows.bat` downloads the standalone
+> `yt-dlp.exe` into `vendor\yt-dlp\` and updates it to the latest nightly on
+> every start — YouTube breaks older yt-dlp builds every few weeks. Without
+> it, YouTube import needs Python 3
 > ([python.org](https://www.python.org/downloads/) or `winget install
 > Python.Python.3.12`) — the vendored `vendor/yt-dlp/yt-dlp` zipapp is
 > launched through it automatically; `pip install yt-dlp` works too.
@@ -111,7 +115,11 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > override, install yt-dlp yourself (`pip install yt-dlp` / `brew install
 > yt-dlp`) or point `YTDLP_PATH` at the binary. `YTDLP_COOKIES` accepts a
 > cookies.txt export for bot/age-gated videos, and `YTDLP_MAX_DURATION`
-> (seconds) caps the length of importable videos.
+> (seconds) caps the length of importable videos. The importer uses yt-dlp's
+> own default player clients (retuned by its maintainers as YouTube changes)
+> and, when YouTube rejects them — e.g. *"The page needs to be reloaded"* —
+> retries with the `web_embedded`/`web_safari` clients and, if cookies are
+> configured, once without cookies.
 >
 > **Portrait video** is a first-class export style: pick 9:16 in the Video
 > Compositor to render vertical video optimized for YouTube Shorts, TikTok,

@@ -24,6 +24,9 @@ export interface YtMetadata {
 export type YtErrorCode =
   | "YT_NETWORK"
   | "YT_BOT_CHECK"
+  /** YouTube refused the player client yt-dlp used (e.g. "The page needs to
+   * be reloaded") — a YouTube-side change, not a problem with the video. */
+  | "YT_CLIENT_REJECTED"
   | "YT_UNAVAILABLE"
   | "YT_AGE_RESTRICTED"
   | "YT_COPYRIGHT"
@@ -34,10 +37,13 @@ export type YtErrorCode =
 
 export class YtDlpError extends Error {
   readonly code: YtErrorCode;
-  constructor(message: string, code: YtErrorCode) {
+  /** yt-dlp's own reason (its last ERROR line), when there was one. */
+  readonly detail: string;
+  constructor(message: string, code: YtErrorCode, detail = "") {
     super(message);
     this.name = "YtDlpError";
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -157,10 +163,50 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
       if (code === 0) resolve({ stdout, stderr });
       else {
         const f = friendlyError(stderr);
-        reject(new YtDlpError(f.message, f.code));
+        reject(new YtDlpError(f.message, f.code, lastErrorLine(stderr)));
       }
     });
   });
+}
+
+/** yt-dlp's final "ERROR: [youtube] <id>: <reason>" line, reduced to <reason>. */
+function lastErrorLine(stderr: string): string {
+  const line = stderr
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("ERROR:"))
+    .pop();
+  return (line ?? "")
+    .replace(/^ERROR:\s*/, "")
+    .replace(/^\[[^\]]+\]\s*(?:[A-Za-z0-9_-]{11}:\s*)?/, "")
+    .slice(0, 300);
+}
+
+// Answers YouTube gives when it refuses the player client yt-dlp used, rather
+// than the video itself — another client may well work (see CLIENT_STRATEGIES).
+const CLIENT_REJECTION_PATTERNS = [
+  "the page needs to be reloaded",
+  "requested format is not available",
+  "no video formats found",
+  "only images are available",
+  "http error 403",
+];
+
+/** Tip appended to YouTube-side errors when yt-dlp can't use this server's Node. */
+function jsRuntimeHint(): string {
+  const major = Number.parseInt(process.versions.node, 10);
+  if (process.versions.electron || !(major < 22)) return "";
+  return ` yt-dlp also needs Node.js 22 or newer (this server runs Node ${process.versions.node}) or Deno to solve YouTube's JavaScript challenges — installing Node 22+ may fix this.`;
+}
+
+function clientRejectedMessage(reason: string, tried: string[] = []): string {
+  const clients = tried.length > 1 ? ` with every player client tried (${tried.join("; ")})` : "";
+  return (
+    `YouTube rejected yt-dlp's request${reason ? ` ("${reason}")` : ""}${clients}. ` +
+    "This is a YouTube-side change that breaks yt-dlp from time to time, not a problem with this video. " +
+    "Updating yt-dlp usually fixes it (start_windows.bat updates it on every start)." +
+    jsRuntimeHint()
+  );
 }
 
 /** Turn yt-dlp's noisy stderr into a user-actionable message + failure class. */
@@ -170,6 +216,8 @@ function friendlyError(stderr: string): { message: string; code: YtErrorCode } {
   // unrelated messages and must not shadow the real cause.
   if (s.includes("timed out") || s.includes("tls/ssl") || s.includes("eof") || s.includes("connection") || s.includes("network") || s.includes("resolve"))
     return { message: "The connection to YouTube failed. Check the server's network access and try again.", code: "YT_NETWORK" };
+  if (CLIENT_REJECTION_PATTERNS.some((p) => s.includes(p)))
+    return { message: clientRejectedMessage(lastErrorLine(stderr)), code: "YT_CLIENT_REJECTED" };
   if (s.includes("sign in to confirm") || s.includes("not a bot"))
     return {
       message: "YouTube asked for a sign-in check before serving this video. Try another video, or configure YTDLP_COOKIES (a cookies.txt export) to pass the check.",
@@ -197,37 +245,145 @@ function friendlyError(stderr: string): { message: string; code: YtErrorCode } {
   };
 }
 
-function baseArgs(opts: { playlist?: boolean } = {}): string[] {
-  // --js-runtimes: yt-dlp only enables deno by default; Node is what ships
-  // with the app, so opt in explicitly for signature/n-sig challenges.
-  // player_client: try less bot-gated innertube clients first.
+// ── Player clients ──────────────────────────────────────────────────────────
+// YouTube serves video data through several "player clients" (web, TV,
+// visionOS, …) and regularly breaks individual ones. yt-dlp's maintainers
+// retune its default clients in every release (2026.08.19: visionos + web),
+// so those always go first. This file used to force `tv,web_safari`, which
+// failed with "The page needs to be reloaded" for every video once YouTube
+// changed the TV player in August 2026 (yt-dlp#17389). When YouTube rejects a
+// client, fall back to the alternatives below.
+interface ClientStrategy {
+  label: string;
+  /** `--extractor-args` value, or null for yt-dlp's own defaults. */
+  extractorArgs: string | null;
+  /** Pass the configured YTDLP_BROWSER / YTDLP_COOKIES. */
+  cookies: boolean;
+}
+
+const CLIENT_STRATEGIES: readonly ClientStrategy[] = [
+  { label: "yt-dlp default clients", extractorArgs: null, cookies: true },
+  // web_embedded is the maintainers' workaround in yt-dlp#17389; web_safari
+  // adds HLS formats. yt-dlp merges whatever any listed client returns.
+  { label: "web_embedded + web_safari clients", extractorArgs: "youtube:player_client=default,web_embedded,web_safari", cookies: true },
+  // Logged-in extraction is what yt-dlp#17389 breaks; public videos (like
+  // every Orbital NCG upload) need no cookies at all.
+  { label: "default clients without cookies", extractorArgs: null, cookies: false },
+];
+
+/** Worth retrying with another player client (not the video's fault). */
+const CLIENT_RETRY_CODES: ReadonlySet<YtErrorCode> = new Set(["YT_CLIENT_REJECTED", "YT_BOT_CHECK"]);
+
+// Which strategy last worked for a URL, so the download that follows a
+// metadata lookup skips attempts already known to fail. Per URL on purpose:
+// every other video starts from yt-dlp's defaults again, so a fallback's
+// quirks (no cookies, embedded player) never decide another video's fate.
+const STRATEGY_MEMORY_MS = 15 * 60_000;
+const workedForUrl = new Map<string, { label: string; at: number }>();
+
+/** Test hook: forget which player-client strategy worked for which URL. */
+export function _resetYtDlpClientStrategyForTests(): void {
+  workedForUrl.clear();
+}
+
+function hasCookies(): boolean {
+  return Boolean(config.ytDlpBrowser || config.ytDlpCookies);
+}
+
+/** Strategies to try for `url`. Without configured cookies the "without
+ * cookies" strategy would just repeat the first one, so it is left out. */
+function orderedStrategies(url: string): ClientStrategy[] {
+  const usable = CLIENT_STRATEGIES.filter((s) => s.cookies || hasCookies());
+  const memo = workedForUrl.get(url);
+  const preferred = memo && Date.now() - memo.at < STRATEGY_MEMORY_MS ? usable.find((s) => s.label === memo.label) : undefined;
+  return preferred ? [preferred, ...usable.filter((s) => s !== preferred)] : usable;
+}
+
+function rememberStrategy(url: string, label: string): void {
+  const now = Date.now();
+  for (const [key, memo] of workedForUrl) if (now - memo.at >= STRATEGY_MEMORY_MS) workedForUrl.delete(key);
+  workedForUrl.set(url, { label, at: now });
+}
+
+/**
+ * yt-dlp only enables Deno by default. Offer the Node running this server too,
+ * by absolute path so PATH order can't substitute an older node (yt-dlp
+ * accepts Node 22+ since 2026.06). Under Electron (desktop app) execPath is
+ * the app itself, so fall back to a `node` on PATH there. yt-dlp splits the
+ * value at the first colon only, so Windows drive letters are safe.
+ */
+export function jsRuntimeArgs(runtime: { execPath?: string; electron?: string } = {
+  execPath: process.execPath,
+  electron: process.versions.electron,
+}): string[] {
+  const node = runtime.execPath && !runtime.electron ? `node:${runtime.execPath}` : "node";
+  // Comma-joined values are rejected; yt-dlp wants one flag per runtime.
+  return ["--js-runtimes", node, "--js-runtimes", "deno"];
+}
+
+function baseArgs(opts: { playlist?: boolean; strategy?: ClientStrategy } = {}): string[] {
+  const strategy = opts.strategy ?? CLIENT_STRATEGIES[0]!;
   const args = [
     // Single-video imports never expand playlists; channel listings must.
     ...(opts.playlist ? [] : ["--no-playlist"]),
     "--no-warnings",
     "--ignore-config",
     "--restrict-filenames",
-    // Comma-joined values are rejected; yt-dlp wants one flag per runtime.
-    "--js-runtimes",
-    "node",
-    "--js-runtimes",
-    "deno",
+    ...jsRuntimeArgs(),
   ];
-  const hasCookies = Boolean(config.ytDlpBrowser || config.ytDlpCookies);
-  // Pairing cookies with player_client=tv invalidates the session (yt-dlp.net);
-  // with live browser cookies use web_safari only, otherwise try tv first.
-  args.push("--extractor-args", hasCookies ? "youtube:player_client=web_safari" : "youtube:player_client=tv,web_safari");
-  // Live browser cookies beat an exported file: no export step, no rotation.
-  if (config.ytDlpBrowser) args.push("--cookies-from-browser", config.ytDlpBrowser);
-  else if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
+  if (strategy.extractorArgs) args.push("--extractor-args", strategy.extractorArgs);
+  if (strategy.cookies) {
+    // Live browser cookies beat an exported file: no export step, no rotation.
+    if (config.ytDlpBrowser) args.push("--cookies-from-browser", config.ytDlpBrowser);
+    else if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
+  }
   return args;
+}
+
+/**
+ * Run a video extraction for `url`, retrying with the next player-client
+ * strategy while YouTube keeps rejecting the client (see CLIENT_STRATEGIES).
+ * `beforeRetry` cleans up after a failed attempt. When every strategy fails,
+ * the first error is reported: a fallback can fail for unrelated reasons (no
+ * cookies, embedding disabled) that would misdescribe the video.
+ */
+async function runWithClientFallback(
+  url: string,
+  buildArgs: (base: string[]) => string[],
+  timeoutMs: number,
+  onStderr?: (chunk: string) => void,
+  beforeRetry?: () => void,
+): Promise<RunResult> {
+  const strategies = orderedStrategies(url);
+  const tried: string[] = [];
+  let firstError: YtDlpError | null = null;
+  for (const [i, strategy] of strategies.entries()) {
+    if (i > 0) beforeRetry?.();
+    try {
+      const result = await run(buildArgs(baseArgs({ strategy })), timeoutMs, onStderr);
+      if (tried.length > 0) console.warn(`[yt-dlp] "${strategy.label}" worked for ${url} after: ${tried.join("; ")}.`);
+      rememberStrategy(url, strategy.label);
+      return result;
+    } catch (e) {
+      if (!(e instanceof YtDlpError) || !CLIENT_RETRY_CODES.has(e.code)) throw e;
+      firstError ??= e;
+      tried.push(strategy.label);
+      const next = strategies[i + 1];
+      console.warn(`[yt-dlp] ${strategy.label} failed: ${e.detail || e.message}${next ? ` - retrying with ${next.label}` : ""}`);
+    }
+  }
+  if (firstError?.code === "YT_CLIENT_REJECTED") {
+    throw new YtDlpError(clientRejectedMessage(firstError.detail, tried), "YT_CLIENT_REJECTED", firstError.detail);
+  }
+  throw firstError ?? new YtDlpError("YouTube download failed", "YT_FAILED");
 }
 
 /** Fetch title/duration without downloading — validates the video early. */
 export async function fetchMetadata(url: string, timeoutMs?: number): Promise<YtMetadata> {
-  const { stdout } = await run(
-    [
-      ...baseArgs(),
+  const { stdout } = await runWithClientFallback(
+    url,
+    (base) => [
+      ...base,
       "--skip-download",
       "--print",
       "%(title)s\n%(duration)s\n%(webpage_url)s\n%(channel)s\n%(channel_url)s",
@@ -367,8 +523,8 @@ export async function downloadVideo(
   fs.mkdirSync(dir, { recursive: true });
   const template = path.join(dir, `${uuid}.%(ext)s`);
 
+  // Everything after the per-strategy base args (see runWithClientFallback).
   const args = [
-    ...baseArgs(),
     "-f",
     formatOverride ??
       "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
@@ -390,15 +546,7 @@ export async function downloadVideo(
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());
   if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
-  // YouTube's innertube often requires a JS runtime for challenge signing.
-  // Surface Node (bundled with the app) so yt-dlp can find it.
-  const nodeDir = path.dirname(process.execPath || "");
-  if (nodeDir && nodeDir !== ".") {
-    const prev = process.env.PATH || "";
-    if (!prev.split(path.delimiter).includes(nodeDir)) {
-      process.env.PATH = `${nodeDir}${path.delimiter}${prev}`;
-    }
-  }
+  // The JS runtime for YouTube's challenges comes from baseArgs (jsRuntimeArgs).
   args.push("--newline", "-o", template, url);
 
   const cleanup = () => {
@@ -414,7 +562,7 @@ export async function downloadVideo(
   };
 
   try {
-    await run(args, timeoutMs ?? config.ytDlpTimeoutMs, (chunk) => {
+    await runWithClientFallback(url, (base) => [...base, ...args], timeoutMs ?? config.ytDlpTimeoutMs, (chunk) => {
       const m = chunk.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
       if (m) {
         onProgress?.(Math.min(99, parseFloat(m[1]!)));
@@ -428,7 +576,7 @@ export async function downloadVideo(
           onProgress?.(Math.min(99, Math.max(0, (secs / sectionSeconds) * 100)));
         }
       }
-    });
+    }, cleanup);
   } catch (e) {
     cleanup();
     throw e;
