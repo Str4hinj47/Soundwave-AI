@@ -117,6 +117,8 @@ describe("yt-dlp player clients", () => {
     expect(args).toContain("deno");
     // Plain Node needs no environment tweaks (ELECTRON_RUN_AS_NODE is desktop-only).
     expect(fake.spawns[0]!.env).toBeUndefined();
+    // Output is read as UTF-8, so yt-dlp must not write in the Windows code page.
+    expect(args.join(" ")).toContain("--encoding utf-8");
   });
 
   it("falls back to web_embedded when YouTube answers 'The page needs to be reloaded', and reuses it for that video only", async () => {
@@ -221,6 +223,7 @@ describe("yt-dlp player clients", () => {
     expect(listing.videos).toHaveLength(1);
     expect(extractorArgs(fake.calls[0]!)).toBeNull();
     expect(fake.calls[0]).not.toContain("--no-playlist");
+    expect(fake.calls[0]!.join(" ")).toContain("--encoding utf-8");
   });
 });
 

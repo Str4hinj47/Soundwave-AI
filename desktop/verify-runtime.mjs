@@ -61,7 +61,19 @@ const ytdlp = [path.join(path.dirname(exe), "resources", "bin", ytdlpName), path
 );
 if (!ytdlp) fail(`no ${ytdlpName} in the package or in desktop/bin`);
 
-const args = ["--js-runtimes", `node:${exe}`, "-v", "--ignore-config", "--no-playlist", "--skip-download", "--print", "%(id)s | %(title)s", TEST_VIDEO];
+const args = [
+  "--js-runtimes",
+  `node:${exe}`,
+  "-v",
+  "--ignore-config",
+  "--no-playlist",
+  "--encoding",
+  "utf-8",
+  "--skip-download",
+  "--print",
+  "%(id)s | %(title)s",
+  TEST_VIDEO,
+];
 console.log(`[verify-runtime] ${ytdlp} ${args.join(" ")}`);
 const result = await new Promise((resolve) => {
   const child = spawn(ytdlp, args, { env: { ...process.env, ...RUN_AS_NODE_ENV }, windowsHide: true });

@@ -406,6 +406,10 @@ function baseArgs(opts: { playlist?: boolean; strategy?: ClientStrategy } = {}):
     "--no-warnings",
     "--ignore-config",
     "--restrict-filenames",
+    // On Windows yt-dlp writes in the console code page, dropping or garbling
+    // non-ASCII titles and messages; its output is always read as UTF-8 here.
+    "--encoding",
+    "utf-8",
   ];
   if (strategy.extractorArgs) args.push("--extractor-args", strategy.extractorArgs);
   if (strategy.cookies) {
