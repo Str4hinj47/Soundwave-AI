@@ -70,6 +70,45 @@ export interface ShortBackground {
   section: { start: number; end: number } | null;
 }
 
+/** Server: Shorts Agent Autopilot snapshot (routes/autopilot.ts). */
+interface AutopilotEntry {
+  ts: string;
+  niche: string;
+  jobId: string | null;
+  status: "COMPLETED" | "FAILED";
+  videoUrl?: string;
+  youtubeUrl?: string;
+  durationSec?: number;
+  backgroundTitle?: string;
+  error?: string;
+}
+
+interface AutopilotSnapshot {
+  state: {
+    enabled: boolean;
+    current: { niche: string; jobId: string | null; startedAt: string } | null;
+    nextRunAt: string | null;
+    pausedReason: string | null;
+    consecutiveFailures: number;
+    producedTotal: number;
+    failedTotal: number;
+  };
+  config: {
+    intervalMinutes: number;
+    niches: string[];
+    voice: string;
+    resolution: "720p" | "1080p";
+    autoPublishYouTube: boolean;
+    youtubePrivacy: "public" | "unlisted" | "private";
+    reuseBackgrounds: boolean;
+    maxConsecutiveFailures: number;
+  };
+  history: AutopilotEntry[];
+  orbital: OrbitalStatus;
+}
+
+const AP_NICHES = ["psychology", "facts", "history", "finance", "ai", "motivation", "horror"] as const;
+
 interface OrbitalUsedEntry {
   id: string;
   url: string;
@@ -218,6 +257,13 @@ export function AgentHub() {
 
   const [resolution, setResolution] = useState<"720p" | "1080p">("720p");
   const [isGenerating, setIsGenerating] = useState(false);
+  // ── Autopilot (zero-click agent) ─────────────────────────────────────
+  const [autopilot, setAutopilot] = useState<AutopilotSnapshot | null>(null);
+  const [apBusy, setApBusy] = useState(false);
+  const [apInterval, setApInterval] = useState<number>(60);
+  const [apNiches, setApNiches] = useState<string[]>([...AP_NICHES]);
+  const [apReuseBg, setApReuseBg] = useState(false);
+  const [apAutoPublish, setApAutoPublish] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentStep, setCurrentStep] = useState("Ready");
   const [generatedScript, setGeneratedScript] = useState<string>("");
@@ -278,6 +324,16 @@ export function AgentHub() {
     } catch {}
   };
 
+  const fetchAutopilot = async () => {
+    try {
+      const res = await fetch("/api/v1/agent/autopilot");
+      if (res.ok) {
+        const data = (await res.json()) as AutopilotSnapshot;
+        setAutopilot(data);
+      }
+    } catch {}
+  };
+
   const fetchYtStatus = async () => {
     try {
       const res = await fetch("/api/v1/youtube/status");
@@ -321,6 +377,10 @@ export function AgentHub() {
     // Initial Orbital background status & YouTube status
     fetchOrbitalStatus();
     fetchYtStatus();
+    fetchAutopilot();
+
+    const apPoll = setInterval(fetchAutopilot, 15000);
+    return () => clearInterval(apPoll);
   }, []);
 
   // Clock & Uptime Ticker
@@ -904,6 +964,52 @@ export function AgentHub() {
       }, 1500);
     });
   };
+
+  // ── Autopilot: the agent runs the whole pipeline by itself ───────────
+  const handleApStart = async () => {
+    if (apNiches.length === 0) {
+      toast.error("Pick at least one niche for the autopilot.");
+      return;
+    }
+    setApBusy(true);
+    try {
+      const res = await fetch("/api/v1/agent/autopilot/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intervalMinutes: apInterval,
+          niches: apNiches,
+          reuseBackgrounds: apReuseBg,
+          autoPublishYouTube: apAutoPublish,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to start autopilot");
+      setAutopilot(data);
+      fetchOrbitalStatus();
+      toast.success("Autopilot started — the agent is making the first short now.");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to start autopilot");
+    } finally {
+      setApBusy(false);
+    }
+  };
+
+  const handleApStop = async () => {
+    setApBusy(true);
+    try {
+      const res = await fetch("/api/v1/agent/autopilot/stop", { method: "POST" });
+      if (res.ok) setAutopilot(await res.json());
+      toast.info("Autopilot stopped. Any render already in progress will finish.");
+    } catch {
+      toast.error("Failed to stop autopilot");
+    } finally {
+      setApBusy(false);
+    }
+  };
+
+  const toggleApNiche = (n: string) =>
+    setApNiches((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
 
   // ── 1-Click Viral Short Generator ───────────────────────────────────────
   const handleGenerateShort = async () => {
@@ -1673,6 +1779,132 @@ export function AgentHub() {
             <p className="text-gray-400 text-[11px]">
               Soundwave crafts high-retention curiosity hooks, synthesizes 24kHz Edge TTS narration, renders word-by-word TikTok subtitles, and composes 9:16 vertical video at 60fps.
             </p>
+
+            {/* ── AUTOPILOT: zero-click — the agent runs everything itself ── */}
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Activity className={autopilot?.state.enabled ? "h-4 w-4 text-emerald-400 animate-pulse" : "h-4 w-4 text-gray-500"} />
+                  <p className="text-[11px] font-semibold tracking-wide text-emerald-300">FULL AUTOPILOT</p>
+                </div>
+                <span className={
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                  (autopilot?.state.enabled
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-gray-700/40 text-gray-400")
+                }>
+                  {autopilot == null ? "…" : autopilot.state.enabled
+                    ? autopilot.state.current
+                      ? `RUNNING · ${autopilot.state.current.niche}`
+                      : "WAITING"
+                    : "OFF"}
+                </span>
+              </div>
+
+              <p className="text-[10px] leading-relaxed text-gray-400">
+                Turn it on once — the agent writes the script, synthesizes the voice, imports an unused Minecraft-parkour (Orbital NCG) background through the YouTube link importer, renders the 9:16 short, and keeps going on this interval. No clicks.
+              </p>
+
+              {autopilot?.state.pausedReason && (
+                <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-300">
+                  {autopilot.state.pausedReason}
+                </p>
+              )}
+              {!autopilot?.state.pausedReason && autopilot?.state.enabled && autopilot.state.nextRunAt && !autopilot.state.current && (
+                <p className="text-[10px] text-gray-500">
+                  Next short at {new Date(autopilot.state.nextRunAt).toLocaleTimeString()} · produced {autopilot.state.producedTotal}
+                  {autopilot.state.failedTotal > 0 ? ` · ${autopilot.state.failedTotal} failed` : ""}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {AP_NICHES.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => toggleApNiche(n)}
+                    disabled={autopilot?.state.enabled}
+                    className={
+                      "rounded-full border px-2 py-0.5 text-[10px] transition-colors " +
+                      (apNiches.includes(n)
+                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                        : "border-gray-700 text-gray-500 hover:text-gray-300")
+                    }
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-[10px] text-gray-400">
+                <label className="flex items-center gap-1.5">
+                  Every
+                  <select
+                    value={apInterval}
+                    onChange={(e) => setApInterval(Number(e.target.value))}
+                    disabled={autopilot?.state.enabled}
+                    className="rounded-md border border-gray-700 bg-[#0C172E] px-1.5 py-1 text-[10px] text-gray-200"
+                  >
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
+                    <option value={60}>1 hour</option>
+                    <option value={120}>2 hours</option>
+                    <option value={240}>4 hours</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer" title="When all unused Orbital videos are consumed, reset history and reuse them instead of pausing">
+                  <input type="checkbox" checked={apReuseBg} onChange={(e) => setApReuseBg(e.target.checked)} disabled={autopilot?.state.enabled} className="accent-emerald-500" />
+                  Reuse backgrounds when exhausted
+                </label>
+                <label
+                  className={"flex items-center gap-1.5 " + (ytStatus?.connected ? "cursor-pointer" : "opacity-50 cursor-not-allowed")}
+                  title={ytStatus?.connected ? "Upload each finished short to your connected YouTube channel" : "Connect YouTube in the Publish section below to enable auto-upload"}
+                >
+                  <input type="checkbox" checked={apAutoPublish && !!ytStatus?.connected} onChange={(e) => setApAutoPublish(e.target.checked)} disabled={!ytStatus?.connected || autopilot?.state.enabled} className="accent-red-500" />
+                  <Youtube className="h-3.5 w-3.5 text-red-400" /> Auto-publish to YouTube
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                {autopilot?.state.enabled ? (
+                  <button
+                    onClick={handleApStop}
+                    disabled={apBusy}
+                    className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 transition-colors"
+                  >
+                    {apBusy ? "Stopping…" : "Stop Autopilot"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleApStart}
+                    disabled={apBusy}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                  >
+                    {apBusy ? "Starting…" : "Start Autopilot"}
+                  </button>
+                )}
+                {autopilot && autopilot.history.length > 0 && (
+                  <div className="flex-1 space-y-1">
+                    {autopilot.history.slice(0, 3).map((h, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                        {h.status === "COMPLETED" ? (
+                          <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+                        ) : (
+                          <span className="h-3 w-3 shrink-0 text-rose-400">✕</span>
+                        )}
+                        <span className="truncate">
+                          {h.status === "COMPLETED" ? `${h.niche}${h.backgroundTitle ? ` · ${h.backgroundTitle}` : ""}` : `${h.niche} failed — ${h.error ?? "error"}`}
+                        </span>
+                        {h.videoUrl && (
+                          <a href={h.videoUrl} className="ml-auto shrink-0 text-cyan-400 hover:text-cyan-300" title="Download short">
+                            <Download className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Niche Grid */}
             <div className="space-y-1.5">

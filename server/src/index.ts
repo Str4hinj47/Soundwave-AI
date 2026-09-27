@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { config, validateConfig, resolveFfmpegPath } from "./config.js";
 import { createApp } from "./app.js";
 import { getStore } from "./lib/store.js";
+import { resumeAutopilotIfEnabled } from "./lib/autopilot.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[soundwave] Handled asynchronous rejection:", reason);
@@ -32,6 +33,7 @@ async function main() {
   const app = createApp();
   app.listen(config.port, config.bindHost, () => {
     console.log(`[soundwave] API listening on http://${config.bindHost}:${config.port} (${config.env})`);
+    resumeAutopilotIfEnabled();
   });
 }
 

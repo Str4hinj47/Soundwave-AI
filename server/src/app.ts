@@ -21,6 +21,7 @@ import jarvisShortRoutes from "./routes/jarvisShort.js";
 import creatorRoutes from "./routes/creator.js";
 import ghostRoutes from "./routes/ghost.js";
 import youtubeRoutes from "./routes/youtube.js";
+import autopilotRoutes from "./routes/autopilot.js";
 
 export function createApp() {
   const app = express();
@@ -67,6 +68,9 @@ export function createApp() {
   app.use("/api/v1/creator", creatorRoutes);
   app.use("/api/v1/ghost", ghostRoutes);
   app.use("/api/v1/youtube", youtubeRoutes);
+  // Zero-click Shorts Agent autopilot (start/stop/status + history).
+  app.use("/api/v1/agent", autopilotRoutes);
+  app.use("/api/v1/automation", autopilotRoutes);
 
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");
