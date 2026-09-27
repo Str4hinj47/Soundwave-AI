@@ -4,13 +4,13 @@ import { cn } from "../../lib/cn";
 type Tone = "blue" | "violet" | "green" | "red" | "amber" | "gray" | "gradient";
 
 const tones: Record<Tone, string> = {
-  blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-  violet: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  green: "bg-success/15 text-emerald-300 border-success/30",
-  red: "bg-danger/15 text-red-300 border-danger/30",
-  amber: "bg-warning/15 text-amber-300 border-warning/30",
-  gray: "bg-gray-700/40 text-gray-300 border-gray-600/40",
-  gradient: "bg-gradient-to-r from-blue-500 to-violet-500 text-white border-transparent",
+  blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  violet: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  green: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  red: "bg-red-500/10 text-red-400 border-red-500/20",
+  amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  gray: "bg-white/[0.05] text-gray-400 border-white/[0.08]",
+  gradient: "bg-blue-500/10 text-blue-400 border-blue-500/20",
 };
 
 export function Badge({
@@ -27,7 +27,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
         tones[tone],
         className,
       )}

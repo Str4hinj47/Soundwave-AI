@@ -21,6 +21,8 @@ import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
+import { AgentHub } from "./pages/AgentHub";
+import { CreatorStudio } from "./pages/CreatorStudio";
 import { NotFound } from "./pages/NotFound";
 
 function ScrollToTop() {
@@ -42,17 +44,6 @@ function FullPageLoader() {
       </div>
     </div>
   );
-}
-
-function RequireAuth({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-  if (loading && !user) return <FullPageLoader />;
-  if (!user) {
-    const redirect = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/signin?redirect=${redirect}`} replace />;
-  }
-  return <>{children}</>;
 }
 
 function PublicOnly({ children }: { children: ReactNode }) {
@@ -94,15 +85,6 @@ function VoiceLibraryRoute() {
 }
 
 export default function App() {
-  const loadSession = useAuth((s) => s.loadSession);
-  useEffect(() => {
-    // Resolve the auth state once on startup. Previously loadSession() was
-    // only reachable from a guarded effect inside RequireAuth whose condition
-    // could never be true on first render, which left `loading: true` forever
-    // and pinned every auth-gated route to the full-page loader.
-    void loadSession();
-  }, [loadSession]);
-
   return (
     <>
       <ScrollToTop />
@@ -132,74 +114,89 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
 
+        {/* Backward-compatible alias for /jarvis -> /agent */}
+        <Route path="/jarvis" element={<Navigate to="/agent" replace />} />
+        <Route path="/automation" element={<Navigate to="/agent" replace />} />
+
+        {/* Studio and Agent routes inside AppShell */}
+        <Route
+          path="/agent"
+          element={
+            <AppShell>
+              <AgentHub />
+            </AppShell>
+          }
+        />
+        <Route
+          path="/creator"
+          element={
+            <AppShell>
+              <CreatorStudio />
+            </AppShell>
+          }
+        />
         <Route
           path="/dashboard"
           element={
-            <RequireAuth>
-              <AppShell>
-                <Dashboard />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <Dashboard />
+            </AppShell>
           }
         />
         <Route
           path="/studio"
           element={
-            <RequireAuth>
-              <AppShell>
-                <Studio />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <Studio />
+            </AppShell>
           }
         />
         <Route
           path="/studio/subtitles"
           element={
-            <RequireAuth>
-              <AppShell>
-                <SubtitleEditor />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <SubtitleEditor />
+            </AppShell>
           }
         />
         <Route
           path="/studio/video"
           element={
-            <RequireAuth>
-              <AppShell>
-                <VideoCompositor />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <VideoCompositor />
+            </AppShell>
           }
         />
         <Route
           path="/projects"
           element={
-            <RequireAuth>
-              <AppShell>
-                <Projects />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <Projects />
+            </AppShell>
           }
         />
         <Route
           path="/settings/*"
           element={
-            <RequireAuth>
-              <AppShell>
-                <Settings />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <Settings />
+            </AppShell>
           }
         />
         <Route
           path="/help"
           element={
-            <RequireAuth>
-              <AppShell>
-                <Help />
-              </AppShell>
-            </RequireAuth>
+            <AppShell>
+              <Help />
+            </AppShell>
+          }
+        />
+        <Route
+          path="/voices"
+          element={
+            <AppShell>
+              <VoiceLibrary standalone={false} />
+            </AppShell>
           }
         />
         <Route path="*" element={<NotFound />} />

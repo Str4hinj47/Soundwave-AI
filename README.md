@@ -9,26 +9,48 @@ and export finished MP4/WebM with FFmpeg.
 
 ---
 
+## Get the app (Windows)
+
+Soundwave AI ships as a **native desktop app** — no terminal, no `.bat`, no
+Node/Python/FFmpeg to install:
+
+- **`SoundwaveAI-Setup-*.exe`** — installer with Start Menu + desktop
+  shortcut (double-click → install → launch).
+- **`SoundwaveAI-Portable-*.exe`** — single-file app, nothing to install.
+
+Both are built by CI from this repo (see [docs/RELEASING.md](docs/RELEASING.md)
+— including the code-signing steps that remove the Windows SmartScreen
+prompt). All your projects, uploads and settings live in
+`%APPDATA%\Soundwave AI\`.
+
+---
+
 ## Architecture
 
 | Layer | Stack |
 | --- | --- |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
+| Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
 | TTS | Server-side **Microsoft Neural voices** via `node-edge-tts` (24 kHz mono MP3 + word timings), offline formant fallback |
 | Backend | Express 5 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
 | Media | FFmpeg (`libx264`/`libvpx-vp9`, `libass` subtitles + ASS watermark, volume/fades, media probing) |
 
 ```
 soundwave-ai/
+├── soundwave-agent/     # Autonomous Desktop Shorts Agent & 2026 Viral Engine
+│   ├── viral_engine.py  # 7 High-performing niches & 6 viral hook frameworks
+│   ├── short_runner.py  # 1-Click & batch vertical video pipeline orchestrator
+│   ├── hud.py           # Futuristic acoustic visualizer HUD (no weird 3D avatar)
+│   ├── main.py          # Unified CLI & GUI desktop launcher
+│   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA
-│   ├── src/pages/       # Landing, Pricing, auth, Dashboard, Studio,
-│   │                    #   SubtitleEditor, VideoCompositor, Projects, Settings
+│   ├── src/pages/       # AgentHub, Studio, SubtitleEditor, VideoCompositor, Projects, ...
 │   ├── src/components/  # ui/ primitives, layout/, VoicePicker, Waveform, …
 │   ├── src/hooks/       # useTTS (edge-tts API call + offline fallback)
 │   ├── src/lib/         # audio, ttsEngine, voices, subtitlePresets, idb, api, …
 │   └── src/store/       # Zustand: auth, studio, toast
 ├── server/              # Express API
-│   ├── src/routes/      # auth, voices, tts, projects, upload, export, user, billing, apiKeys
+│   ├── src/routes/      # agent, auth, voices, tts, projects, upload, export, billing, ...
 │   ├── src/lib/         # auth (JWT/bcrypt), edgeTts, store (Prisma/JSON), ffmpeg, ytdlp, plans, security
 │   ├── prisma/schema.prisma
 │   └── scripts/generate-samples.ts
@@ -58,6 +80,15 @@ npm run dev                   # http://localhost:5173 (proxies /api → :4000)
 
 Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 (`server/data/store.json`) so the full product works locally with zero infra.
+
+> **One-click launchers:** `start_windows.bat` (Windows) and `start.sh`
+> (macOS/Linux) do all of the above and open the Agent Hub. Before starting the
+> servers they run `node scripts/ensure_node_deps.mjs server frontend`, which
+> checks every package against `package-lock.json` and repairs the install, so
+> an interrupted first `npm install` no longer shows up later in the browser as
+> `Failed to resolve import "lucide-react"`. If you install by hand and hit that
+> error, delete that folder's `node_modules` and run `npm install` again — a
+> plain re-run cannot repair packages that were only half-extracted.
 
 > **Windows:** the commands are the same in PowerShell or `cmd`. Install
 > [Node.js 20+](https://nodejs.org), and for video export install FFmpeg once
@@ -123,6 +154,21 @@ cd frontend && npm run build     # production build
 | POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
 | GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |
 | GET | `/api/v1/export/jobs/:id/download` | ✓ | download finished export |
+| POST | `/api/v1/agent/generate-short` | — | 1-click viral short generation (script + voice + TikTok captions + an unused Orbital NCG video imported via the YouTube link importer) |
+| GET | `/api/v1/agent/defaults` | — | default 9:16 vertical short configuration & presets |
+| GET | `/api/v1/agent/status` | — | agent status, binary availability & Orbital NCG background counts |
+| GET | `/api/v1/agent/orbital` | — | Orbital NCG background history: used videos, unused count, skipped videos |
+| POST | `/api/v1/agent/orbital/refresh` | — | re-list the Orbital NCG channel (picks up new uploads) |
+| POST | `/api/v1/agent/orbital/reset` | — | forget which Orbital NCG videos were used |
+| GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
+| POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
+| GET | `/api/v1/ghost/macros` | — | list built-in and user custom automation macros |
+| POST | `/api/v1/ghost/macros` | — | create/save custom sequential macro workflow |
+| DELETE | `/api/v1/ghost/macros/:id` | — | remove user custom automation macro |
+| POST | `/api/v1/ghost/decompose` | — | NLP step decomposer for natural language instructions |
+| POST | `/api/v1/ghost/execute` | — | run sequential automation macro with step telemetry |
+| POST | `/api/v1/creator/jump-cut` | — | auto-edit jump cut silence removal with FFmpeg |
+| POST | `/api/v1/creator/screen-frame` | — | screen recording framing with rounded corners & shadow |
 | GET/PATCH | `/api/v1/user/me` | ✓ | profile + password change |
 | GET | `/api/v1/user/usage` | ✓ | quota snapshot |
 | DELETE | `/api/v1/user/account` | ✓ | account deletion (30-day window) |

@@ -15,6 +15,12 @@ import exportRoutes from "./routes/export.js";
 import userRoutes from "./routes/user.js";
 import billingRoutes from "./routes/billing.js";
 import apiKeyRoutes from "./routes/apiKeys.js";
+import agentRoutes from "./routes/agent.js";
+import jarvisRoutes from "./routes/jarvis.js";
+import jarvisShortRoutes from "./routes/jarvisShort.js";
+import creatorRoutes from "./routes/creator.js";
+import ghostRoutes from "./routes/ghost.js";
+import youtubeRoutes from "./routes/youtube.js";
 
 export function createApp() {
   const app = express();
@@ -53,10 +59,39 @@ export function createApp() {
   app.use("/api/v1/billing", billingRoutes);
   app.use("/api/v1/api-keys", apiKeyRoutes);
 
+  // Soundwave Agent & Automation routes (with backward compatibility for jarvis)
+  app.use("/api/v1/agent", agentRoutes);
+  app.use("/api/v1/automation", agentRoutes);
+  app.use("/api/v1/jarvis", jarvisShortRoutes);
+  app.use("/api/v1/jarvis", jarvisRoutes);
+  app.use("/api/v1/creator", creatorRoutes);
+  app.use("/api/v1/ghost", ghostRoutes);
+  app.use("/api/v1/youtube", youtubeRoutes);
+
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");
   if (fs.existsSync(samplesDir)) {
     app.use("/voice-samples", express.static(samplesDir, { maxAge: "7d", immutable: true }));
+  }
+
+  // Packaged/desktop mode: serve the built SPA from this same origin (WEB_DIST).
+  // Hashed assets are immutable; index.html is the history fallback and never
+  // shadows /api (API 404s keep returning JSON from the notFound handler).
+  if (config.webDist && fs.existsSync(config.webDist)) {
+    app.use(
+      express.static(config.webDist, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }),
+    );
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(config.webDist, "index.html"));
+    });
   }
 
   app.use(notFoundHandler);

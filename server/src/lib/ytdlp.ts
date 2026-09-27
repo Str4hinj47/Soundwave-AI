@@ -13,6 +13,38 @@ export interface YtMetadata {
   title: string;
   duration: number; // seconds, 0 when unknown
   webpageUrl: string;
+  /** Uploader channel name (YouTube), empty when unavailable. */
+  channel?: string;
+  /** Channel page URL (e.g. https://www.youtube.com/@OrbitalNCG), empty when unavailable. */
+  channelUrl?: string;
+}
+
+/** Machine-readable failure class, so callers can tell a broken video (skip
+ * it, try another) from a broken connection / missing binary (stop). */
+export type YtErrorCode =
+  | "YT_NETWORK"
+  | "YT_BOT_CHECK"
+  | "YT_UNAVAILABLE"
+  | "YT_AGE_RESTRICTED"
+  | "YT_COPYRIGHT"
+  | "YT_UNSUPPORTED"
+  | "YT_NOT_INSTALLED"
+  | "YT_TIMEOUT"
+  | "YT_FAILED";
+
+export class YtDlpError extends Error {
+  readonly code: YtErrorCode;
+  constructor(message: string, code: YtErrorCode) {
+    super(message);
+    this.name = "YtDlpError";
+    this.code = code;
+  }
+}
+
+/** Failures tied to one specific video — another video may still import fine. */
+export function isVideoSpecificYtError(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  return code === "YT_UNAVAILABLE" || code === "YT_AGE_RESTRICTED" || code === "YT_COPYRIGHT" || code === "YT_UNSUPPORTED";
 }
 
 /** Only real YouTube URLs are accepted (SSRF / abuse guard). */
@@ -46,7 +78,12 @@ export function parseYouTubeUrl(raw: string): URL | null {
  * via its shebang, Windows spawns it through `python`/`py`. */
 export function resolveYtDlpPath(): string {
   if (config.ytDlpPath) return config.ytDlpPath;
+  const isWin = process.platform === "win32";
   const candidates = [
+    path.join(process.cwd(), "..", "vendor", "yt-dlp", isWin ? "yt-dlp.exe" : "yt-dlp"),
+    path.join(process.cwd(), "vendor", "yt-dlp", isWin ? "yt-dlp.exe" : "yt-dlp"),
+    path.join(process.cwd(), "..", "vendor", "yt-dlp", "yt-dlp.exe"),
+    path.join(process.cwd(), "vendor", "yt-dlp", "yt-dlp.exe"),
     path.join(process.cwd(), "..", "vendor", "yt-dlp", "yt-dlp"),
     path.join(process.cwd(), "vendor", "yt-dlp", "yt-dlp"),
     "/usr/local/bin/yt-dlp",
@@ -54,8 +91,9 @@ export function resolveYtDlpPath(): string {
   ];
   for (const c of candidates) {
     try {
-      fs.accessSync(c, fs.constants.X_OK);
-      return c;
+      if (fs.existsSync(c) && fs.statSync(c).size > 100_000) {
+        return c;
+      }
     } catch {
       /* keep looking */
     }
@@ -92,7 +130,7 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
     let stderr = "";
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new Error(`yt-dlp timed out after ${Math.round(timeoutMs / 1000)}s`));
+      reject(new YtDlpError(`yt-dlp timed out after ${Math.round(timeoutMs / 1000)}s`, "YT_TIMEOUT"));
     }, timeoutMs);
     child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
     child.stderr.on("data", (d: Buffer) => {
@@ -105,8 +143,9 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
       const err = e as NodeJS.ErrnoException;
       if (err.code === "ENOENT") {
         reject(
-          new Error(
+          new YtDlpError(
             "yt-dlp is not installed. Install it (`pip install yt-dlp`), set YTDLP_PATH, or keep the vendored vendor/yt-dlp/yt-dlp zipapp (requires python3).",
+            "YT_NOT_INSTALLED",
           ),
         );
       } else {
@@ -116,59 +155,189 @@ function run(args: string[], timeoutMs: number, onStderr?: (chunk: string) => vo
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(friendlyError(stderr)));
+      else {
+        const f = friendlyError(stderr);
+        reject(new YtDlpError(f.message, f.code));
+      }
     });
   });
 }
 
-/** Turn yt-dlp's noisy stderr into a user-actionable message. */
-function friendlyError(stderr: string): string {
+/** Turn yt-dlp's noisy stderr into a user-actionable message + failure class. */
+function friendlyError(stderr: string): { message: string; code: YtErrorCode } {
   const s = stderr.toLowerCase();
   // Network failures first — substrings like "page" or "bot" appear in
   // unrelated messages and must not shadow the real cause.
   if (s.includes("timed out") || s.includes("tls/ssl") || s.includes("eof") || s.includes("connection") || s.includes("network") || s.includes("resolve"))
-    return "The connection to YouTube failed. Check the server's network access and try again.";
+    return { message: "The connection to YouTube failed. Check the server's network access and try again.", code: "YT_NETWORK" };
   if (s.includes("sign in to confirm") || s.includes("not a bot"))
-    return "YouTube asked for a sign-in check before serving this video. Try another video, or configure YTDLP_COOKIES (a cookies.txt export) to pass the check.";
+    return {
+      message: "YouTube asked for a sign-in check before serving this video. Try another video, or configure YTDLP_COOKIES (a cookies.txt export) to pass the check.",
+      code: "YT_BOT_CHECK",
+    };
   if (s.includes("video unavailable") || s.includes("private video"))
-    return "This video is unavailable, private, or has been removed.";
+    return { message: "This video is unavailable, private, or has been removed.", code: "YT_UNAVAILABLE" };
+  if (s.includes("members-only") || s.includes("join this channel"))
+    return { message: "This video is members-only.", code: "YT_UNAVAILABLE" };
+  if (s.includes("premieres in") || s.includes("live event will begin") || s.includes("is not available yet"))
+    return { message: "This video hasn't premiered yet.", code: "YT_UNAVAILABLE" };
   if (s.includes("age-restrict") || s.includes("age gate") || s.includes("age verif") || s.includes("confirm your age"))
-    return "This video is age-restricted and requires account cookies (YTDLP_COOKIES).";
-  if (s.includes("copyright")) return "This video can't be downloaded due to a copyright restriction.";
+    return { message: "This video is age-restricted and requires account cookies (YTDLP_COOKIES).", code: "YT_AGE_RESTRICTED" };
+  if (s.includes("copyright")) return { message: "This video can't be downloaded due to a copyright restriction.", code: "YT_COPYRIGHT" };
   if (s.includes("unsupported url") || s.includes("no suitable") || s.includes("unable to extract"))
-    return "That URL doesn't look like a downloadable YouTube video.";
+    return { message: "That URL doesn't look like a downloadable YouTube video.", code: "YT_UNSUPPORTED" };
   const line = stderr
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.startsWith("ERROR:"))
     .pop();
-  return (line ?? stderr.trim().split("\n").pop() ?? "YouTube download failed").replace(/^ERROR:\s*/, "").slice(0, 300);
+  return {
+    message: (line ?? stderr.trim().split("\n").pop() ?? "YouTube download failed").replace(/^ERROR:\s*/, "").slice(0, 300),
+    code: "YT_FAILED",
+  };
 }
 
-function baseArgs(): string[] {
-  const args = ["--no-playlist", "--no-warnings", "--ignore-config", "--restrict-filenames"];
-  if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
+function baseArgs(opts: { playlist?: boolean } = {}): string[] {
+  // --js-runtimes: yt-dlp only enables deno by default; Node is what ships
+  // with the app, so opt in explicitly for signature/n-sig challenges.
+  // player_client: try less bot-gated innertube clients first.
+  const args = [
+    // Single-video imports never expand playlists; channel listings must.
+    ...(opts.playlist ? [] : ["--no-playlist"]),
+    "--no-warnings",
+    "--ignore-config",
+    "--restrict-filenames",
+    // Comma-joined values are rejected; yt-dlp wants one flag per runtime.
+    "--js-runtimes",
+    "node",
+    "--js-runtimes",
+    "deno",
+  ];
+  const hasCookies = Boolean(config.ytDlpBrowser || config.ytDlpCookies);
+  // Pairing cookies with player_client=tv invalidates the session (yt-dlp.net);
+  // with live browser cookies use web_safari only, otherwise try tv first.
+  args.push("--extractor-args", hasCookies ? "youtube:player_client=web_safari" : "youtube:player_client=tv,web_safari");
+  // Live browser cookies beat an exported file: no export step, no rotation.
+  if (config.ytDlpBrowser) args.push("--cookies-from-browser", config.ytDlpBrowser);
+  else if (config.ytDlpCookies) args.push("--cookies", config.ytDlpCookies);
   return args;
 }
 
 /** Fetch title/duration without downloading — validates the video early. */
-export async function fetchMetadata(url: string): Promise<YtMetadata> {
+export async function fetchMetadata(url: string, timeoutMs?: number): Promise<YtMetadata> {
   const { stdout } = await run(
-    [...baseArgs(), "--skip-download", "--print", "%(title)s\n%(duration)s\n%(webpage_url)s", url],
-    Math.min(config.ytDlpTimeoutMs, 60_000),
+    [
+      ...baseArgs(),
+      "--skip-download",
+      "--print",
+      "%(title)s\n%(duration)s\n%(webpage_url)s\n%(channel)s\n%(channel_url)s",
+      url,
+    ],
+    timeoutMs ?? Math.min(config.ytDlpTimeoutMs, 60_000),
   );
-  const lines = stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const [title, durationRaw, webpageUrl] = lines;
+  // Parse right-anchored so multi-line titles and empty channel fields cannot
+  // shift the fixed positions of duration / webpage URL / channel fields.
+  const lines = stdout.split("\n").map((l) => l.trim());
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length < 3) throw new Error("Could not read this YouTube video's details.");
+  const channelUrl = lines.length >= 5 ? lines.pop()! : "";
+  const channel = lines.length >= 4 ? lines.pop()! : "";
+  const webpageUrl = lines.pop() ?? url;
+  const durationRaw = lines.pop() ?? "0";
+  const title = lines.join("\n");
   if (!title) throw new Error("Could not read this YouTube video's details.");
   const duration = Number.parseFloat(durationRaw ?? "0");
   return {
     title: title.slice(0, 200),
     duration: Number.isFinite(duration) ? duration : 0,
     webpageUrl: webpageUrl ?? url,
+    channel: channel || "",
+    channelUrl: channelUrl || "",
   };
+}
+
+export interface YtChannelVideo {
+  id: string;
+  title: string;
+  /** Seconds, null when YouTube didn't report it in the flat listing. */
+  duration: number | null;
+  /** Canonical watch URL — exactly what a user would paste into the importer. */
+  url: string;
+}
+
+export interface YtChannelListing {
+  channelId: string;
+  channelName: string;
+  videos: YtChannelVideo[];
+}
+
+const YT_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * List the uploads on a channel tab (e.g. https://www.youtube.com/@OrbitalNCG/videos)
+ * without resolving each video — one fast `--flat-playlist` request. Upcoming
+ * premieres, live streams and gated entries are dropped: they can't be imported.
+ */
+export async function listChannelVideos(
+  channelTabUrl: string,
+  opts: { limit?: number; timeoutMs?: number } = {},
+): Promise<YtChannelListing> {
+  const args = [...baseArgs({ playlist: true }), "--flat-playlist", "--dump-single-json"];
+  if (opts.limit && opts.limit > 0) args.push("--playlist-end", String(Math.floor(opts.limit)));
+  args.push(channelTabUrl);
+  const { stdout } = await run(args, opts.timeoutMs ?? Math.min(config.ytDlpTimeoutMs, 120_000));
+
+  let data: unknown;
+  try {
+    data = JSON.parse(stdout);
+  } catch {
+    throw new YtDlpError("Could not read the channel's video list.", "YT_FAILED");
+  }
+
+  type Entry = Record<string, unknown> & { entries?: unknown[] };
+  const root = (data ?? {}) as Entry;
+  const videos: YtChannelVideo[] = [];
+  const seen = new Set<string>();
+  const skipLive = new Set(["is_upcoming", "is_live", "post_live"]);
+  const skipAvailability = new Set(["private", "premium_only", "subscriber_only", "needs_auth"]);
+  const walk = (entries: unknown[] | undefined, depth: number) => {
+    if (!Array.isArray(entries) || depth > 3) return;
+    for (const raw of entries) {
+      const e = (raw ?? {}) as Entry;
+      // A bare channel URL yields nested tab playlists — descend into them.
+      if (Array.isArray(e.entries)) {
+        walk(e.entries, depth + 1);
+        continue;
+      }
+      const id = typeof e.id === "string" ? e.id : "";
+      if (!YT_VIDEO_ID.test(id) || seen.has(id)) continue;
+      if (typeof e.live_status === "string" && skipLive.has(e.live_status)) continue;
+      if (typeof e.availability === "string" && skipAvailability.has(e.availability)) continue;
+      const duration = typeof e.duration === "number" && Number.isFinite(e.duration) ? e.duration : null;
+      seen.add(id);
+      videos.push({
+        id,
+        title: (typeof e.title === "string" && e.title.trim() ? e.title.trim() : id).slice(0, 200),
+        duration,
+        url: `https://www.youtube.com/watch?v=${id}`,
+      });
+    }
+  };
+  walk(root.entries, 0);
+
+  return {
+    channelId: typeof root.channel_id === "string" ? root.channel_id : typeof root.id === "string" ? root.id : "",
+    channelName:
+      typeof root.channel === "string" ? root.channel : typeof root.uploader === "string" ? root.uploader : typeof root.title === "string" ? root.title : "",
+    videos,
+  };
+}
+
+export interface YtDownloadOptions {
+  /** Import only this time window (seconds) via `--download-sections`. */
+  section?: { start: number; end: number } | null;
+  /** yt-dlp `-S` format sort (e.g. "vcodec:h264,res:1080,fps"). */
+  formatSort?: string;
 }
 
 export interface YtDownloadResult {
@@ -182,12 +351,17 @@ export interface YtDownloadResult {
  * Download a video into the uploads dir as `<uuid>.<real-ext>`. Prefers
  * pre-merged MP4 ≤1080p, falls back to best muxed pair (needs ffmpeg for the
  * merge), then any best-effort format. Enforces `maxBytes` post-download.
+ * `options.section` limits the import to a time window of the video.
  */
 export async function downloadVideo(
   url: string,
   uuid: string,
   maxBytes: number,
   onProgress?: (pct: number) => void,
+  timeoutMs?: number,
+  /** Optional yt-dlp `-f` override (e.g. a lower-height cap for full imports of long videos). */
+  formatOverride?: string,
+  options: YtDownloadOptions = {},
 ): Promise<YtDownloadResult> {
   const dir = config.uploadsDir;
   fs.mkdirSync(dir, { recursive: true });
@@ -196,12 +370,35 @@ export async function downloadVideo(
   const args = [
     ...baseArgs(),
     "-f",
-    "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+    formatOverride ??
+      "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+    // Prefer a single pre-merged MP4 so the imported file plays everywhere.
+    "--merge-output-format", "mp4",
   ];
+  if (options.formatSort) args.push("-S", options.formatSort);
+  const section = options.section ?? null;
+  let sectionSeconds = 0;
+  if (section) {
+    const start = Math.max(0, Math.floor(section.start));
+    const end = Math.max(start + 1, Math.ceil(section.end));
+    sectionSeconds = end - start;
+    // yt-dlp hands the window to ffmpeg, which seeks server-side — only the
+    // requested seconds are transferred, not the whole (possibly hours-long) video.
+    args.push("--download-sections", `*${start}-${end}`);
+  }
   // Point yt-dlp at ffmpeg for stream-merging — but only when we have a real
   // path; a bare "ffmpeg" on PATH should be discovered by yt-dlp itself.
   const ffmpegDir = path.dirname(resolveFfmpegPath());
   if (ffmpegDir && ffmpegDir !== ".") args.push("--ffmpeg-location", ffmpegDir);
+  // YouTube's innertube often requires a JS runtime for challenge signing.
+  // Surface Node (bundled with the app) so yt-dlp can find it.
+  const nodeDir = path.dirname(process.execPath || "");
+  if (nodeDir && nodeDir !== ".") {
+    const prev = process.env.PATH || "";
+    if (!prev.split(path.delimiter).includes(nodeDir)) {
+      process.env.PATH = `${nodeDir}${path.delimiter}${prev}`;
+    }
+  }
   args.push("--newline", "-o", template, url);
 
   const cleanup = () => {
@@ -217,9 +414,20 @@ export async function downloadVideo(
   };
 
   try {
-    await run(args, config.ytDlpTimeoutMs, (chunk) => {
+    await run(args, timeoutMs ?? config.ytDlpTimeoutMs, (chunk) => {
       const m = chunk.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
-      if (m) onProgress?.(Math.min(99, parseFloat(m[1]!)));
+      if (m) {
+        onProgress?.(Math.min(99, parseFloat(m[1]!)));
+        return;
+      }
+      // Section downloads run through ffmpeg, which reports `time=HH:MM:SS.xx`.
+      if (sectionSeconds > 0) {
+        const t = [...chunk.matchAll(/time=(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/g)].pop();
+        if (t) {
+          const secs = Number(t[1]) * 3600 + Number(t[2]) * 60 + Number(t[3]);
+          onProgress?.(Math.min(99, Math.max(0, (secs / sectionSeconds) * 100)));
+        }
+      }
     });
   } catch (e) {
     cleanup();

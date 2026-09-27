@@ -432,8 +432,18 @@ export async function getStore(): Promise<DataStore> {
   if (store) return store;
   // Use Prisma when a Postgres DSN is configured (production path).
   if (config.databaseUrl.startsWith("postgres")) {
-    const { PrismaStore } = await import("./prismaStore.js");
-    store = new PrismaStore();
+    try {
+      const { PrismaStore } = await import("./prismaStore.js");
+      const p = new PrismaStore();
+      // Test the database connection with a fast query
+      await (p as any).prisma.$queryRaw`SELECT 1`;
+      store = p;
+    } catch (err) {
+      console.warn(`[soundwave] PostgreSQL at "${config.databaseUrl}" is unreachable. Falling back to local JSON store.`);
+      const s = new JsonStore();
+      await s.init();
+      store = s;
+    }
   } else {
     const s = new JsonStore();
     await s.init();

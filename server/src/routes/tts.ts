@@ -1,8 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
+import fs from "node:fs";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
 import { usageLimiter, uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
@@ -15,6 +16,7 @@ import {
   createCloneProfile,
   deleteCloneProfile,
   listCloneProfiles,
+  getProfileSamplePath,
   probeVoiceClone,
   sniffAudio,
   synthesizeClone,
@@ -145,6 +147,17 @@ router.get("/clone/profiles", requireAuth, async (req, res, next) => {
   }
 });
 
+router.get("/clone/profiles/:id/sample", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = req.user?.id || "local-user";
+    const samplePath = await getProfileSamplePath(userId, req.params.id ?? "");
+    res.setHeader("Content-Type", samplePath.endsWith(".mp3") ? "audio/mpeg" : "audio/wav");
+    fs.createReadStream(samplePath).pipe(res);
+  } catch (e) {
+    next(e);
+  }
+});
+
 const refUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const createProfileSchema = z.object({
@@ -162,7 +175,7 @@ router.post("/clone/profiles", requireAuth, uploadLimiter, refUpload.single("fil
     const parsed = createProfileSchema.safeParse(req.body);
     if (!parsed.success) throw new ApiError(400, "VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid profile data.");
     if (!sniffAudio(req.file.buffer)) {
-      throw new ApiError(400, "INVALID_FILE", "The reference clip must be a WAV, MP3, FLAC, OGG, or M4A audio file.");
+      throw new ApiError(400, "INVALID_FILE", "The reference clip must be a WAV, MP3, FLAC, OGG, M4A, or WEBM audio file.");
     }
     const profile = await createCloneProfile(req.user!.id, {
       name: parsed.data.name.trim(),
@@ -194,7 +207,7 @@ const cloneSchema = z.object({
 });
 
 // Cloned-voice synthesis — same response shape as /synthesize (MP3 base64 +
-// word timings), same quota accounting. Only the owner's voices can be used.
+// word timings), same quota accounting.
 router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema }), async (req, res, next) => {
   try {
     assertConfigured();
@@ -209,18 +222,20 @@ router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema })
 
     const result = await synthesizeClone(req.user!.id, { text, profileId, speed });
 
-    const store = await getStore();
-    await store.addUsageLog({
-      userId: req.user!.id,
-      characterCount: characters,
-      voiceId: `clone:${profileId}`,
-      audioDurationSeconds: Math.max(1, Math.round(result.duration)),
-      generatedAt: new Date().toISOString(),
-    });
-    await store.updateUser(req.user!.id, {
-      charactersUsedThisMonth: quota.used + characters,
-      totalAudioDurationSeconds: req.user!.totalAudioDurationSeconds + Math.round(result.duration),
-    });
+    if (req.user) {
+      const store = await getStore();
+      await store.addUsageLog({
+        userId: req.user.id,
+        characterCount: text.length,
+        voiceId: `clone:${profileId}`,
+        audioDurationSeconds: Math.max(1, Math.round(result.duration)),
+        generatedAt: new Date().toISOString(),
+      });
+      await store.updateUser(req.user.id, {
+        charactersUsedThisMonth: quota.used + text.length,
+        totalAudioDurationSeconds: req.user.totalAudioDurationSeconds + Math.round(result.duration),
+      });
+    }
 
     res.json({
       audioBase64: result.audioBase64,
@@ -228,7 +243,7 @@ router.post("/clone", requireAuth, usageLimiter, validate({ body: cloneSchema })
       duration: result.duration,
       wordTimings: result.wordTimings,
       voiceId: `clone:${profileId}`,
-      used: quota.used + characters,
+      used: quota.used + text.length,
       limit: quota.limit,
       resetDate: quota.resetDate,
     });

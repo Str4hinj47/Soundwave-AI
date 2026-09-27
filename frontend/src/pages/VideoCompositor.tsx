@@ -58,7 +58,8 @@ export function VideoCompositor() {
   const navigate = useNavigate();
   const studio = useStudio();
   const { user } = useAuth();
-  const plan: Plan = (user?.plan as Plan) ?? "FREE";
+  // NO LOGIN MODE — default to ENTERPRISE so no watermark, optimized for Soundwave Agent
+  const plan: Plan = (user?.plan as Plan) ?? "ENTERPRISE";
   const planDef = PLANS[plan];
 
   const [videoUrl, setVideoUrl] = useState<string | null>(studio.video.url);
@@ -82,7 +83,7 @@ export function VideoCompositor() {
   const setAspect = studio.setAspect;
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
-  const [fps, setFps] = useState(30);
+  const [fps, setFps] = useState(60);
 
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);

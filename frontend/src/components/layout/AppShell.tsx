@@ -3,8 +3,10 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
+  Bot,
   ChevronDown,
   CircleUserRound,
+  Clapperboard,
   CreditCard,
   FolderKanban,
   HelpCircle,
@@ -33,6 +35,8 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, end: true },
+  { to: "/agent", label: "Shorts Agent", icon: <Bot className="h-5 w-5" /> },
+  { to: "/creator", label: "Creator Studio", icon: <Clapperboard className="h-5 w-5" /> },
   { to: "/projects", label: "My Projects", icon: <FolderKanban className="h-5 w-5" /> },
   { to: "/voices", label: "Voice Library", icon: <Mic className="h-5 w-5" /> },
   { to: "/settings", label: "Settings", icon: <SettingsIcon className="h-5 w-5" /> },

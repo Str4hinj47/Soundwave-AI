@@ -73,9 +73,13 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 // ── ASS generation ──────────────────────────────────────────────────────────
 function hexToAss(hex: string, opacityPct: number): string {
   const clean = (hex ?? "#FFFFFF").replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16) || 255;
-  const g = parseInt(clean.slice(2, 4), 16) || 255;
-  const b = parseInt(clean.slice(4, 6), 16) || 255;
+  const parseHex = (s: string) => {
+    const val = parseInt(s, 16);
+    return isNaN(val) ? 0 : val;
+  };
+  const r = parseHex(clean.slice(0, 2));
+  const g = parseHex(clean.slice(2, 4));
+  const b = parseHex(clean.slice(4, 6));
   const alpha = Math.round(((100 - clamp(opacityPct, 0, 100)) / 100) * 255);
   const toHex = (n: number) => n.toString(16).padStart(2, "0").toUpperCase();
   return `&H${toHex(alpha)}${toHex(b)}${toHex(g)}${toHex(r)}`;
@@ -135,9 +139,10 @@ export function buildAss(
   const bold = (style.fontWeight ?? 700) >= 600 ? 1 : 0;
   const primary = hexToAss(style.color ?? "#FFFFFF", style.textOpacity ?? 100);
   const outlineColor = hexToAss(style.strokeColor ?? "#000000", 100);
-  const backColor = hexToAss(style.bgColor ?? "#000000", style.bgOpacity ?? 0);
+  const backColor = hexToAss("#000000", 60);
 
-  const header = [
+    const fontFace = (style.fontFamily || "DejaVu Sans").replace(/,/g, "").trim() || "DejaVu Sans";
+    const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${width}`,
@@ -281,7 +286,12 @@ export function runFfmpegExport(params: ExportParams): Promise<void> {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
     const { resolution, format, quality, fps } = settings;
-    const scaleFilter = `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2:color=black`;
+    // FIX: Portrait 9:16 should FILL frame, not letterbox with black bars
+    // User screenshot showed landscape video centered with huge black bars top/bottom
+    // For Shorts/TikTok, we want crop-to-fill: scale to cover then crop center
+    // Old: scale=WxH:force_original_aspect_ratio=decrease,pad=WxH:(ow-iw)/2:(oh-ih)/2:color=black (letterbox)
+    // New: scale=WxH:force_original_aspect_ratio=increase,crop=WxH (fill, no black bars)
+    const scaleFilter = `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=increase,crop=${resolution.width}:${resolution.height}`;
 
     // Write the ASS file to a safe temp location.
     const assPath = path.join(path.dirname(outputPath), `${path.basename(outputPath, path.extname(outputPath))}.ass`);

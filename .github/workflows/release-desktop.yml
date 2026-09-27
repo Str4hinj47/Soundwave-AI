@@ -1,0 +1,96 @@
+# Build the sellable Windows desktop app on a real Windows VM.
+# Trigger: push a tag (v*) or run manually from the Actions tab.
+# Produces: SoundwaveAI-Setup-<version>.exe (NSIS installer)
+#           SoundwaveAI-Portable-<version>.exe (single-file portable app)
+# Signing:  set repo secrets CSC_LINK + CSC_KEY_PASSWORD (base64 .pfx) and
+#           every build is signed automatically — see docs/RELEASING.md.
+name: Release Desktop
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Build backend (typecheck + tests + tsc)
+        working-directory: server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Build frontend (React → dist)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Fetch runtime binaries (ffmpeg + yt-dlp)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop/bin | Out-Null
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-extract -Force
+          $ff = Get-ChildItem -Recurse -Filter ffmpeg.exe ffmpeg-extract | Select-Object -First 1
+          if (-not $ff) { throw "ffmpeg.exe not found in essentials zip" }
+          Copy-Item $ff.FullName desktop/bin/ffmpeg.exe -Force
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile desktop/bin/yt-dlp.exe
+          Get-ChildItem desktop/bin | Format-Table Name, Length
+
+      - name: Install desktop tooling (Electron + electron-builder)
+        working-directory: desktop
+        run: npm ci
+
+      - name: Assemble packaged app
+        working-directory: desktop
+        run: node assemble.mjs
+
+      - name: Smoke-test the assembled app on real Windows
+        working-directory: desktop
+        run: node smoke.mjs
+
+      - name: Build installers (NSIS setup + portable)
+        working-directory: desktop
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win --publish never
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundwave-ai-windows
+          path: desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Attach installers to the GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exes = (Get-ChildItem desktop/release/*.exe).FullName
+          gh release view $env:GITHUB_REF_NAME 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME $exes --title "Soundwave AI $env:GITHUB_REF_NAME" --generate-notes
+          } else {
+            gh release upload $env:GITHUB_REF_NAME $exes --clobber
+          }

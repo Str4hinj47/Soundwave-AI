@@ -1,0 +1,50 @@
+# electron-builder configuration — Windows sellable build.
+# Signing: when the CSC_LINK / CSC_KEY_PASSWORD secrets are present in CI,
+# electron-builder signs the exe + installer automatically (standard env vars).
+appId: ai.soundwave.desktop
+productName: Soundwave AI
+copyright: Copyright © 2026 Soundwave AI
+
+directories:
+  buildResources: build
+  output: release
+
+# Everything ships as real files (no asar): the bundled server chdirs here and
+# spawns ffmpeg/yt-dlp against these paths.
+asar: false
+npmRebuild: false
+
+files:
+  - package.json
+  - src/**/*
+  - build/icon.png
+  - app/**/*
+
+extraResources:
+  - from: bin
+    to: bin
+    filter:
+      - "**/*"
+
+win:
+  icon: build/icon.ico
+  # Standard user (asInvoker) — customers never see a UAC prompt.
+  requestedExecutionLevel: asInvoker
+  verifyUpdateCodeSignature: false
+  target:
+    - nsis
+    - portable
+
+nsis:
+  artifactName: SoundwaveAI-Setup-${version}.exe
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Soundwave AI
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+portable:
+  artifactName: SoundwaveAI-Portable-${version}.exe

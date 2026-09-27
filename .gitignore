@@ -8,6 +8,12 @@ frontend/dist-standalone/
 server/dist/
 *.tsbuildinfo
 
+# desktop packaging (assembled tree + installer output; binaries fetched at build time)
+desktop/app/
+desktop/release/
+desktop/bin/*
+!desktop/bin/.gitkeep
+
 # env
 .env
 .env.*
@@ -17,6 +23,8 @@ server/dist/
 server/data/
 server/uploads/
 server/generated/
+soundwave_live_progress.html
+background_cache/
 
 # logs
 *.log
@@ -30,7 +38,17 @@ npm-debug.log*
 # test artifacts
 coverage/
 
+# python artifacts
+*.pyc
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+.venv/
+
+
 # voice-clone sidecar runtime artifacts
 voiceclone/profiles/
 voiceclone/.venv/
 voiceclone/__pycache__/
+__pycache__/

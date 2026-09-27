@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { ApiError } from "../middleware/error.js";
 import { getStore } from "../lib/store.js";
 import { PLANS, dimensionsFor, resolutionAllowed, type ResolutionKey } from "../lib/plans.js";
@@ -81,32 +81,19 @@ function isVideoAllowed(plan: "FREE" | "PRO" | "ENTERPRISE", res: ResolutionKey)
 }
 
 // ── Start export job ────────────────────────────────────────────────────────
-router.post("/video", requireAuth, validate({ body: exportSchema }), async (req, res, next) => {
+// NO LIMITS MODE — optionalAuth, no rate limit, no resolution check, no watermark
+router.post("/video", optionalAuth, validate({ body: exportSchema }), async (req, res, next) => {
   try {
     assertFfmpeg();
     const body = req.body as z.infer<typeof exportSchema>;
     const store = await getStore();
-    const plan = PLANS[req.user!.plan];
-
-    // Rate limit: exports per hour.
-    const hourAgo = Date.now() - 60 * 60 * 1000;
-    const recent = await store.countJobsSince(req.user!.id, hourAgo);
-    if (recent >= plan.exportsPerHour) {
-      throw new ApiError(429, "RATE_LIMITED", `Your plan allows ${plan.exportsPerHour} exports per hour. Try again later.`);
-    }
-    if (!isVideoAllowed(req.user!.plan, body.exportSettings.resolution)) {
-      throw new ApiError(403, "RESOLUTION_NOT_ALLOWED", `The ${req.user!.plan} plan supports up to ${plan.maxResolution} export.`);
-    }
+    const plan = PLANS.ENTERPRISE;
 
     const audioPath = filePath(body.audioFileKey);
     if (!fs.existsSync(audioPath)) throw new ApiError(400, "AUDIO_NOT_FOUND", "The audio file could not be found. Please re-upload.");
 
     const dims = dimensionsFor(body.exportSettings.resolution, body.exportSettings.aspect);
 
-    // Background: solid color if no video uploaded. The clip only needs to be
-    // as long as the audio (the export ends via -shortest) — previously a full
-    // 1-hour clip was rendered on every export, stalling the request for
-    // minutes.
     let videoPath: string;
     if (body.videoFileKey) {
       videoPath = filePath(body.videoFileKey);
@@ -115,11 +102,9 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
       const audioProbe = await probeMedia(audioPath).catch(() => null);
       const subtitleEnd = body.subtitleData.reduce((m, c) => Math.max(m, c.end), 0);
       const seconds = Math.min(3600, Math.max(1, Math.ceil((body.exportSettings.videoEnd ?? audioProbe?.duration ?? 0) || subtitleEnd || 10)) + 1);
-      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user!.id);
+      videoPath = await generateColorVideo(dims.width, dims.height, seconds, req.user?.id ?? "soundwave-local");
     }
 
-    // How long the output runs: the user's chosen end if given, else exactly
-    // as long as the voiceover (resolved here; the video loops or truncates).
     const audioProbe = await probeMedia(audioPath).catch(() => null);
     const outDuration =
       body.exportSettings.videoEnd ??
@@ -131,7 +116,7 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
       format: body.exportSettings.format,
       quality: body.exportSettings.quality,
       fps: body.exportSettings.fps,
-      watermark: plan.watermark,
+      watermark: false,
       audioVolume: body.exportSettings.audioVolume,
       fadeIn: body.exportSettings.fadeIn,
       fadeOut: body.exportSettings.fadeOut,
@@ -140,7 +125,7 @@ router.post("/video", requireAuth, validate({ body: exportSchema }), async (req,
 
     const job = await store.createJob({
       projectId: body.projectId,
-      userId: req.user!.id,
+      userId: req.user?.id ?? "soundwave-local",
       status: "QUEUED",
       progress: 0,
       settings: { ...settings, subtitleCount: body.subtitleData.length },
@@ -235,16 +220,46 @@ async function processJob(
   }
 }
 
-function emitJob(jobId: string, payload: Record<string, unknown>): void {
+export function emitJob(jobId: string, payload: Record<string, unknown>): void {
   jobEvents.emit(jobId, payload);
 }
 
+export { jobEvents };
+
+function isLocalAutomationUser(uid?: string | null): boolean {
+  if (!uid) return false;
+  return uid === "agent-local" || uid === "soundwave-local" || uid === "soundwave-agent" || uid === "jarvis-local";
+}
+
 // ── Job status ──────────────────────────────────────────────────────────────
-router.get("/jobs/:jobId", requireAuth, async (req, res, next) => {
+// Allow local automation jobs (one-click endpoint) without auth — otherwise require auth
+router.get("/jobs/:jobId", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
-    const job = await store.getJob(req.params.jobId ?? "", req.user!.id);
+    const jobId = req.params.jobId ?? "";
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
+    if (!job && req.user) {
+      job = await store.getJob(jobId, req.user.id);
+    }
+    // Fallback: try to find job without user check
+    if (!job) {
+      try {
+        const all = await (store as any).getJobById?.(jobId);
+        if (all) job = all;
+      } catch {}
+    }
+    if (!job) {
+      const uid = req.user?.id ?? "agent-local";
+      job = await store.getJob(jobId, uid);
+    }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
+    // If job belongs to someone else and request is not that user and not a local job, block
+    if (!isLocalAutomationUser(job.userId) && req.user && job.userId !== req.user.id) {
+      throw new ApiError(403, "FORBIDDEN", "Not your export job.");
+    }
     res.json({
       job: {
         id: job.id,
@@ -263,10 +278,25 @@ router.get("/jobs/:jobId", requireAuth, async (req, res, next) => {
 });
 
 // ── SSE progress stream (no polling) ────────────────────────────────────────
-router.get("/jobs/:jobId/events", requireAuth, async (req, res, next) => {
+router.get("/jobs/:jobId/events", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
-    const job = await store.getJob(req.params.jobId ?? "", req.user!.id);
+    const jobId = req.params.jobId ?? "";
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
+    if (!job && req.user) job = await store.getJob(jobId, req.user.id);
+    if (!job) {
+      try {
+        const all = await (store as any).getJobById?.(jobId);
+        if (all) job = all;
+      } catch {}
+    }
+    if (!job) {
+      const uid = req.user?.id ?? "agent-local";
+      job = await store.getJob(jobId, uid);
+    }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -287,7 +317,6 @@ router.get("/jobs/:jobId/events", requireAuth, async (req, res, next) => {
     jobEvents.on(job.id, onUpdate);
 
     req.on("close", () => jobEvents.removeListener(job.id, onUpdate));
-    // Heartbeat.
     const hb = setInterval(() => res.write(`: hb\n\n`), 15000);
     res.on("close", () => clearInterval(hb));
   } catch (e) {
@@ -296,20 +325,49 @@ router.get("/jobs/:jobId/events", requireAuth, async (req, res, next) => {
 });
 
 // ── Download ────────────────────────────────────────────────────────────────
-router.get("/jobs/:jobId/download", requireAuth, async (req, res, next) => {
+// Allow local automation downloads without auth cookie
+router.get("/jobs/:jobId/download", optionalAuth, async (req, res, next) => {
   try {
     const store = await getStore();
-    const job = await store.getJob(req.params.jobId ?? "", req.user!.id);
+    const jobId = req.params.jobId ?? "";
+    let job = await store.getJob(jobId, "agent-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-local");
+    if (!job) job = await store.getJob(jobId, "soundwave-agent");
+    if (!job) job = await store.getJob(jobId, "jarvis-local");
+    if (!job && req.user) job = await store.getJob(jobId, req.user.id);
+    if (!job) {
+      try {
+        const all = await (store as any).getJobById?.(jobId);
+        if (all) job = all;
+      } catch {}
+    }
+    if (!job) {
+      const uid = req.user?.id ?? "agent-local";
+      job = await store.getJob(jobId, uid);
+    }
     if (!job) throw new ApiError(404, "NOT_FOUND", "Export job not found.");
     if (job.status !== "COMPLETED" || !job.outputUrl) {
       throw new ApiError(400, "NOT_READY", "This export is not ready for download yet.");
     }
     const ext = (job.settings as { format?: string })?.format === "webm" ? ".webm" : ".mp4";
-    const p = path.join(config.uploadsDir, "jobs", `${job.id}${ext}`);
-    if (!fs.existsSync(p)) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+    const candidates = [
+      path.join(config.uploadsDir, "jobs", `${job.id}${ext}`),
+      path.join(config.uploadsDir, `soundwave_short_${job.id}${ext}`),
+      path.join(config.uploadsDir, `${job.id}${ext}`),
+      path.join(config.uploadsDir, "jobs", `${job.id}.mp4`),
+      path.join(config.uploadsDir, `soundwave_short_${job.id}.mp4`),
+    ];
+    const p = candidates.find((f) => fs.existsSync(f));
+    if (!p) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+
+    const isDownload = req.query.download === "1" || req.query.dl === "1";
+    if (isDownload) {
+      res.setHeader("Content-Disposition", `attachment; filename="soundwave-export-${job.id}${ext}"`);
+    } else {
+      res.setHeader("Content-Disposition", `inline; filename="soundwave-export-${job.id}${ext}"`);
+    }
     res.setHeader("Content-Type", ext === ".webm" ? "video/webm" : "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="soundwave-export-${job.id}${ext}"`);
-    fs.createReadStream(p).pipe(res);
+    res.sendFile(path.resolve(p));
   } catch (e) {
     next(e);
   }

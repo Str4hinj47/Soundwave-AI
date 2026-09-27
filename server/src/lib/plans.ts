@@ -45,7 +45,7 @@ export const PLANS: Record<Plan, PlanDefinition> = {
     maxResolution: "1080p",
     watermark: false,
     cloudSave: true,
-    maxProjects: Infinity,
+    maxProjects: 50,
     subtitleFonts: 20,
     fullStyling: true,
     apiAccess: false,
@@ -69,7 +69,7 @@ export const PLANS: Record<Plan, PlanDefinition> = {
 };
 
 export function getPlan(plan: Plan): PlanDefinition {
-  return PLANS[plan];
+  return PLANS[plan] ?? PLANS.FREE;
 }
 
 export const RESOLUTIONS = {
@@ -82,18 +82,18 @@ export const RESOLUTIONS = {
 export type ResolutionKey = keyof typeof RESOLUTIONS;
 export type AspectRatio = "16:9" | "9:16";
 
-/** Output dimensions for a resolution + aspect ratio. Portrait (9:16) swaps
- * the axes, so 1080p portrait is 1080×1920 — the vertical style used by
- * YouTube Shorts, TikTok, and Instagram Reels. */
 export function dimensionsFor(res: ResolutionKey, aspect: AspectRatio = "16:9"): { width: number; height: number } {
   const { width, height } = RESOLUTIONS[res];
   return aspect === "9:16" ? { width: height, height: width } : { width, height };
 }
 
 export function resolutionAllowed(plan: Plan, res: ResolutionKey): boolean {
-  const order: ResolutionKey[] = ["720p", "1080p", "1440p", "4K"];
-  const planMax = getPlan(plan).maxResolution;
-  return order.indexOf(res) <= order.indexOf(planMax as ResolutionKey);
+  const allowed = {
+    FREE: ["720p"],
+    PRO: ["720p", "1080p"],
+    ENTERPRISE: ["720p", "1080p", "1440p", "4K"],
+  }[plan] ?? ["720p"];
+  return allowed.includes(res);
 }
 
 export function nextMonthlyReset(): Date {
