@@ -4,8 +4,7 @@
 //   app/
 //     server/         package.json + package-lock.json + dist/ + prod node_modules/
 //     frontend/dist/  built SPA
-//     scripts/assets/ bundled static assets (HUD overlay, music, stills)
-//     yt_clipper/     optional python slicer (used only if python exists)
+//     scripts/assets/ bundled static assets (music)
 //
 // Binaries (ffmpeg.exe, yt-dlp.exe) are NOT staged here — they live in
 // desktop/bin/ and are attached as electron-builder extraResources.
@@ -61,13 +60,10 @@ fs.cpSync(path.join(repoRoot, "frontend", "dist"), path.join(stage, "frontend", 
   recursive: true,
 });
 
-console.log("[assemble] scripts/assets + yt_clipper …");
+console.log("[assemble] scripts/assets …");
 fs.cpSync(path.join(repoRoot, "scripts", "assets"), path.join(stage, "scripts", "assets"), {
   recursive: true,
 });
-if (fs.existsSync(path.join(repoRoot, "yt_clipper"))) {
-  fs.cpSync(path.join(repoRoot, "yt_clipper"), path.join(stage, "yt_clipper"), { recursive: true });
-}
 
 // Sanity: the exact entry points the runtime resolves.
 need(path.join(stage, "server", "dist", "index.js"), "stage incomplete");

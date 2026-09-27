@@ -37,6 +37,6 @@ def handler(parameters: Dict[str, Any], context: Any = None) -> str:
         suggestion = "Great time to queue up overnight video renders or review tomorrow's tasks."
     else:
         period = "night"
-        suggestion = "Late night session detected. Want to run a background gameplay cache build?"
+        suggestion = "Late night session detected. Want me to queue a short over a fresh Orbital NCG background?"
 
     return f"Proactive Check-in ({period.title()} · {now.strftime('%I:%M %p')}): {suggestion}"

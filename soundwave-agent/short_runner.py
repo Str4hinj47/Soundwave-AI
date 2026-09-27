@@ -1,6 +1,10 @@
 """
 Soundwave AI — Autonomous Viral Shorts Runner
 Full pipeline execution: Script -> Voice -> Subtitles -> Background -> Render -> Download.
+
+Backgrounds: for every short the server picks an Orbital NCG video
+(https://www.youtube.com/@OrbitalNCG) it has never used before and imports it
+through the YouTube link importer.
 """
 
 import os
@@ -14,10 +18,12 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 
 from viral_engine import generate_viral_script, NICHES
-from cache_manager import list_cached_clips, get_random_cached_clip
 from progress_tracker import update_state, get_html_path, open_in_browser
 
 API_BASE = "http://127.0.0.1:4000/api/v1"
+ORBITAL_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG"
+# Voice + Orbital link import + render in one synchronous request.
+GENERATE_TIMEOUT_S = 900
 
 def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
     """Check if a TCP port is currently listening."""
@@ -61,6 +67,27 @@ def get_json(endpoint: str, timeout: int = 30) -> Tuple[Optional[Dict[str, Any]]
     except Exception as e:
         return None, str(e)
 
+def get_orbital_status() -> Optional[Dict[str, Any]]:
+    """Orbital NCG background history: channel, used/unused counts, used videos."""
+    data, _ = get_json("/agent/orbital")
+    return data
+
+
+def reset_orbital_history() -> Optional[Dict[str, Any]]:
+    """Forget which Orbital NCG videos were used, so they can be picked again."""
+    data, _ = post_json("/agent/orbital/reset", {})
+    return (data or {}).get("status") if data else None
+
+
+def describe_background(bg: Optional[Dict[str, Any]]) -> str:
+    """One-line description of the Orbital video a short was rendered over."""
+    if not bg:
+        return "Orbital NCG (unknown video)"
+    title = bg.get("title") or "Orbital NCG video"
+    url = bg.get("url") or ORBITAL_CHANNEL_URL
+    return f'"{title}" — {url}'
+
+
 def download_file(url_or_path: str, dest_path: Path, timeout: int = 180) -> bool:
     """Download the completed video export to the local destination path."""
     if url_or_path.startswith("/"):
@@ -102,21 +129,25 @@ def generate_single_short(
     script = custom_script or generate_viral_script(topic)
     time.sleep(0.5)
 
-    # 3. Call 1-Click Short API
-    update_state(3, "Synthesizing voice & rendering 9:16 vertical video...", topic=topic, voice=voice, script=script)
+    # 3. Call 1-Click Short API (voice → unused Orbital NCG video via the
+    #    YouTube link importer → 9:16 render)
+    update_state(
+        3,
+        "Synthesizing voice, importing an unused Orbital NCG background & rendering 9:16 video...",
+        topic=topic, voice=voice, script=script,
+    )
 
     payload = {
         "topic": f"{topic} {script[:80]}",
         "voice": voice,
         "resolution": resolution,
-        "useDefaultBackground": True,
         "async": False,
     }
 
     # Call endpoint (primary /agent/generate-short, with fallback to /jarvis/generate-short)
-    res_data, status_msg = post_json("/agent/generate-short", payload, timeout=300)
+    res_data, status_msg = post_json("/agent/generate-short", payload, timeout=GENERATE_TIMEOUT_S)
     if not res_data or "jobId" not in res_data:
-        res_data, status_msg = post_json("/jarvis/generate-short", payload, timeout=300)
+        res_data, status_msg = post_json("/jarvis/generate-short", payload, timeout=GENERATE_TIMEOUT_S)
 
     if not res_data or "jobId" not in res_data:
         update_state(6, f"Generation failed: {status_msg}", topic=topic, voice=voice, script=script)
@@ -125,6 +156,8 @@ def generate_single_short(
 
     job_id = res_data["jobId"]
     download_url = res_data.get("downloadUrl", f"/api/v1/export/jobs/{job_id}/download")
+    background = res_data.get("background")
+    print(f"[ShortRunner] Background: {describe_background(background)} (Orbital NCG, YouTube link importer)")
 
     # 7. Verification & Download
     update_state(7, "Verifying MP4 output and saving locally...", topic=topic, voice=voice, script=script, download_url=download_url)

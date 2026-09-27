@@ -21,7 +21,7 @@ if (Test-Path $ytdlpExe) {
     }
 }
 
-Write-Host "[INFO] Downloading standalone yt-dlp.exe for background video downloading..."
+Write-Host "[INFO] Downloading standalone yt-dlp.exe for the YouTube link importer..."
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
 $downloadUrls = @(

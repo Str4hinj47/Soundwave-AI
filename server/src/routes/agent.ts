@@ -1,15 +1,12 @@
 import { Router } from "express";
-import fs from "node:fs";
-import path from "node:path";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 import { resolveYtDlpPath } from "../lib/ytdlp.js";
-import { backgroundCacheRoot } from "../lib/backgroundPool.js";
 import { getStore } from "../lib/store.js";
-import { config } from "../config.js";
-import agentShortRouter, { VIRAL_SCRIPTS, generateScript, buildShortVideo } from "./agentShort.js";
+import { ORBITAL_CHANNEL_URL, getOrbitalCatalog, getOrbitalStatus } from "../lib/orbitalBackground.js";
+import agentShortRouter, { VIRAL_SCRIPTS, generateScript, getActiveShortJobs, startShortJob } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 
@@ -64,10 +61,39 @@ const chatSchema = z
       )
       .optional()
       .default([]),
+    /** Voice / resolution for shorts started from chat (the Hub passes its current picks). */
+    voice: z.string().min(2).max(100).optional(),
+    resolution: z.enum(["720p", "1080p"]).optional(),
   })
   .refine((d) => Boolean((d.message && d.message.trim().length > 0) || (d.prompt && d.prompt.trim().length > 0)), {
     message: "Either message or prompt is required",
   });
+
+// ── Chat → "generate a YT short" detection ──────────────────────────────────
+const SHORT_VERB = /\b(?:generate|make|create|render|build|produce)\b/i;
+const SHORT_NOUN = /\b(?:videos?|shorts?|reels?|tiktoks?|clips?)\b/i;
+const SHORT_COMMAND =
+  /\b(?:generate|make|create|render|build|produce)\b[\s\S]*?\b(?:videos?|shorts?|reels?|tiktoks?|clips?)\b(?:\s+(?:videos?|shorts?|reels?|tiktoks?|clips?)\b)*/i;
+const QUESTION_START = /^(?:how|what|why|which|where|when|who|whose|should|is|are|does|did|do\s+i|do\s+you)\b/i;
+
+/**
+ * "generate a yt short about psychology" → { topic: "psychology" }.
+ * Needs a create-verb before a video-noun (whole words, so "shortcut" or
+ * "clipboard" never match) and ignores questions like "what video did you make?".
+ */
+export function parseShortRequest(message: string): { topic: string } | null {
+  const text = message.trim();
+  if (!SHORT_VERB.test(text) || !SHORT_NOUN.test(text) || QUESTION_START.test(text)) return null;
+  const command = text.match(SHORT_COMMAND);
+  if (!command) return null;
+  const topic = text
+    .slice((command.index ?? 0) + command[0].length)
+    .replace(/^[\s,:;.!-]*(?:(?:about|on|for|regarding|around|covering)\b[\s:]*)?/i, "")
+    .replace(/[\s.!?]+$/, "")
+    .replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "")
+    .trim();
+  return { topic: topic.length >= 2 ? topic.slice(0, 200) : "motivation" };
+}
 
 router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, res, next) => {
   try {
@@ -77,7 +103,79 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
     const qLower = message.toLowerCase().trim();
     const userId = req.user?.id || "local-user";
 
-    // 1. Ghost Operator Macros
+    // 1. "Generate a YT short" — checked first so topics like "morning
+    //    routines" or "focus" can't be hijacked by the macro triggers below.
+    //    Runs as a background job: pick an unused Orbital NCG video, paste its
+    //    link into the YouTube link importer, render. Progress streams via the job.
+    const shortRequest = parseShortRequest(message);
+    if (shortRequest) {
+      const { topic } = shortRequest;
+      const active = getActiveShortJobs()[0];
+      if (active) {
+        return res.json({
+          success: true,
+          reply: `I'm still rendering the short about "${active.topic}" and will post it here when it's done. Ask me again for "${topic}" after that.`,
+          action: "soundwave_shorts",
+          status: "PROCESSING",
+          jobId: active.jobId,
+          topic: active.topic,
+          pollUrl: `/api/v1/export/jobs/${active.jobId}`,
+          eventsUrl: `/api/v1/export/jobs/${active.jobId}/events`,
+          tag: "AUDIO",
+        });
+      }
+
+      const exhausted = (st: ReturnType<typeof getOrbitalStatus>) => Boolean(st.catalogSize) && st.available === 0 && st.inProgress === 0;
+      let orbital = getOrbitalStatus();
+      if (exhausted(orbital)) {
+        // The saved channel list may be old — look for new Orbital uploads before saying no.
+        await getOrbitalCatalog({ force: true }).catch(() => undefined);
+        orbital = getOrbitalStatus();
+      }
+      if (exhausted(orbital)) {
+        return res.json({
+          success: false,
+          reply: `I can't make a new short yet: all ${orbital.catalogSize} Orbital NCG videos (${ORBITAL_CHANNEL_URL}) have already been used as backgrounds. Reset the Orbital history in the Agent Hub and I'll start over.`,
+          action: "soundwave_shorts",
+          status: "FAILED",
+          error: "ORBITAL_EXHAUSTED",
+          tag: "AUDIO",
+        });
+      }
+
+      try {
+        const { jobId } = await startShortJob({
+          topic,
+          voice: body.voice || "en-US-GuyNeural",
+          resolution: body.resolution || "720p",
+          userId,
+        });
+        return res.json({
+          success: true,
+          reply: `On it! Generating a YouTube Short about "${topic}". For the background I'm picking an Orbital NCG video I haven't used before (${ORBITAL_CHANNEL_URL}) and pasting its link into the YouTube link importer. I'll post the finished short right here.`,
+          action: "soundwave_shorts",
+          status: "PROCESSING",
+          jobId,
+          topic,
+          pollUrl: `/api/v1/export/jobs/${jobId}`,
+          eventsUrl: `/api/v1/export/jobs/${jobId}/events`,
+          tag: "AUDIO",
+        });
+      } catch (shortErr) {
+        const reason = (shortErr as Error).message || "unknown error";
+        console.error("[agent/chat] could not start short generation:", shortErr);
+        return res.json({
+          success: false,
+          reply: `I couldn't start the short about "${topic}": ${reason}`,
+          action: "soundwave_shorts",
+          status: "FAILED",
+          error: reason,
+          tag: "AUDIO",
+        });
+      }
+    }
+
+    // 2. Ghost Operator Macros
     if (qLower.includes("focus") && (qLower.includes("mode") || qLower.includes("pomodoro") || qLower.includes("deep"))) {
       const macros = await listMacros(userId);
       const m = macros.find((x) => x.id === "deep_focus_pomodoro") || macros[1]!;
@@ -134,7 +232,7 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       });
     }
 
-    // 2. Chained Multi-Step Instructions
+    // 3. Chained Multi-Step Instructions
     if (qLower.includes(" and ") || (qLower.includes(",") && (qLower.includes("open") || qLower.includes("mute") || qLower.includes("volume") || qLower.includes("stats")))) {
       const steps = decomposeNaturalLanguage(message);
       if (steps.length > 1) {
@@ -157,7 +255,7 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       }
     }
 
-    // 3. Computer Control & System Skills
+    // 4. Computer Control & System Skills
     if (qLower.startsWith("open ") || qLower.startsWith("launch ")) {
       const appName = qLower.replace(/^(open|launch)\s+/, "").trim();
       return res.json({
@@ -209,43 +307,6 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       });
     }
 
-    // 4. Automated Video Generation Trigger
-    const isCreateVideoCommand =
-      (qLower.includes("generate") || qLower.includes("make") || qLower.includes("create") || qLower.includes("render") || qLower.includes("build") || qLower.includes("produce")) &&
-      (qLower.includes("video") || qLower.includes("short") || qLower.includes("reel") || qLower.includes("tiktok") || qLower.includes("clip"));
-
-    if (isCreateVideoCommand) {
-      let topic = "motivation";
-      const cleanTopic = qLower
-        .replace(/^(can you |please )?(generate|make|create|render|build|produce)\s+(a |an |me a )?(video|short|reel|tiktok|clip)\s*(about|on|for)?/i, "")
-        .trim();
-      if (cleanTopic.length > 2) {
-        topic = cleanTopic;
-      }
-
-      try {
-        const result = await buildShortVideo({
-          topic,
-          voice: "en-US-GuyNeural",
-          resolution: "720p",
-          userId,
-        });
-
-        return res.json({
-          success: true,
-          reply: `I have generated and rendered your 60fps 9:16 Minecraft parkour short on "${topic}"!\n\n**Script**: "${result.script}"\n\nDuration: ${result.duration.toFixed(1)}s with synchronized TikTok subtitles. You can preview and download it directly below.`,
-          action: "soundwave_shorts",
-          videoUrl: result.videoUrl,
-          downloadUrl: result.downloadUrl,
-          script: result.script,
-          jobId: result.jobId,
-          tag: "AUDIO",
-        });
-      } catch (shortErr) {
-        console.error("[agent/chat] buildShortVideo failed:", shortErr);
-      }
-    }
-
     // 5. Video Inquiries & Retrieval ("where is my video", "download video", "what video did you make", etc.)
     const isVideoInquiry =
       qLower.includes("where is") ||
@@ -287,7 +348,7 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
       }
     }
 
-    // 5. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
+    // 6. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
     let aiReply = "";
 
     if (qLower.includes("hello") || qLower.includes("hi") || qLower.includes("hey") || qLower.includes("who are you")) {
@@ -295,7 +356,7 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
     } else if (qLower.includes("hook") || qLower.includes("viral") || qLower.includes("script") || qLower.includes("short")) {
       const topic = qLower.replace(/.*(hook|viral|script|short)\s*(about|for|on)?\s*/i, "").trim() || "Psychology";
       const sample = generateScript(topic);
-      aiReply = `Here is a high-retention viral script for "${topic}":\n\n"${sample}"\n\nYou can click "Generate 1-Click Viral Short" below to render this into a finished 9:16 vertical video with 60fps Minecraft parkour and animated subtitles!`;
+      aiReply = `Here is a high-retention viral script for "${topic}":\n\n"${sample}"\n\nSay "make a short about ${topic}" (or click "Generate Short") and I'll render it into a finished 9:16 vertical video with animated subtitles over a fresh Orbital NCG gameplay background I haven't used before.`;
     } else if (qLower.includes("focus") || qLower.includes("pomodoro") || qLower.includes("work")) {
       aiReply = `For maximum cognitive flow, I recommend a 25-minute Deep Work sprint. Type "focus mode" or click the Deep Focus macro below, and I will minimize your distracting background windows, mute alerts, and engage your countdown timer.`;
     } else if (qLower.includes("youtube") || qLower.includes("grow") || qLower.includes("algorithm")) {
@@ -317,31 +378,11 @@ router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, r
   }
 });
 
-// GET /status — check health, tool binaries, and cache state
+// GET /status — check health, tool binaries, and the Orbital background source
 router.get("/status", async (_req, res) => {
   const ffmpeg = resolveFfmpegPath();
   const ytdlp = resolveYtDlpPath();
-
-  const cacheDirs = [
-    path.join(backgroundCacheRoot(), "minecraft_parkour", "80s"),
-    path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s"),
-    path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s"),
-    path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s"),
-  ];
-
-  let cachedClipsCount = 0;
-  let totalSizeBytes = 0;
-  for (const dir of cacheDirs) {
-    try {
-      if (fs.existsSync(dir)) {
-        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".mp4"));
-        cachedClipsCount += files.length;
-        for (const file of files) {
-          totalSizeBytes += fs.statSync(path.join(dir, file)).size;
-        }
-      }
-    } catch {}
-  }
+  const orbital = getOrbitalStatus();
 
   res.json({
     status: "online",
@@ -349,8 +390,14 @@ router.get("/status", async (_req, res) => {
     version: "2.0.0",
     ffmpegAvailable: Boolean(ffmpeg),
     ytdlpAvailable: Boolean(ytdlp),
-    cachedBackgroundClips: cachedClipsCount,
-    cachedBackgroundSizeMb: +(totalSizeBytes / (1024 * 1024)).toFixed(1),
+    backgroundSource: {
+      type: "orbital_ncg",
+      channelUrl: orbital.channelUrl,
+      importer: orbital.importer,
+      catalogSize: orbital.catalogSize,
+      available: orbital.available,
+      usedCount: orbital.usedCount,
+    },
     supportedNiches: Object.keys(VIRAL_SCRIPTS),
   });
 });

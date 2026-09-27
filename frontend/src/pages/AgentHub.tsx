@@ -20,7 +20,6 @@ import {
   TrendingUp, 
   Flame, 
   Eye, 
-  Upload, 
   Youtube, 
   ExternalLink, 
 } from "lucide-react";
@@ -60,16 +59,55 @@ function getNicheIcon(iconName: string) {
   }
 }
 
-export interface PoolStatus {
-  clipsRemaining: number;
-  clipNames: string[];
-  usedUrlsCount: number;
-  usedUrls: string[];
-  customUrlsCount: number;
-  totalClipsConsumed: number;
-  totalClipsGenerated: number;
-  lastReplenishedAt: string | null;
-  isProcessing: boolean;
+/** Where a rendered short's background came from (server: ShortBackgroundInfo). */
+export interface ShortBackground {
+  source: "orbital_ncg";
+  channelName: string;
+  channelUrl: string;
+  videoId: string;
+  url: string;
+  title: string;
+  section: { start: number; end: number } | null;
+}
+
+interface OrbitalUsedEntry {
+  id: string;
+  url: string;
+  title: string;
+  usedAt: string;
+  jobId?: string;
+  topic?: string;
+  section?: { start: number; end: number } | null;
+}
+
+/** GET /api/v1/agent/orbital — which Orbital NCG videos were used / are left. */
+export interface OrbitalStatus {
+  channelUrl: string;
+  channelName: string;
+  importer: string;
+  catalogSize: number | null;
+  catalogFetchedAt: string | null;
+  available: number | null;
+  usedCount: number;
+  skippedCount: number;
+  inProgress: number;
+  lastUsed: OrbitalUsedEntry | null;
+  used: OrbitalUsedEntry[];
+  skipped: Array<{ id: string; url: string; title: string; reason: string; skippedAt: string }>;
+}
+
+const ORBITAL_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG";
+
+function formatClock(secs: number): string {
+  const s = Math.max(0, Math.round(secs));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+function describeSection(section: { start: number; end: number } | null | undefined): string {
+  return section ? `${formatClock(section.start)}–${formatClock(section.end)}` : "full video";
 }
 
 interface ChatMessage {
@@ -82,6 +120,8 @@ interface ChatMessage {
   videoUrl?: string;
   downloadUrl?: string;
   youtubeUrl?: string;
+  /** Orbital NCG video the short's background was imported from. */
+  background?: ShortBackground;
 }
 
 interface MacroWorkflow {
@@ -117,30 +157,15 @@ export function AgentHub() {
     loadPercent: 18,
   });
 
-  // Background Gameplay 60s Pool Telemetry
-  const [poolStatus, setPoolStatus] = useState<{
-    clipsRemaining: number;
-    clipNames: string[];
-    usedUrlsCount: number;
-    usedUrls: string[];
-    customUrlsCount: number;
-    totalClipsConsumed: number;
-    totalClipsGenerated: number;
-    lastReplenishedAt: string | null;
-    isProcessing: boolean;
-  }>({
-    clipsRemaining: 0,
-    clipNames: [],
-    usedUrlsCount: 0,
-    usedUrls: [],
-    customUrlsCount: 0,
-    totalClipsConsumed: 0,
-    totalClipsGenerated: 0,
-    lastReplenishedAt: null,
-    isProcessing: false,
-  });
-  const [customPoolUrl, setCustomPoolUrl] = useState("");
-  const [isReplenishingPool, setIsReplenishingPool] = useState(false);
+  // Orbital NCG background source (unused videos, history)
+  const [orbitalStatus, setOrbitalStatus] = useState<OrbitalStatus | null>(null);
+  const [orbitalHistoryOpen, setOrbitalHistoryOpen] = useState(false);
+  const [isRefreshingOrbital, setIsRefreshingOrbital] = useState(false);
+  const [isResettingOrbital, setIsResettingOrbital] = useState(false);
+  /** Background of the most recently rendered short. */
+  const [lastBackground, setLastBackground] = useState<ShortBackground | null>(null);
+  /** Job currently tracked by the progress UI (Generate button or chat). */
+  const activeJobIdRef = useRef<string | null>(null);
 
   // Orb Visualizer Mode State (persisted)
   const [orbMode, setOrbMode] = useState<OrbState | "auto">(() => {
@@ -226,63 +251,6 @@ export function AgentHub() {
   const [isUploadingToYt, setIsUploadingToYt] = useState(false);
   const [uploadedYoutubeUrl, setUploadedYoutubeUrl] = useState<string | null>(null);
 
-  // Custom Gameplay Video Upload State
-  const [isUploadingGameplay, setIsUploadingGameplay] = useState(false);
-  const gameplayFileRef = useRef<HTMLInputElement | null>(null);
-  const generatorGameplayFileRef = useRef<HTMLInputElement | null>(null);
-
-  // Background Pool Inspector State
-  const [showPoolInspector, setShowPoolInspector] = useState(false);
-  const [inspectorTab, setInspectorTab] = useState<"clips" | "masters" | "history">("clips");
-  const [isInspectorLoading, setIsInspectorLoading] = useState(false);
-  const [isSlicingMaster, setIsSlicingMaster] = useState(false);
-  const [inspectorData, setInspectorData] = useState<{
-    poolClips: Array<{
-      id: string;
-      filename: string;
-      index: number;
-      size: number;
-      sizeFormatted: string;
-      mtime: string;
-      previewUrl: string;
-      type: string;
-    }>;
-    masterVideos: Array<{
-      id: string;
-      filename: string;
-      size: number;
-      sizeFormatted: string;
-      mtime?: string;
-      previewUrl: string;
-      type: string;
-    }>;
-    customVideos: Array<{
-      id: string;
-      filename: string;
-      size: number;
-      sizeFormatted: string;
-      mtime?: string;
-      previewUrl: string;
-      type: string;
-    }>;
-    status: PoolStatus;
-  }>({
-    poolClips: [],
-    masterVideos: [],
-    customVideos: [],
-    status: {
-      clipsRemaining: 0,
-      clipNames: [],
-      usedUrlsCount: 0,
-      usedUrls: [],
-      customUrlsCount: 0,
-      totalClipsConsumed: 0,
-      totalClipsGenerated: 0,
-      lastReplenishedAt: null,
-      isProcessing: false,
-    },
-  });
-
   // Ghost Operator Macros State
   const [macrosList, setMacrosList] = useState<MacroWorkflow[]>([]);
   const [isRunningMacro, setIsRunningMacro] = useState(false);
@@ -300,12 +268,12 @@ export function AgentHub() {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Status Fetchers
-  const fetchPoolStatus = async () => {
+  const fetchOrbitalStatus = async () => {
     try {
-      const res = await fetch("/api/v1/agent/background-pool");
+      const res = await fetch("/api/v1/agent/orbital");
       if (res.ok) {
-        const data = await res.json();
-        setPoolStatus(data);
+        const data = (await res.json()) as OrbitalStatus;
+        setOrbitalStatus(data);
       }
     } catch {}
   };
@@ -345,12 +313,13 @@ export function AgentHub() {
           const latest = completed[0];
           const dlUrl = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
           setCompletedVideoUrl(dlUrl);
+          if (latest.settings?.background?.url) setLastBackground(latest.settings.background);
         }
       })
       .catch(() => {});
 
-    // Initial background pool status & YouTube status
-    fetchPoolStatus();
+    // Initial Orbital background status & YouTube status
+    fetchOrbitalStatus();
     fetchYtStatus();
   }, []);
 
@@ -458,7 +427,12 @@ export function AgentHub() {
 
   const speakText = (text: string) => {
     if (!voiceFeedback || typeof window === "undefined") return;
-    const clean = text.replace(/[*_#`\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 320);
+    const clean = text
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/[*_#`\n]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 320);
     if (!clean) return;
 
     if (activeAudioRef.current) {
@@ -538,11 +512,17 @@ export function AgentHub() {
           message: query,
           prompt: query,
           history: historyContext,
+          voice: selectedVoice,
+          resolution,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
+        // "generate a yt short …" → the server started a background job
+        // (unused Orbital NCG video → YouTube link importer → render); follow it.
+        const startedShortJob =
+          data.action === "soundwave_shorts" && data.status === "PROCESSING" && typeof data.jobId === "string";
         const videoLink = data.videoUrl || data.downloadUrl;
         const aiMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -559,6 +539,9 @@ export function AgentHub() {
         }
         setChatMessages((prev) => [...prev, aiMsg]);
         speakText(aiMsg.text);
+        if (startedShortJob && activeJobIdRef.current !== data.jobId) {
+          void trackShortJob(data.jobId, data.topic || query);
+        }
       } else {
         const fallbackMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -580,7 +563,7 @@ export function AgentHub() {
       };
       setChatMessages((prev) => [...prev, fallbackMsg]);
     } finally {
-      setAssistantState("STANDBY");
+      setAssistantState(activeJobIdRef.current ? "GENERATING" : "STANDBY");
     }
   };
 
@@ -708,140 +691,224 @@ export function AgentHub() {
     }
   };
 
-  // ── Gameplay Video Upload & Purge Handlers ──────────────────────────────
-  const handlePurgePool = async () => {
+  // ── Orbital NCG Background Handlers ───────────────────────────────────
+  const handleRefreshOrbital = async () => {
+    setIsRefreshingOrbital(true);
     try {
-      const res = await fetch("/api/v1/agent/background-pool/purge", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success("Pool Purged", `Cleared ${data.purged || 0} old/legacy clips. Pool is fresh.`);
-        fetchPoolStatus();
-      }
-    } catch (err: any) {
-      toast.error("Purge Failed", err.message);
-    }
-  };
-
-  const handleGameplayUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsUploadingGameplay(true);
-      toast.info("Processing Gameplay", `Uploading "${file.name}" and slicing into 60s clips...`);
-      const formData = new FormData();
-      formData.append("video", file);
-
-      const res = await fetch("/api/v1/agent/background-pool/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
+      const res = await fetch("/api/v1/agent/orbital/refresh", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data.status) setOrbitalStatus(data.status);
       if (res.ok && data.ok) {
-        toast.success("Gameplay Sliced", `Added ${data.clipsAdded || "new"} 60s clips to rotation pool!`);
-        if (data.status) setPoolStatus(data.status);
-        fetchInspectorData();
+        toast.success("Orbital NCG channel checked", `${data.status?.catalogSize ?? 0} videos · ${data.status?.available ?? 0} not used yet`);
       } else {
-        throw new Error(data.error || "Upload failed");
+        toast.error("Couldn't reach the Orbital NCG channel", data.error || "Channel listing failed");
       }
     } catch (err: any) {
-      toast.error("Upload Error", err.message);
+      toast.error("Couldn't reach the Orbital NCG channel", err.message);
     } finally {
-      setIsUploadingGameplay(false);
-      if (gameplayFileRef.current) gameplayFileRef.current.value = "";
-      if (generatorGameplayFileRef.current) generatorGameplayFileRef.current.value = "";
+      setIsRefreshingOrbital(false);
     }
   };
 
-  // ── Media Inspector Handlers ──────────────────────────────────────────
-  const fetchInspectorData = async () => {
-    setIsInspectorLoading(true);
+  const handleResetOrbital = async () => {
+    if (!window.confirm("Forget which Orbital NCG videos were already used? Future shorts may reuse them.")) return;
+    setIsResettingOrbital(true);
     try {
-      const res = await fetch("/api/v1/agent/background-pool/inspect");
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setInspectorData({
-          poolClips: data.poolClips || [],
-          masterVideos: data.masterVideos || [],
-          customVideos: data.customVideos || [],
-          status: data.status || poolStatus,
-        });
-      }
-    } catch {
-      toast.error("Inspector Error", "Could not fetch background pool inspector details");
-    } finally {
-      setIsInspectorLoading(false);
-    }
-  };
-
-  const handleDeleteClip = async (type: string, filename: string) => {
-    try {
-      const res = await fetch(`/api/v1/agent/background-pool/clip/${type}/${encodeURIComponent(filename)}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        toast.success("Deleted", `Removed ${filename}`);
-        fetchInspectorData();
-        fetchPoolStatus();
-      } else {
-        toast.error("Delete Failed", data.error || "Could not delete file");
-      }
-    } catch (err: any) {
-      toast.error("Delete Failed", err.message);
-    }
-  };
-
-  const handleSliceMaster = async () => {
-    setIsSlicingMaster(true);
-    toast.info("Slicing Master", "Generating fresh 60s clips from local parkour master...");
-    try {
-      const res = await fetch("/api/v1/agent/background-pool/slice-master", { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        toast.success("Master Sliced", `Added ${data.clipsAdded || 0} fresh 60s clips to rotation pool!`);
-        fetchInspectorData();
-        fetchPoolStatus();
-      } else {
-        toast.error("Slicing Failed", data.error || "Could not slice master video");
-      }
-    } catch (err: any) {
-      toast.error("Slicing Failed", err.message);
-    } finally {
-      setIsSlicingMaster(false);
-    }
-  };
-
-  const handleReplenishPool = async (url?: string) => {
-    setIsReplenishingPool(true);
-    toast.info("Importing YouTube Link", "Fetching your link and slicing it into 60s clips...");
-    try {
-      const res = await fetch("/api/v1/agent/background-pool/replenish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const text = await res.text();
-      let data: any = {};
-      try { data = JSON.parse(text); } catch {}
+      const res = await fetch("/api/v1/agent/orbital/reset", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.status) {
-        setPoolStatus(data.status);
-        toast.success("Pool Updated", `${data.status.clipsRemaining} 60s clips ready in pool.`);
-        if (url) setCustomPoolUrl("");
+        setOrbitalStatus(data.status);
+        toast.success("Orbital history reset", "Every Orbital NCG video is available again.");
       } else {
-        toast.error("Pool replenishment", data.error || "Replenishment failed");
+        toast.error("Reset failed", data.error || "Could not reset the Orbital history");
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to replenish pool");
+      toast.error("Reset failed", err.message);
     } finally {
-      setIsReplenishingPool(false);
+      setIsResettingOrbital(false);
     }
+  };
+
+  // ── Short Job Tracker (Generate button + chat) ─────────────────────────
+  // Follows a background short job via SSE with a polling fallback. Steps
+  // include the Orbital NCG link being pasted into the YouTube link importer.
+  const trackShortJob = (jobId: string, topic: string): Promise<void> => {
+    activeJobIdRef.current = jobId;
+    setIsGenerating(true);
+    setCompletedVideoUrl(null);
+    setUploadedYoutubeUrl(null);
+    setAssistantState("GENERATING");
+    setProgressPercent((prev) => Math.max(prev, 8));
+    setCurrentStep("Picking an Orbital NCG video the agent hasn't used yet...");
+
+    return new Promise<void>((resolve) => {
+      let isDone = false;
+      let eventSource: EventSource | null = null;
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      // Imports of long videos can take a while — only give up after a long silence.
+      const STALL_MS = 10 * 60_000;
+      let lastActivity = Date.now();
+      let lastSignature = "";
+
+      const noteActivity = (progress?: unknown, step?: unknown) => {
+        const signature = `${String(progress)}|${String(step)}`;
+        if (signature !== lastSignature) {
+          lastSignature = signature;
+          lastActivity = Date.now();
+        }
+      };
+
+      const cleanup = () => {
+        isDone = true;
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      };
+
+      const finish = () => {
+        if (activeJobIdRef.current === jobId) activeJobIdRef.current = null;
+        setIsGenerating(false);
+        fetchOrbitalStatus();
+        resolve();
+      };
+
+      const finishSuccess = (resultData: any) => {
+        if (isDone) return;
+        cleanup();
+
+        setProgressPercent(100);
+        setCurrentStep("Completed!");
+        setAssistantState("STANDBY");
+
+        const finalVideoUrl =
+          resultData.outputUrl ||
+          resultData.videoUrl ||
+          resultData.downloadUrl ||
+          `/api/v1/export/jobs/${jobId}/download`;
+        const background: ShortBackground | undefined = resultData.background || resultData.settings?.background;
+
+        if (resultData.script) setGeneratedScript(resultData.script);
+        setCompletedVideoUrl(finalVideoUrl);
+        setLastBackground(background ?? null);
+        if (resultData.youtubeUrl) {
+          setUploadedYoutubeUrl(resultData.youtubeUrl);
+        }
+
+        const hasYt = !!resultData.youtubeUrl;
+        const backgroundLine = background
+          ? `\nBackground: "${background.title}" (${describeSection(background.section)}) — Orbital NCG video imported via the YouTube link importer: ${background.url}`
+          : "";
+        const successNotice: ChatMessage = {
+          id: Date.now().toString(),
+          sender: "assistant",
+          text:
+            (hasYt
+              ? `Rendered viral short for "${topic}" and automatically published it to YouTube Shorts: ${resultData.youtubeUrl}`
+              : `Rendered viral short for "${topic}". Your video is ready to preview, download, or post to YouTube!`) + backgroundLine,
+          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+          tag: "AUDIO",
+          videoUrl: finalVideoUrl,
+          downloadUrl: finalVideoUrl,
+          youtubeUrl: resultData.youtubeUrl,
+          background,
+        };
+        setChatMessages((prev) => [...prev, successNotice]);
+        speakText(hasYt ? "Your short has been rendered and posted to YouTube Shorts!" : "Your video has finished rendering and is ready to download!");
+        toast.success(hasYt ? "Published to YouTube!" : "Video Ready", hasYt ? resultData.youtubeUrl : "Short generated successfully.");
+        finish();
+      };
+
+      const finishFail = (errMessage: string) => {
+        if (isDone) return;
+        cleanup();
+        setAssistantState("STANDBY");
+        setProgressPercent(0);
+        setCurrentStep("Ready");
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            sender: "assistant",
+            text: `I couldn't finish the short about "${topic}": ${errMessage}`,
+            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+            tag: "SYS",
+          },
+        ]);
+        toast.error("Generation Error", errMessage);
+        finish();
+      };
+
+      // 1. Real-time EventSource SSE listener
+      try {
+        eventSource = new EventSource(`/api/v1/export/jobs/${jobId}/events`);
+        eventSource.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            noteActivity(msg.progress, msg.step);
+            if (typeof msg.progress === "number") {
+              setProgressPercent((prev) => Math.max(prev, msg.progress));
+            }
+            if (msg.step) {
+              setCurrentStep(msg.step);
+            }
+            if (msg.status === "COMPLETED") {
+              finishSuccess(msg);
+            } else if (msg.status === "FAILED") {
+              finishFail(msg.error || "Video export failed");
+            }
+          } catch {}
+        };
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+        };
+      } catch {}
+
+      // 2. Polling fallback (+ stall detection)
+      pollTimer = setInterval(async () => {
+        if (isDone) return;
+        if (Date.now() - lastActivity > STALL_MS) {
+          finishFail("Generation stalled — no progress for 10 minutes");
+          return;
+        }
+        try {
+          const pollRes = await fetch(`/api/v1/export/jobs/${jobId}`);
+          if (pollRes.ok) {
+            const pollData = await pollRes.json();
+            const j = pollData.job;
+            if (j) {
+              noteActivity(j.progress, j.settings?.step);
+              if (typeof j.progress === "number" && j.progress > 0) {
+                setProgressPercent((prev) => Math.max(prev, j.progress));
+              }
+              if (j.settings?.step) {
+                setCurrentStep(j.settings.step);
+              }
+              if (j.status === "COMPLETED") {
+                finishSuccess(j);
+              } else if (j.status === "FAILED") {
+                finishFail(j.errorMessage || "Export failed");
+              }
+            }
+          }
+        } catch {}
+        // SSE is the primary channel; poll gently — the API allows 120 req/min
+        // per user, and an Orbital import + render can take a few minutes.
+      }, 1500);
+    });
   };
 
   // ── 1-Click Viral Short Generator ───────────────────────────────────────
   const handleGenerateShort = async () => {
     if (isGenerating) return;
+    const topic = customTopic.trim() || selectedNiche;
 
     try {
       setIsGenerating(true);
@@ -851,10 +918,9 @@ export function AgentHub() {
       setCurrentStep("Initiating generation...");
 
       const payload = {
-        topic: customTopic.trim() || selectedNiche,
+        topic,
         voice: selectedVoice,
         resolution,
-        useDefaultBackground: true,
         async: true,
         autoPublishYouTube: ytAutoPublish,
         youtubePrivacy: ytPrivacy,
@@ -874,133 +940,11 @@ export function AgentHub() {
       const jobId = initData.jobId;
       if (!jobId) throw new Error("No job ID received from server");
 
-      // Track REAL progress from FFmpeg and generation stages
-      await new Promise<void>((resolve, reject) => {
-        let isDone = false;
-        let eventSource: EventSource | null = null;
-        let pollTimer: any = null;
-
-        const cleanup = () => {
-          isDone = true;
-          if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-          }
-          if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-          }
-        };
-
-        const finishSuccess = (resultData: any) => {
-          if (isDone) return;
-          cleanup();
-
-          setProgressPercent(100);
-          setCurrentStep("Completed!");
-          setAssistantState("STANDBY");
-
-          const finalVideoUrl =
-            resultData.outputUrl ||
-            resultData.videoUrl ||
-            resultData.downloadUrl ||
-            `/api/v1/export/jobs/${jobId}/download`;
-
-          if (resultData.script) setGeneratedScript(resultData.script);
-          setCompletedVideoUrl(finalVideoUrl);
-          if (resultData.youtubeUrl) {
-            setUploadedYoutubeUrl(resultData.youtubeUrl);
-          }
-
-          const hasYt = !!resultData.youtubeUrl;
-          const successNotice: ChatMessage = {
-            id: Date.now().toString(),
-            sender: "assistant",
-            text: hasYt
-              ? `Rendered viral short for "${payload.topic}" (${resolution} 60fps) and automatically published to YouTube Shorts: ${resultData.youtubeUrl}`
-              : `Rendered viral short for "${payload.topic}" (${resolution} 60fps). Your video is ready to preview, download, or post to YouTube!`,
-            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-            tag: "AUDIO",
-            videoUrl: finalVideoUrl,
-            downloadUrl: finalVideoUrl,
-            youtubeUrl: resultData.youtubeUrl,
-          };
-          setChatMessages((prev) => [...prev, successNotice]);
-          speakText(hasYt ? "Your short has been rendered and posted to YouTube Shorts!" : "Your video has finished rendering and is ready to download!");
-          toast.success(hasYt ? "Published to YouTube!" : "Video Ready", hasYt ? resultData.youtubeUrl : "Short generated successfully.");
-          resolve();
-        };
-
-        const finishFail = (errMessage: string) => {
-          if (isDone) return;
-          cleanup();
-          reject(new Error(errMessage));
-        };
-
-        // 1. Real-time EventSource SSE listener
-        try {
-          eventSource = new EventSource(`/api/v1/export/jobs/${jobId}/events`);
-          eventSource.onmessage = (e) => {
-            try {
-              const msg = JSON.parse(e.data);
-              if (typeof msg.progress === "number") {
-                setProgressPercent((prev) => Math.max(prev, msg.progress));
-              }
-              if (msg.step) {
-                setCurrentStep(msg.step);
-              }
-              if (msg.status === "COMPLETED") {
-                finishSuccess(msg);
-              } else if (msg.status === "FAILED") {
-                finishFail(msg.error || "Video export failed");
-              }
-            } catch {}
-          };
-          eventSource.onerror = () => {
-            if (eventSource) {
-              eventSource.close();
-              eventSource = null;
-            }
-          };
-        } catch {}
-
-        // 2. High-frequency 350ms Polling fallback
-        pollTimer = setInterval(async () => {
-          if (isDone) return;
-          try {
-            const pollRes = await fetch(`/api/v1/export/jobs/${jobId}`);
-            if (pollRes.ok) {
-              const pollData = await pollRes.json();
-              const j = pollData.job;
-              if (j) {
-                if (typeof j.progress === "number" && j.progress > 0) {
-                  setProgressPercent((prev) => Math.max(prev, j.progress));
-                }
-                if (j.settings?.step) {
-                  setCurrentStep(j.settings.step);
-                }
-                if (j.status === "COMPLETED") {
-                  finishSuccess(j);
-                } else if (j.status === "FAILED") {
-                  finishFail(j.errorMessage || "Export failed");
-                }
-              }
-            }
-          } catch {}
-        }, 350);
-
-        // Safety timeout
-        setTimeout(() => {
-          if (!isDone) {
-            finishFail("Generation timed out");
-          }
-        }, 180_000);
-      });
+      await trackShortJob(jobId, topic);
     } catch (err: any) {
       toast.error("Generation Error", err.message);
       setAssistantState("STANDBY");
       setProgressPercent(0);
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -1042,7 +986,7 @@ export function AgentHub() {
           <span className="text-gray-300">{currentDateStr || "September 20, 2026"}</span>
         </div>
 
-        {/* Right: Voice Capsule, Background Pool Capsule & Settings Gear Button */}
+        {/* Right: Voice Capsule, Orbital Background Capsule & Settings Gear Button */}
         <div className="flex items-center gap-2">
           {/* Quick Male Voice Selector Capsule */}
           <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-2.5 py-1 text-xs text-gray-300 font-mono">
@@ -1061,11 +1005,19 @@ export function AgentHub() {
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-3 py-1 text-xs text-gray-300 font-mono">
-            <Film className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-white font-semibold">{poolStatus.clipsRemaining}</span>
-            <span className="hidden sm:inline text-gray-400">clips in pool</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setOrbitalHistoryOpen(true);
+              fetchOrbitalStatus();
+            }}
+            className="flex items-center gap-1.5 rounded-full border border-[#172A4A] bg-[#0C172E] px-3 py-1 text-xs text-gray-300 font-mono hover:border-cyan-500/40 transition-colors cursor-pointer"
+            title="Orbital NCG videos the agent hasn't used yet"
+          >
+            <Youtube className="h-3.5 w-3.5 text-red-500" />
+            <span className="text-white font-semibold">{orbitalStatus?.available ?? "—"}</span>
+            <span className="hidden sm:inline text-gray-400">unused Orbital videos</span>
+          </button>
 
           <button
             onClick={() => setSettingsOpen(true)}
@@ -1143,127 +1095,87 @@ export function AgentHub() {
             </div>
           </div>
 
-          {/* Card 2: Minecraft Parkour 60s Background Pool */}
+          {/* Card 2: Orbital NCG Background Source */}
           <div className="rounded-xl border border-[#14233D] bg-[#0A1224] p-3.5 space-y-2.5 font-mono">
             <div className="flex items-center justify-between border-b border-[#14233D] pb-1.5 text-xs">
               <span className="flex items-center gap-1.5 font-semibold text-gray-200">
                 <Film className="h-3.5 w-3.5 text-cyan-400" />
-                Background Gameplay Pool
+                Orbital NCG Backgrounds
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setShowPoolInspector(true);
-                    fetchInspectorData();
+                    setOrbitalHistoryOpen(true);
+                    fetchOrbitalStatus();
                   }}
                   className="text-gray-400 hover:text-cyan-300 transition-colors cursor-pointer"
-                  title="Inspect downloaded clips & videos"
+                  title="Show the Orbital videos already used"
                 >
-                  <Eye className="h-3.5 w-3.5" />
+                  <Clock className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
-                  onClick={handlePurgePool}
-                  className="text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
-                  title="Purge legacy/cached clips from disk"
+                  onClick={handleRefreshOrbital}
+                  disabled={isRefreshingOrbital}
+                  className="text-gray-400 hover:text-cyan-400 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Re-check the channel for new uploads"
                 >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={fetchPoolStatus}
-                  className="text-gray-400 hover:text-cyan-400 transition-colors cursor-pointer"
-                  title="Refresh pool status"
-                >
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className={`h-3 w-3 ${isRefreshingOrbital ? "animate-spin" : ""}`} />
                 </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-2xl font-bold text-white tracking-tight">{poolStatus.clipsRemaining}</span>
-                <span className="text-xs text-gray-400 ml-1.5">clips ready</span>
-                <p className="text-[11px] text-cyan-400/90 mt-0.5">60s clips · Auto-rotates & deletes on use</p>
+                <span className="text-2xl font-bold text-white tracking-tight">{orbitalStatus?.available ?? "—"}</span>
+                <span className="text-xs text-gray-400 ml-1.5">unused videos</span>
+                <p className="text-[11px] text-cyan-400/90 mt-0.5">
+                  {orbitalStatus?.catalogSize != null
+                    ? `of ${orbitalStatus.catalogSize} on the channel`
+                    : "Channel gets listed on the first Generate"}
+                </p>
               </div>
               <div className="text-right">
                 <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold block">
-                  {poolStatus.usedUrlsCount} LONG VIDEOS
+                  {orbitalStatus?.usedCount ?? 0} USED
                 </span>
-                <span className="text-[9px] text-gray-400 mt-1 block">Zero duplicates</span>
+                <span className="text-[9px] text-gray-400 mt-1 block">Never reused</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1 text-center">
-              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
-                <span className="text-[10px] text-gray-400 block">Consumed</span>
-                <span className="text-xs font-bold text-white">{poolStatus.totalClipsConsumed}</span>
-              </div>
-              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
-                <span className="text-[10px] text-gray-400 block">Unique Sources</span>
-                <span className="text-xs font-bold text-white">{poolStatus.usedUrlsCount}</span>
-              </div>
-            </div>
-
-            {/* Quick URL Adder & Replenish */}
-            <div className="pt-1 space-y-2">
-              {/* Media Inspector Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPoolInspector(true);
-                  fetchInspectorData();
-                }}
-                className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-cyan-950/40"
-              >
-                <Eye className="h-3.5 w-3.5 text-cyan-400" />
-                Inspect Downloaded Videos & Clips
-              </button>
-
-              <div className="flex gap-1.5">
-                <input
-                  type="text"
-                  placeholder="Paste YouTube parkour URL..."
-                  value={customPoolUrl}
-                  onChange={(e) => setCustomPoolUrl(e.target.value)}
-                  className="flex-1 rounded-lg border border-[#14233D] bg-[#070D18] px-2.5 py-1 text-[11px] text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
-                />
-                <button
-                  onClick={() => handleReplenishPool(customPoolUrl.trim())}
-                  disabled={isReplenishingPool || !customPoolUrl.trim()}
-                  className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 hover:bg-cyan-500 hover:text-[#070B14] text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer"
-                  title="Import this YouTube link and slice it into 60s clips"
+            <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-2 space-y-0.5">
+              <span className="text-[10px] text-gray-400 block">Last imported background</span>
+              {orbitalStatus?.lastUsed ? (
+                <a
+                  href={orbitalStatus.lastUsed.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-cyan-300 hover:text-cyan-200"
+                  title={orbitalStatus.lastUsed.url}
                 >
-                  <RefreshCw className={`h-3 w-3 ${isReplenishingPool ? "animate-spin" : ""}`} />
-                  {isReplenishingPool ? "Slicing..." : "Replenish"}
-                </button>
-              </div>
-
-              {/* Custom Gameplay Upload */}
-              <div className="flex items-center justify-between pt-0.5">
-                <input
-                  type="file"
-                  ref={gameplayFileRef}
-                  onChange={handleGameplayUpload}
-                  accept="video/mp4,video/webm,video/quicktime,video/mkv"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => gameplayFileRef.current?.click()}
-                  disabled={isUploadingGameplay}
-                  className="w-full rounded-lg border border-[#172A4A] bg-[#070D18] hover:border-cyan-400/60 hover:bg-cyan-500/10 text-gray-300 hover:text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Upload className="h-3 w-3 text-cyan-400" />
-                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Custom Gameplay (MP4)"}
-                </button>
-              </div>
-
-              <p className="text-[10px] text-gray-400 italic">
-                *Clips are sliced into 60s segments, rotated, and auto-deleted on use. Never reuses the same video.
-              </p>
+                  <span className="truncate">{orbitalStatus.lastUsed.title}</span>
+                  <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                </a>
+              ) : (
+                <span className="text-[11px] text-gray-500 block">None yet</span>
+              )}
             </div>
+
+            <a
+              href={ORBITAL_CHANNEL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-cyan-950/40"
+            >
+              <Youtube className="h-3.5 w-3.5 text-red-500" />
+              youtube.com/@OrbitalNCG
+              <ExternalLink className="h-3 w-3" />
+            </a>
+
+            <p className="text-[10px] text-gray-400 italic">
+              *On every Generate (button or chat) the agent picks an Orbital NCG video it hasn't used before, pastes its link into the YouTube link importer, and uses the imported gameplay as the background.
+            </p>
           </div>
 
           {/* YouTube Shorts Studio & Automation Card */}
@@ -1364,6 +1276,21 @@ export function AgentHub() {
                   className="h-full w-full object-contain"
                 />
               </div>
+              {lastBackground && (
+                <a
+                  href={lastBackground.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[10px] text-gray-300 hover:text-cyan-300 transition-colors"
+                  title={`Imported via the YouTube link importer: ${lastBackground.url}`}
+                >
+                  <Youtube className="h-3 w-3 shrink-0 text-red-500" />
+                  <span className="truncate">
+                    Background: {lastBackground.title} · Orbital NCG · {describeSection(lastBackground.section)}
+                  </span>
+                  <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                </a>
+              )}
               <div className="space-y-1.5">
                 <a
                   href={completedVideoUrl}
@@ -1473,7 +1400,7 @@ export function AgentHub() {
                   ? "Neural processing..."
                   : assistantState === "SPEAKING"
                   ? "Synthesizing voice response..."
-                  : assistantState === "GENERATING"
+                  : assistantState === "GENERATING" || isGenerating
                   ? `Rendering short (${progressPercent}%)...`
                   : "Listening for wake word..."}
               </span>
@@ -1601,6 +1528,22 @@ export function AgentHub() {
                       />
                     </div>
 
+                    {msg.background && (
+                      <a
+                        href={msg.background.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[10px] text-gray-300 hover:text-cyan-300 transition-colors"
+                        title={`Imported via the YouTube link importer: ${msg.background.url}`}
+                      >
+                        <Youtube className="h-3 w-3 shrink-0 text-red-500" />
+                        <span className="truncate">
+                          Background: {msg.background.title} · Orbital NCG · {describeSection(msg.background.section)}
+                        </span>
+                        <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                      </a>
+                    )}
+
                     <div className="flex items-center gap-2 pt-1">
                       <a
                         href={msg.downloadUrl || msg.videoUrl}
@@ -1661,6 +1604,21 @@ export function AgentHub() {
 
           {/* Command Prompt Input Bar */}
           <div className="pt-2 border-t border-[#14233D] space-y-2">
+            {/* Live short progress (Generate button or chat request) */}
+            {isGenerating && (
+              <div className="rounded-lg border border-cyan-500/30 bg-[#070D18] px-2.5 py-1.5 space-y-1 font-mono">
+                <div className="flex items-center justify-between gap-2 text-[10px]">
+                  <span className="truncate text-gray-300" title={currentStep}>
+                    🎬 {currentStep}
+                  </span>
+                  <span className="shrink-0 text-cyan-400 font-bold">{progressPercent}%</span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-gray-800">
+                  <div className="h-full bg-cyan-400 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </div>
+            )}
+
             {/* Quick Chips */}
             <div className="flex items-center gap-1.5 overflow-x-auto text-[10px] text-gray-400 pb-1">
               <button
@@ -1784,45 +1742,42 @@ export function AgentHub() {
               </div>
             </div>
 
-            {/* Background Footage Source Info & Upload */}
+            {/* Background Footage Source: Orbital NCG via the YouTube link importer */}
             <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 space-y-2">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-semibold text-gray-300">Background Footage Source</span>
                 <span className="text-cyan-400 font-bold">
-                  {poolStatus.clipsRemaining > 0 ? `${poolStatus.clipsRemaining} Clips in Rotation` : "Auto-Replenish Active"}
+                  {orbitalStatus?.available != null ? `${orbitalStatus.available} unused Orbital videos` : "Orbital NCG"}
                 </span>
               </div>
               <p className="text-[10px] text-gray-400 leading-normal">
-                Continuous 60s gameplay slices. Auto-rotates, consumes without duplicates, and auto-fetches fresh runs.
+                The agent picks a video from{" "}
+                <a href={ORBITAL_CHANNEL_URL} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline hover:text-cyan-200">
+                  youtube.com/@OrbitalNCG
+                </a>{" "}
+                that it hasn't used before, pastes its link into the YouTube link importer, and composites the imported gameplay behind your captions.
               </p>
               <div className="pt-1 flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={generatorGameplayFileRef}
-                  onChange={handleGameplayUpload}
-                  accept="video/mp4,video/webm,video/quicktime,video/mkv"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => generatorGameplayFileRef.current?.click()}
-                  disabled={isUploadingGameplay}
-                  className="flex-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                <a
+                  href={ORBITAL_CHANNEL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Upload className="h-3 w-3 text-cyan-400" />
-                  {isUploadingGameplay ? "Slicing into 60s Clips..." : "Upload Gameplay"}
-                </button>
+                  <Youtube className="h-3 w-3 text-red-500" />
+                  Open Orbital NCG
+                </a>
                 <button
                   type="button"
                   onClick={() => {
-                    setShowPoolInspector(true);
-                    fetchInspectorData();
+                    setOrbitalHistoryOpen(true);
+                    fetchOrbitalStatus();
                   }}
                   className="rounded-lg border border-[#172A4A] bg-[#070D18] hover:border-cyan-400/50 hover:bg-cyan-500/10 text-gray-300 hover:text-cyan-300 px-2.5 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                  title="Inspect downloaded pool clips"
+                  title="Orbital videos already used as backgrounds"
                 >
-                  <Eye className="h-3 w-3 text-cyan-400" />
-                  Inspect Pool
+                  <Clock className="h-3 w-3 text-cyan-400" />
+                  Used Videos ({orbitalStatus?.usedCount ?? 0})
                 </button>
               </div>
             </div>
@@ -2334,333 +2289,131 @@ export function AgentHub() {
         </Modal>
       )}
 
-      {/* ── 6. MODAL: GAMEPLAY MEDIA INSPECTOR ────────────────────────── */}
-      {showPoolInspector && (
+      {/* ── 6. MODAL: ORBITAL NCG BACKGROUND HISTORY ──────────────────── */}
+      {orbitalHistoryOpen && (
         <Modal
-          open={showPoolInspector}
-          onClose={() => setShowPoolInspector(false)}
-          title="Background Gameplay & Media Inspector"
-          size="2xl"
+          open={orbitalHistoryOpen}
+          onClose={() => setOrbitalHistoryOpen(false)}
+          title="Orbital NCG Background History"
+          size="xl"
           footer={
-            <div className="flex w-full items-center justify-between font-mono text-xs">
-              <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>{inspectorData.poolClips.length} ready clips</span>
-                <span>·</span>
-                <span>{inspectorData.status.totalClipsConsumed} consumed</span>
-              </div>
+            <div className="flex w-full items-center justify-between gap-2 font-mono text-xs">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetOrbital}
+                loading={isResettingOrbital}
+                disabled={!orbitalStatus || (orbitalStatus.usedCount === 0 && orbitalStatus.skippedCount === 0)}
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+              >
+                Reset History
+              </Button>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleSliceMaster}
-                  disabled={isSlicingMaster}
+                  onClick={handleRefreshOrbital}
+                  loading={isRefreshingOrbital}
+                  icon={<RefreshCw className="h-3.5 w-3.5" />}
                 >
-                  <Film className="h-3 w-3 mr-1 text-cyan-400" />
-                  {isSlicingMaster ? "Slicing..." : "Slice Master Video"}
+                  Re-check Channel
                 </Button>
-                <Button variant="primary" size="sm" onClick={() => setShowPoolInspector(false)}>
+                <Button variant="primary" size="sm" onClick={() => setOrbitalHistoryOpen(false)}>
                   Done
                 </Button>
               </div>
             </div>
           }
         >
-          <div className="space-y-4 font-mono text-xs">
-            {/* Top Bar: Tabs & Quick Refresh */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#14233D] pb-3">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab("clips")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inspectorTab === "clips"
-                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
-                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
-                  }`}
-                >
-                  Ready 60s Clips ({inspectorData.poolClips.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab("masters")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inspectorTab === "masters"
-                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
-                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
-                  }`}
-                >
-                  Master & Custom Videos ({inspectorData.masterVideos.length + inspectorData.customVideos.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab("history")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inspectorTab === "history"
-                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950/40"
-                      : "text-gray-400 hover:text-white hover:bg-[#070D18]"
-                  }`}
-                >
-                  Source URL Rotation ({inspectorData.status.usedUrlsCount})
-                </button>
-              </div>
+          <div className="space-y-3 font-mono text-xs">
+            <p className="text-[11px] text-gray-400 leading-normal">
+              Every short uses a video from{" "}
+              <a href={ORBITAL_CHANNEL_URL} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline hover:text-cyan-200">
+                youtube.com/@OrbitalNCG
+              </a>{" "}
+              that was never used before. The agent pastes its link into the YouTube link importer and imports just the stretch of gameplay the short needs. A video counts as used once a short has been rendered from it.
+            </p>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={fetchInspectorData}
-                  disabled={isInspectorLoading}
-                  className="rounded-lg border border-[#14233D] bg-[#070D18] hover:border-cyan-400/50 text-gray-300 hover:text-cyan-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Refresh pool clips"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isInspectorLoading ? "animate-spin" : ""}`} />
-                  Refresh
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePurgePool}
-                  className="rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 px-2.5 py-1 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Purge all cached clips from disk"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Purge Pool
-                </button>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-2">
+                <span className="text-[10px] text-gray-400 block">On channel</span>
+                <span className="text-sm font-bold text-white">{orbitalStatus?.catalogSize ?? "—"}</span>
+              </div>
+              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-2">
+                <span className="text-[10px] text-gray-400 block">Not used yet</span>
+                <span className="text-sm font-bold text-cyan-300">{orbitalStatus?.available ?? "—"}</span>
+              </div>
+              <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-2">
+                <span className="text-[10px] text-gray-400 block">Used</span>
+                <span className="text-sm font-bold text-emerald-400">{orbitalStatus?.usedCount ?? 0}</span>
               </div>
             </div>
-
-            {/* TAB 1: 60s Ready Clips */}
-            {inspectorTab === "clips" && (
-              <div className="space-y-3">
-                {inspectorData.poolClips.length === 0 ? (
-                  <div className="p-8 text-center rounded-xl border border-dashed border-[#172A4A] bg-[#070D18]/60 space-y-3">
-                    <Film className="h-10 w-10 text-cyan-400/50 mx-auto" />
-                    <div>
-                      <h4 className="text-sm font-bold text-white">Rotation Pool is Empty</h4>
-                      <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                        No 60-second sliced clips are currently in the queue. Paste a YouTube link above to import footage for slicing, or Soundwave will use the 60fps Minecraft parkour master.
-                      </p>
-                    </div>
-                    <div className="pt-2 flex flex-wrap justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSliceMaster}
-                        disabled={isSlicingMaster}
-                        className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-[#070B14] px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Film className="h-3.5 w-3.5" />
-                        {isSlicingMaster ? "Slicing..." : "Slice Master Video into 60s Clips"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[55vh] overflow-y-auto pr-1">
-                    {inspectorData.poolClips.map((clip) => (
-                      <div
-                        key={clip.id}
-                        className="rounded-xl border border-[#14233D] bg-[#070D18] p-3 space-y-2 flex flex-col justify-between hover:border-cyan-500/40 transition-colors"
-                      >
-                        {/* Card Header */}
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold">
-                              CLIP #{clip.index}
-                            </span>
-                            {clip.index === 1 && (
-                              <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] font-bold">
-                                NEXT UP
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-400 font-mono">{clip.sizeFormatted}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteClip("pool", clip.filename)}
-                              className="text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
-                              title="Delete clip from pool"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Video Player */}
-                        <div className="relative rounded-lg overflow-hidden bg-black aspect-[9/16] max-h-64 flex items-center justify-center border border-[#14233D]">
-                          <video
-                            src={clip.previewUrl}
-                            controls
-                            preload="metadata"
-                            playsInline
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-
-                        {/* Card Footer */}
-                        <div className="flex items-center justify-between pt-1 border-t border-[#14233D] text-[10px] text-gray-400">
-                          <span className="truncate max-w-[180px]" title={clip.filename}>
-                            {clip.filename}
-                          </span>
-                          <a
-                            href={clip.previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-cyan-400 hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-2.5 w-2.5" />
-                            Open
-                          </a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {orbitalStatus?.catalogFetchedAt && (
+              <p className="text-[10px] text-gray-500">
+                Channel last checked {new Date(orbitalStatus.catalogFetchedAt).toLocaleString()}
+              </p>
             )}
 
-            {/* TAB 2: Master & Custom Footage */}
-            {inspectorTab === "masters" && (
-              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-                {/* Section A: Master 60fps Gameplay */}
-                <div className="rounded-xl border border-[#14233D] bg-[#070D18] p-3.5 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#14233D] pb-2">
-                    <div>
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-                        Guaranteed 60fps Minecraft Parkour Master
-                      </h4>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        Master video used as fallback and source for slicing fresh 60s clips.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSliceMaster}
-                      disabled={isSlicingMaster}
-                      className="rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-[#070B14] px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Film className="h-3 w-3" />
-                      {isSlicingMaster ? "Slicing..." : "Slice into 60s Clips"}
-                    </button>
-                  </div>
-
-                  {inspectorData.masterVideos.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                      <div className="relative rounded-lg overflow-hidden bg-black aspect-[9/16] max-h-72 flex items-center justify-center border border-[#14233D]">
-                        <video
-                          src={inspectorData.masterVideos[0]?.previewUrl}
-                          controls
-                          preload="metadata"
-                          playsInline
-                          className="w-full h-full object-contain"
-                        />
+            <div className="space-y-1.5">
+              <h4 className="text-[11px] font-bold text-gray-200">Used videos ({orbitalStatus?.usedCount ?? 0})</h4>
+              {!orbitalStatus || orbitalStatus.used.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#14233D] bg-[#070D18] p-3 text-center text-[11px] text-gray-500">
+                  No Orbital videos used yet. Generate a short and its background video will show up here.
+                </p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+                  {orbitalStatus.used.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#14233D] bg-[#070D18] px-2.5 py-1.5">
+                      <div className="min-w-0">
+                        <span className="block truncate text-[11px] text-white" title={u.title}>
+                          {u.title}
+                        </span>
+                        <span className="block truncate text-[10px] text-gray-500">
+                          {new Date(u.usedAt).toLocaleString()} · {describeSection(u.section)}
+                          {u.topic ? ` · "${u.topic}"` : ""}
+                        </span>
                       </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="rounded-lg border border-[#14233D] bg-[#0A1224] p-3 space-y-1.5">
-                          <span className="text-[10px] text-gray-500 block">FILE</span>
-                          <span className="text-white font-mono text-[11px] block">{inspectorData.masterVideos[0]?.filename}</span>
-                          <span className="text-[10px] text-gray-500 block pt-1">SIZE</span>
-                          <span className="text-cyan-400 font-bold block">{inspectorData.masterVideos[0]?.sizeFormatted}</span>
-                          <span className="text-[10px] text-gray-500 block pt-1">PROPERTIES</span>
-                          <span className="text-emerald-400 block text-[11px]">1080x1920 · 60 FPS · Vertical 9:16</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 text-center text-gray-500 text-xs">
-                      Master video not yet generated on disk. Generating a short will produce it automatically.
-                    </div>
-                  )}
-                </div>
-
-                {/* Section B: User Custom Videos */}
-                <div className="rounded-xl border border-[#14233D] bg-[#070D18] p-3.5 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#14233D] pb-2">
-                    <div>
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <Upload className="h-3.5 w-3.5 text-cyan-400" />
-                        Custom Dropped Gameplay Footage ({inspectorData.customVideos.length})
-                      </h4>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        Videos dropped into <code className="text-cyan-300">background_cache/minecraft_parkour/custom_videos/</code>
-                      </p>
-                    </div>
-                  </div>
-
-                  {inspectorData.customVideos.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500 text-xs">
-                      No custom videos uploaded yet. Use "Upload Custom Gameplay" to import your own gameplay files.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {inspectorData.customVideos.map((c) => (
-                        <div key={c.id} className="rounded-lg border border-[#14233D] bg-[#0A1224] p-2.5 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-white font-bold text-[11px] truncate max-w-[180px]">{c.filename}</span>
-                            <span className="text-cyan-400 text-[10px]">{c.sizeFormatted}</span>
-                          </div>
-                          <div className="relative rounded overflow-hidden bg-black aspect-[9/16] max-h-48 border border-[#14233D]">
-                            <video src={c.previewUrl} controls preload="metadata" className="w-full h-full object-contain" />
-                          </div>
-                          <div className="flex justify-end pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteClip("custom", c.filename)}
-                              className="text-gray-500 hover:text-rose-400 text-[10px] flex items-center gap-1 cursor-pointer"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Delete File
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: Used YouTube URL History */}
-            {inspectorTab === "history" && (
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg border border-[#172A4A] bg-[#070D18] flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Zero Duplicate Protection</h4>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      Soundwave tracks processed URLs permanently so your shorts always use fresh gameplay.
-                    </p>
-                  </div>
-                  <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold">
-                    {inspectorData.status.usedUrlsCount} Processed Videos
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
-                  {inspectorData.status.usedUrls.length === 0 ? (
-                    <div className="p-6 text-center text-gray-500 text-xs">
-                      No YouTube URLs recorded in history yet.
-                    </div>
-                  ) : (
-                    inspectorData.status.usedUrls.map((u: string, idx: number) => (
-                      <div
-                        key={u + idx}
-                        className="rounded-lg border border-[#14233D] bg-[#070D18] p-2.5 flex items-center justify-between"
+                      <a
+                        href={u.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex shrink-0 items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
+                        title={u.url}
                       >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="text-[10px] text-gray-500 font-mono">#{idx + 1}</span>
-                          <span className="text-xs text-gray-200 truncate font-mono">{u}</span>
-                        </div>
-                        <a
-                          href={u}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[11px] shrink-0 ml-2"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          View on YouTube
-                        </a>
+                        <ExternalLink className="h-3 w-3" />
+                        YouTube
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {orbitalStatus && orbitalStatus.skipped.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-[11px] font-bold text-amber-300">Skipped: couldn't be imported ({orbitalStatus.skipped.length})</h4>
+                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                  {orbitalStatus.skipped.map((sk) => (
+                    <div key={sk.id} className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/20 bg-[#070D18] px-2.5 py-1.5">
+                      <div className="min-w-0">
+                        <span className="block truncate text-[11px] text-white" title={sk.title}>
+                          {sk.title}
+                        </span>
+                        <span className="block truncate text-[10px] text-amber-200/70" title={sk.reason}>
+                          {sk.reason}
+                        </span>
                       </div>
-                    ))
-                  )}
+                      <a
+                        href={sk.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex shrink-0 items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        YouTube
+                      </a>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

@@ -54,7 +54,7 @@ function loadSecrets(secretsFile) {
  *   appRoot/
  *     server/        package.json, dist/, node_modules/   (assembled)
  *     frontend/dist/ built SPA served at WEB_DIST
- *     scripts/assets bundled static assets (HUD overlay, music, …)
+ *     scripts/assets bundled static assets (music, …)
  *   binDir/
  *     ffmpeg.exe, yt-dlp.exe                              (runtime binaries)
  */
@@ -83,10 +83,9 @@ async function applyServerEnv({ appRoot, binDir, userDataDir }) {
     APP_URL: appUrl,
     CORS_ORIGINS: appUrl,
     DATA_DIR: dataDir,
+    // Uploads (incl. YouTube link imports) and the agent's Orbital NCG history
+    // live in the user-data folder, never the install directory.
     UPLOADS_DIR: path.join(userDataDir, "uploads"),
-    // All background-video cache writes go to the user-data folder, never the
-    // install directory (upgrade/uninstall safe).
-    BACKGROUND_CACHE_DIR: path.join(dataDir, "background_cache"),
     WEB_DIST: webDist,
     JWT_ACCESS_SECRET: secrets.jwtAccess,
     JWT_REFRESH_SECRET: secrets.jwtRefresh,

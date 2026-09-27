@@ -17,7 +17,7 @@ STEPS = [
     ("draft_script", "Viral Script & Hooks Generation"),
     ("synth_voice", "Neural Voice Synthesis (Edge TTS)"),
     ("align_subtitles", "Word-Level Subtitle Alignment"),
-    ("select_background", "Gameplay Background Selection (80s Cache)"),
+    ("select_background", "Orbital NCG Background Import (YouTube link importer)"),
     ("composite_video", "FFmpeg Vertical Video Compositor (9:16 60fps)"),
     ("verify_export", "MP4 Integrity & Duration Check"),
     ("complete_download", "Completed & Ready for Download"),

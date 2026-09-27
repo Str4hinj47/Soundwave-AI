@@ -4,7 +4,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
-import multer from "multer";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
@@ -13,18 +12,24 @@ import { dimensionsFor } from "../lib/plans.js";
 import { synthesizeEdgeTTS } from "../lib/edgeTts.js";
 import { synthesizeClone } from "../lib/voiceclone.js";
 import { runFfmpegExport, resolveFfmpegPath, type ExportSettings, type SubtitleCueInput, type SubtitleStyleInput } from "../lib/ffmpeg.js";
-import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { config } from "../config.js";
-import { backgroundPool, backgroundCacheRoot } from "../lib/backgroundPool.js";
-import { isReadableMediaFile } from "../lib/mediaFile.js";
+import {
+  ORBITAL_CHANNEL_NAME,
+  ORBITAL_CHANNEL_URL,
+  OrbitalError,
+  describeOrbitalSection,
+  discardOrbitalImport,
+  getOrbitalCatalog,
+  getOrbitalStatus,
+  importUnusedOrbitalVideo,
+  markOrbitalVideoUsed,
+  releaseOrbitalVideo,
+  resetOrbitalHistory,
+  type OrbitalImport,
+  type OrbitalSection,
+} from "../lib/orbitalBackground.js";
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
-
-export const BLACKLIST = ["dQw4w9WgXcQ", "NJ1VD4eCcD0"];
-
-export function isBlacklisted(url: string): boolean {
-  return BLACKLIST.some((id) => url.includes(id));
-}
 
 // ── Script templates for Soundwave Agent — VIRAL 2026 RESEARCH-BASED
 export const VIRAL_SCRIPTS: Record<string, string[]> = {
@@ -131,134 +136,6 @@ export function cuesFromTimings(
   return cues;
 }
 
-const CACHE_CHUNK_SECS = 80;
-
-export function findCachedChunk(): string | null {
-  const masterCandidates = [
-    path.join(backgroundCacheRoot(), "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(process.cwd(), "..", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(process.cwd(), "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(process.cwd(), "..", "data", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(process.cwd(), "data", "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-    path.join(config.dataDir, "background_cache", "minecraft_parkour", "80s", "parkour_master_80s.mp4"),
-  ];
-    for (const p of masterCandidates) {
-      try {
-        if (fs.existsSync(p) && fs.statSync(p).size > 1_000_000 && isReadableMediaFile(p)) return p;
-        if (fs.existsSync(p) && !isReadableMediaFile(p)) {
-          // Self-heal: delete a corrupt master so ensureLocalMasterVideo regenerates it.
-          console.warn(`[findCachedChunk] Deleting corrupt master: ${p}`);
-          try {
-            fs.unlinkSync(p);
-          } catch {}
-        }
-      } catch {}
-    }
-
-  const roots = [
-    path.dirname(backgroundCacheRoot()), // parent of the (possibly env-overridden) cache root
-    path.join(process.cwd(), ".."),
-    process.cwd(),
-    config.dataDir,
-  ];
-
-  const subdirs = [
-    path.join("background_cache", "minecraft_parkour", "80s"),
-    path.join("data", "background_cache", "minecraft_parkour", "80s"),
-    path.join("background_cache", "minecraft_parkour"),
-    "background_cache",
-  ];
-
-  for (const root of roots) {
-    for (const sub of subdirs) {
-      const d = path.resolve(root, sub);
-      try {
-        if (fs.existsSync(d) && fs.statSync(d).isDirectory()) {
-          const files = fs.readdirSync(d).filter((f) => {
-            const lower = f.toLowerCase();
-            return (
-              (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv") || lower.endsWith(".webm")) &&
-              !lower.startsWith("solid-bg-") &&
-              !lower.startsWith("soundwave_short_") &&
-              !lower.startsWith("motion-bg-")
-            );
-          });
-          const master = files.find((f) => f.includes("parkour_master") || f.includes("minecraft") || f.includes("parkour"));
-          if (master) {
-            const full = path.join(d, master);
-            try {
-              if (fs.statSync(full).size > 1_000_000 && isReadableMediaFile(full)) return full;
-            } catch {}
-          }
-          for (const f of files) {
-            const fullPath = path.join(d, f);
-            try {
-              if (fs.statSync(fullPath).size > 500_000 && isReadableMediaFile(fullPath)) return fullPath;
-            } catch {}
-          }
-        }
-      } catch {}
-    }
-  }
-  return null;
-}
-
-export async function ensureMinecraftBackground(customUrl?: string | null): Promise<string> {
-  // If custom URL requested, add it to pool rotation and replenish
-  if (customUrl && !isBlacklisted(customUrl)) {
-    backgroundPool.addCustomUrl(customUrl);
-    try {
-      await backgroundPool.replenishPool(customUrl);
-    } catch {}
-  }
-
-  // Consume next 60-second clip from pool (deletes upon consumption, auto-replenishes if pool is empty)
-  try {
-    const clip = await backgroundPool.consumeNextClip();
-    if (clip && fs.existsSync(clip) && fs.statSync(clip).size > 100_000) {
-      return clip;
-    }
-  } catch (err) {
-    console.warn("[ensureMinecraftBackground] Background pool consumption fallback:", err);
-  }
-
-  const cached = findCachedChunk();
-  if (cached && fs.existsSync(cached) && fs.statSync(cached).size > 1_000_000) {
-    return cached;
-  }
-
-  // Generate or return guaranteed local 60fps master video (zero static photos)
-  return await backgroundPool.ensureLocalMasterVideo();
-}
-
-async function generateSolidVideo(width: number, height: number, seconds: number): Promise<string> {
-  const dir = path.join(config.uploadsDir, "jobs");
-  fs.mkdirSync(dir, { recursive: true });
-  const out = path.join(dir, `motion-bg-${Date.now()}.mp4`);
-  const dur = Math.min(3600, Math.max(1, Math.round(seconds)));
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(resolveFfmpegPath(), [
-      "-y",
-      "-f",
-      "lavfi",
-      "-i",
-      `color=c=#070d18:s=${width}x${height}:d=${dur}:r=30`,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-pix_fmt",
-      "yuv420p",
-      "-t",
-      String(dur),
-      out,
-    ]);
-    child.on("error", reject);
-    child.on("close", (code: number) => (code === 0 ? resolve() : reject(new Error("Background generation failed"))));
-  });
-  return out;
-}
-
 // ── Resilient Audio Synthesis ──────────────────────────────────────────────
 async function synthesizeWindowsNativeTTS(text: string): Promise<Buffer | null> {
   if (process.platform !== "win32") return null;
@@ -297,9 +174,6 @@ async function generateResilientSpeechTrack(seconds: number): Promise<Buffer> {
   const musicCandidates = [
     path.resolve(process.cwd(), "..", "scripts", "assets", "music", "epic-motivation.mp3"),
     path.resolve(process.cwd(), "scripts", "assets", "music", "epic-motivation.mp3"),
-    path.resolve(process.cwd(), "..", "background_cache", "music", "epic-motivation.mp3"),
-    path.resolve(process.cwd(), "background_cache", "music", "epic-motivation.mp3"),
-    path.resolve(config.dataDir, "background_cache", "music", "epic-motivation.mp3"),
   ];
   const actualMusic = musicCandidates.find((p) => fs.existsSync(p)) ?? null;
 
@@ -398,14 +272,24 @@ export async function synthesizeResilientAudio(
 }
 
 // ── End-to-End Short Video Builder ─────────────────────────────────────────
+/** Where the short's background footage came from (always Orbital NCG). */
+export interface ShortBackgroundInfo {
+  source: "orbital_ncg";
+  importer: "youtube_link_importer";
+  channelName: string;
+  channelUrl: string;
+  videoId: string;
+  url: string;
+  title: string;
+  /** Imported window of the Orbital video (null = whole video). */
+  section: OrbitalSection | null;
+}
+
 export interface BuildShortOptions {
   topic: string;
   script?: string;
   voice?: string;
   resolution?: "720p" | "1080p";
-  youtubeUrl?: string | null;
-  backgroundFileKey?: string | null;
-  useDefaultBackground?: boolean;
   userId?: string;
   existingJobId?: string;
   autoPublishYouTube?: boolean;
@@ -421,9 +305,31 @@ export interface BuildShortResult {
   script: string;
   duration: number;
   cuesCount: number;
+  background: ShortBackgroundInfo;
   youtubeUrl?: string;
   youtubeVideoId?: string;
 }
+
+/** Gameplay seconds to import: the voiceover plus a small safety margin
+ * (the renderer loops the clip if it ever comes up short). */
+function backgroundClipSeconds(voiceSeconds: number): number {
+  return Math.min(180, Math.max(15, Math.ceil(voiceSeconds) + 3));
+}
+
+function toBackgroundInfo(orbital: OrbitalImport): ShortBackgroundInfo {
+  return {
+    source: "orbital_ncg",
+    importer: "youtube_link_importer",
+    channelName: ORBITAL_CHANNEL_NAME,
+    channelUrl: ORBITAL_CHANNEL_URL,
+    videoId: orbital.video.id,
+    url: orbital.video.url,
+    title: orbital.imported.meta.title || orbital.video.title,
+    section: orbital.imported.section,
+  };
+}
+
+type BuildStage = "script" | "voice" | "background" | "render" | "publish";
 
 export async function buildShortVideo(params: BuildShortOptions): Promise<BuildShortResult> {
   const store = await getStore();
@@ -448,96 +354,108 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
       completedAt: null,
     });
   }
+  const jobId = job.id;
+  let jobSettings: Record<string, unknown> = { ...((job.settings as unknown as Record<string, unknown> | null) ?? {}) };
 
   const reportProgress = async (pct: number, step: string) => {
     params.onProgress?.(pct, step);
-    emitJob(job.id, { progress: pct, step, status: "PROCESSING" });
+    emitJob(jobId, { progress: pct, step, status: "PROCESSING", background: jobSettings.background });
     try {
-      await store.updateJob(job.id, {
+      await store.updateJob(jobId, {
         progress: pct,
-        settings: { ...(job.settings || {}), step },
+        settings: { ...jobSettings, step } as any,
       });
     } catch {}
   };
 
-  // 1. Script Generation (10% -> 22%)
-  await reportProgress(10, "Crafting viral script & opening hook...");
-  const script = params.script?.trim() || generateScript(params.topic);
-  await reportProgress(22, "Script crafted. Preparing neural narrator...");
+  let stage: BuildStage = "script";
+  let orbital: OrbitalImport | null = null;
+  let orbitalMarkedUsed = false;
 
-  // 2. Voiceover Synthesis (28% -> 40%)
-  await reportProgress(28, "Synthesizing neural voiceover with natural pacing...");
-  const ttsResult = await synthesizeResilientAudio(userId, script, voice);
-  const audioBuf = Buffer.from(ttsResult.audioBase64, "base64");
-  const audioFileKey = `${crypto.randomUUID()}.audio`;
-  const audioPath = path.join(config.uploadsDir, audioFileKey);
-  fs.mkdirSync(config.uploadsDir, { recursive: true });
-  fs.writeFileSync(audioPath, audioBuf);
-  await reportProgress(40, "Speech synthesized. Aligning captions...");
-
-  // 3. Word-by-word Subtitles (40% -> 50%)
-  await reportProgress(44, "Generating synchronized word-by-word subtitles...");
-  const cues = cuesFromTimings(ttsResult.wordTimings, ttsResult.duration);
-  const tiktokStyle: SubtitleStyleInput = {
-    fontFamily: "DejaVu Sans",
-    fontWeight: 800,
-    fontSize: 56,
-    color: "#FFFFFF",
-    bgColor: "#8B5CF6",
-    bgOpacity: 0,
-    bgPadding: 14,
-    bgRadius: 10,
-    vAlign: "middle",
-    hAlign: "center",
-    strokeEnabled: true,
-    strokeColor: "#000000",
-    strokeWidth: 4,
-    shadowEnabled: true,
-    shadowColor: "#000000",
-    shadowBlur: 4,
-    shadowX: 2,
-    shadowY: 2,
-  };
-
-  // 4. Background: Authentic Minecraft parkour gameplay (50% -> 58%)
-  await reportProgress(50, "Sourcing 60s Minecraft parkour gameplay from pool...");
-  let videoPath: string | null = null;
-  if (params.backgroundFileKey) {
-    const p = path.join(config.uploadsDir, params.backgroundFileKey);
-    if (fs.existsSync(p)) videoPath = p;
-  }
-
-  if (!videoPath) {
-    videoPath = await ensureMinecraftBackground(params.youtubeUrl);
-  }
-  await reportProgress(58, "Background clip acquired. Initializing 60fps compositor...");
-
-  // 5. Export Settings
-  const exportSettings: ExportSettings = {
-    resolution: dims,
-    format: "mp4",
-    quality: "low",
-    fps: 60,
-    watermark: false,
-    audioVolume: 1.0,
-    fadeIn: 0,
-    fadeOut: 0.3,
-    duration: ttsResult.duration,
-  };
-
-  const jobsDir = path.join(config.uploadsDir, "jobs");
-  fs.mkdirSync(jobsDir, { recursive: true });
-  const outFilename = `soundwave_short_${job.id}.mp4`;
-  const outPath = path.join(config.uploadsDir, outFilename);
-  const jobFilePath = path.join(jobsDir, `${job.id}.mp4`);
-
-  const finalCues = cues.map((c) => ({
-    ...c,
-    end: Math.min(c.end, ttsResult.duration),
-  }));
-
-  // 6. FFmpeg Compositing (58% -> 96%)
   try {
+    // 1. Script Generation (10% -> 22%)
+    await reportProgress(10, "Crafting viral script & opening hook...");
+    const script = params.script?.trim() || generateScript(params.topic);
+    await reportProgress(22, "Script crafted. Preparing neural narrator...");
+
+    // 2. Voiceover Synthesis (28% -> 40%)
+    stage = "voice";
+    await reportProgress(28, "Synthesizing neural voiceover with natural pacing...");
+    const ttsResult = await synthesizeResilientAudio(userId, script, voice);
+    const audioBuf = Buffer.from(ttsResult.audioBase64, "base64");
+    const audioFileKey = `${crypto.randomUUID()}.audio`;
+    const audioPath = path.join(config.uploadsDir, audioFileKey);
+    fs.mkdirSync(config.uploadsDir, { recursive: true });
+    fs.writeFileSync(audioPath, audioBuf);
+    await reportProgress(40, "Speech synthesized. Aligning captions...");
+
+    // 3. Word-by-word Subtitles (40% -> 46%)
+    await reportProgress(44, "Generating synchronized word-by-word subtitles...");
+    const cues = cuesFromTimings(ttsResult.wordTimings, ttsResult.duration);
+    const tiktokStyle: SubtitleStyleInput = {
+      fontFamily: "DejaVu Sans",
+      fontWeight: 800,
+      fontSize: 56,
+      color: "#FFFFFF",
+      bgColor: "#8B5CF6",
+      bgOpacity: 0,
+      bgPadding: 14,
+      bgRadius: 10,
+      vAlign: "middle",
+      hAlign: "center",
+      strokeEnabled: true,
+      strokeColor: "#000000",
+      strokeWidth: 4,
+      shadowEnabled: true,
+      shadowColor: "#000000",
+      shadowBlur: 4,
+      shadowX: 2,
+      shadowY: 2,
+    };
+
+    // 4. Background (46% -> 58%): an Orbital NCG video the agent has never
+    //    used, pasted into the YouTube link importer.
+    stage = "background";
+    let progressChain: Promise<void> = Promise.resolve();
+    orbital = await importUnusedOrbitalVideo({
+      clipSeconds: backgroundClipSeconds(ttsResult.duration),
+      onStep: (message, fraction) => {
+        const pct = Math.round(46 + fraction * 12);
+        progressChain = progressChain.then(() => reportProgress(pct, message));
+      },
+    });
+    await progressChain;
+    const background = toBackgroundInfo(orbital);
+    jobSettings = { ...jobSettings, background };
+    await reportProgress(58, `Background ready: "${background.title}" (Orbital NCG, ${describeOrbitalSection(background.section)}). Initializing 60fps compositor...`);
+    const videoPath = orbital.imported.filePath;
+
+    // 5. Export Settings
+    const exportSettings: ExportSettings = {
+      resolution: dims,
+      format: "mp4",
+      quality: "low",
+      fps: 60,
+      watermark: false,
+      audioVolume: 1.0,
+      fadeIn: 0,
+      fadeOut: 0.3,
+      duration: ttsResult.duration,
+    };
+
+    const jobsDir = path.join(config.uploadsDir, "jobs");
+    fs.mkdirSync(jobsDir, { recursive: true });
+    const outFilename = `soundwave_short_${jobId}.mp4`;
+    const outPath = path.join(config.uploadsDir, outFilename);
+    const jobFilePath = path.join(jobsDir, `${jobId}.mp4`);
+
+    const finalCues = cues.map((c) => ({
+      ...c,
+      end: Math.min(c.end, ttsResult.duration),
+    }));
+
+    // 6. FFmpeg Compositing (58% -> 96%)
+    stage = "render";
     await runFfmpegExport({
       videoPath,
       audioPath,
@@ -552,99 +470,117 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
         await reportProgress(overall, stepDesc);
       },
     });
-  } catch (err: any) {
-    const errText = err?.message || "FFmpeg export failed";
-    emitJob(job.id, { status: "FAILED", error: errText });
-    await store.updateJob(job.id, { status: "FAILED", errorMessage: errText });
-    if (err?.code === "ENOENT" || errText.includes("ENOENT") || errText.includes("spawn ffmpeg")) {
-      throw new Error("FFmpeg not found on system. Please run 'winget install ffmpeg' in PowerShell or launch via 'start_windows.bat'.");
-    }
-    throw err;
-  }
 
-  await reportProgress(97, "Finalizing short video package...");
-  try {
-    fs.copyFileSync(outPath, jobFilePath);
-  } catch {}
+    // The short exists — this Orbital video is now used and never picked again.
+    markOrbitalVideoUsed(orbital.video, { jobId, topic: params.topic, section: orbital.imported.section });
+    orbitalMarkedUsed = true;
 
-  // 7. Auto-Publish to YouTube Shorts (if configured & requested)
-  let ytResult: { videoId: string; youtubeUrl: string } | undefined = undefined;
-  const ytConfig = youtubeService.getConfig();
-  const shouldPublish = params.autoPublishYouTube ?? ytConfig.autoPublish;
-
-  if (shouldPublish && ytConfig.clientId && ytConfig.clientSecret && ytConfig.refreshToken) {
+    await reportProgress(97, "Finalizing short video package...");
     try {
-      await reportProgress(98, "Uploading short to YouTube Shorts...");
-      const rawTitle = script.split("\n")[0]?.replace(/^[#\s*]+/, "").slice(0, 75) || `Viral Motivation #${Math.floor(Math.random() * 1000)}`;
-      const pubTitle = rawTitle.endsWith(".") ? rawTitle.slice(0, -1) : rawTitle;
-      const privacy = params.youtubePrivacy || ytConfig.defaultPrivacy || "public";
-      const tags = params.youtubeTags || ytConfig.defaultTags || ["shorts", "minecraft", "parkour", "viral", "facts"];
+      fs.copyFileSync(outPath, jobFilePath);
+    } catch {}
 
-      const uploadRes = await youtubeService.uploadShort({
-        videoPath: outPath,
-        title: pubTitle,
-        description: `${script}\n\nProduced with Soundwave AI Automated Shorts Pipeline.\n#shorts #minecraft #motivation #viral`,
-        privacy,
-        tags,
-      });
+    // 7. Auto-Publish to YouTube Shorts (if configured & requested)
+    stage = "publish";
+    let ytResult: { videoId: string; youtubeUrl: string } | undefined = undefined;
+    const ytConfig = youtubeService.getConfig();
+    const shouldPublish = params.autoPublishYouTube ?? ytConfig.autoPublish;
 
-      ytResult = {
-        videoId: uploadRes.videoId,
-        youtubeUrl: uploadRes.youtubeUrl,
-      };
-      console.log(`[agentShort] Auto-published to YouTube Shorts: ${uploadRes.youtubeUrl}`);
-    } catch (ytErr: any) {
-      console.error("[agentShort] YouTube auto-publish error (continuing):", ytErr.message);
+    if (shouldPublish && ytConfig.clientId && ytConfig.clientSecret && ytConfig.refreshToken) {
+      try {
+        await reportProgress(98, "Uploading short to YouTube Shorts...");
+        const rawTitle = script.split("\n")[0]?.replace(/^[#\s*]+/, "").slice(0, 75) || `Viral Motivation #${Math.floor(Math.random() * 1000)}`;
+        const pubTitle = rawTitle.endsWith(".") ? rawTitle.slice(0, -1) : rawTitle;
+        const privacy = params.youtubePrivacy || ytConfig.defaultPrivacy || "public";
+        const tags = params.youtubeTags || ytConfig.defaultTags || ["shorts", "minecraft", "parkour", "viral", "facts"];
+
+        const uploadRes = await youtubeService.uploadShort({
+          videoPath: outPath,
+          title: pubTitle,
+          description: `${script}\n\nBackground gameplay: ${background.title} by ${ORBITAL_CHANNEL_NAME} (${background.url})\nProduced with Soundwave AI Automated Shorts Pipeline.\n#shorts #minecraft #motivation #viral`,
+          privacy,
+          tags,
+        });
+
+        ytResult = {
+          videoId: uploadRes.videoId,
+          youtubeUrl: uploadRes.youtubeUrl,
+        };
+        console.log(`[agentShort] Auto-published to YouTube Shorts: ${uploadRes.youtubeUrl}`);
+      } catch (ytErr: any) {
+        console.error("[agentShort] YouTube auto-publish error (continuing):", ytErr.message);
+      }
     }
+
+    const finalUrl = `/api/v1/export/jobs/${jobId}/download`;
+    const finalStep = ytResult ? `Video Ready & Published to YouTube Shorts!` : "Video Ready!";
+    await store.updateJob(jobId, {
+      status: "COMPLETED",
+      progress: 100,
+      outputUrl: finalUrl,
+      completedAt: new Date().toISOString(),
+      settings: { ...jobSettings, step: finalStep } as any,
+    });
+
+    emitJob(jobId, {
+      status: "COMPLETED",
+      progress: 100,
+      step: finalStep,
+      outputUrl: finalUrl,
+      videoUrl: finalUrl,
+      downloadUrl: finalUrl,
+      youtubeUrl: ytResult?.youtubeUrl,
+      youtubeVideoId: ytResult?.videoId,
+      script,
+      duration: ttsResult.duration,
+      background,
+    });
+
+    return {
+      jobId,
+      videoUrl: finalUrl,
+      downloadUrl: finalUrl,
+      script,
+      duration: ttsResult.duration,
+      cuesCount: finalCues.length,
+      background,
+      youtubeUrl: ytResult?.youtubeUrl,
+      youtubeVideoId: ytResult?.videoId,
+    };
+  } catch (err: any) {
+    let failure: Error = err instanceof Error ? err : new Error(String(err ?? "Short generation failed"));
+    const errText = failure.message || "Short generation failed";
+    if (
+      (stage === "render" || stage === "voice") &&
+      (err?.code === "ENOENT" || errText.includes("ENOENT") || errText.includes("spawn ffmpeg"))
+    ) {
+      failure = new Error("FFmpeg not found on system. Please run 'winget install ffmpeg' in PowerShell or launch via 'start_windows.bat'.");
+    }
+    emitJob(jobId, { status: "FAILED", error: failure.message, background: jobSettings.background });
+    try {
+      await store.updateJob(jobId, {
+        status: "FAILED",
+        errorMessage: failure.message,
+        settings: { ...jobSettings, step: `Failed: ${failure.message}` } as any,
+      });
+    } catch {}
+    throw failure;
+  } finally {
+    // Failed after the pick → the Orbital video goes back to the unused set.
+    if (orbital && !orbitalMarkedUsed) releaseOrbitalVideo(orbital.video.id);
+    // The imported clip lives on inside the rendered short; the link stays in the history.
+    discardOrbitalImport(orbital);
   }
-
-  const finalUrl = `/api/v1/export/jobs/${job.id}/download`;
-  await store.updateJob(job.id, {
-    status: "COMPLETED",
-    progress: 100,
-    outputUrl: finalUrl,
-    completedAt: new Date().toISOString(),
-  });
-
-  emitJob(job.id, {
-    status: "COMPLETED",
-    progress: 100,
-    step: ytResult ? `Video Ready & Published to YouTube Shorts!` : "Video Ready!",
-    outputUrl: finalUrl,
-    videoUrl: finalUrl,
-    downloadUrl: finalUrl,
-    youtubeUrl: ytResult?.youtubeUrl,
-    youtubeVideoId: ytResult?.videoId,
-    script,
-    duration: ttsResult.duration,
-  });
-
-  return {
-    jobId: job.id,
-    videoUrl: finalUrl,
-    downloadUrl: finalUrl,
-    script,
-    duration: ttsResult.duration,
-    cuesCount: finalCues.length,
-    youtubeUrl: ytResult?.youtubeUrl,
-    youtubeVideoId: ytResult?.videoId,
-  };
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
 const router = Router();
 
-const poolUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
-});
+const BACKGROUND_POLICY = `Unused Orbital NCG video (${ORBITAL_CHANNEL_URL}) imported via the YouTube link importer`;
 
 const generateShortSchema = z.object({
   topic: z.string().min(2).max(500).default("motivation"),
   voice: z.string().min(2).max(100).default("en-US-ChristopherNeural"),
-  youtubeUrl: z.string().max(2048).nullable().optional(),
-  useDefaultBackground: z.boolean().default(true),
-  backgroundFileKey: z.string().max(200).nullable().optional(),
   resolution: z.enum(["720p", "1080p"]).default("720p"),
   async: z.boolean().default(false),
   autoPublishYouTube: z.boolean().optional(),
@@ -652,80 +588,89 @@ const generateShortSchema = z.object({
   youtubeTags: z.array(z.string()).optional(),
 });
 
+/** Background shorts currently rendering (chat uses this to avoid stacking jobs). */
+const activeShortJobs = new Map<string, { topic: string; startedAt: number }>();
+
+export function getActiveShortJobs(): Array<{ jobId: string; topic: string; startedAt: number }> {
+  return [...activeShortJobs.entries()].map(([jobId, j]) => ({ jobId, ...j }));
+}
+
+/** Start a short as a background job; progress streams via /export/jobs/:id(/events). */
+export async function startShortJob(params: Omit<BuildShortOptions, "existingJobId" | "onProgress">): Promise<{ jobId: string }> {
+  const store = await getStore();
+  const userId = params.userId || "agent-local";
+  const dims = dimensionsFor(params.resolution || "720p", "9:16");
+  const job = await store.createJob({
+    projectId: null,
+    userId,
+    status: "PROCESSING",
+    progress: 8,
+    settings: { resolution: dims, topic: params.topic, step: "Crafting viral script & hook..." } as any,
+    outputUrl: null,
+    errorMessage: null,
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+  });
+
+  // buildShortVideo marks the job FAILED (and streams the error) on its own.
+  activeShortJobs.set(job.id, { topic: params.topic, startedAt: Date.now() });
+  buildShortVideo({ ...params, userId, existingJobId: job.id })
+    .catch((e) => {
+      console.error("[agentShort async] generation failed:", (e as Error).message);
+    })
+    .finally(() => activeShortJobs.delete(job.id));
+  return { jobId: job.id };
+}
+
+function httpStatusFor(err: unknown): number {
+  if (err instanceof OrbitalError) {
+    return err.code === "ORBITAL_EXHAUSTED" || err.code === "ORBITAL_BUSY" ? 409 : 502;
+  }
+  return 500;
+}
+
 router.post("/generate-short", optionalAuth, validate({ body: generateShortSchema }), async (req, res) => {
+  const defaults = (body: z.infer<typeof generateShortSchema>) => ({
+    aspect: "9:16",
+    resolution: body.resolution,
+    format: "mp4",
+    quality: "medium",
+    fps: 60,
+    fitToVoice: true,
+    voice: body.voice,
+    subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle",
+    background: BACKGROUND_POLICY,
+  });
+
   try {
     const body = req.body as z.infer<typeof generateShortSchema>;
     const userId = req.user?.id ?? "agent-local";
+    const buildParams = {
+      topic: body.topic,
+      voice: body.voice,
+      resolution: body.resolution,
+      userId,
+      autoPublishYouTube: body.autoPublishYouTube,
+      youtubePrivacy: body.youtubePrivacy,
+      youtubeTags: body.youtubeTags,
+    };
 
     if (body.async) {
-      const store = await getStore();
-      const dims = dimensionsFor(body.resolution, "9:16");
-      const job = await store.createJob({
-        projectId: null,
-        userId,
-        status: "PROCESSING",
-        progress: 8,
-        settings: { resolution: dims, topic: body.topic, step: "Crafting viral script & hook..." } as any,
-        outputUrl: null,
-        errorMessage: null,
-        startedAt: new Date().toISOString(),
-        completedAt: null,
-      });
-
-      // Launch async generation bound to this job.id
-      buildShortVideo({
-        topic: body.topic,
-        voice: body.voice,
-        resolution: body.resolution,
-        youtubeUrl: body.youtubeUrl,
-        backgroundFileKey: body.backgroundFileKey,
-        useDefaultBackground: body.useDefaultBackground,
-        userId,
-        existingJobId: job.id,
-        autoPublishYouTube: body.autoPublishYouTube,
-        youtubePrivacy: body.youtubePrivacy,
-        youtubeTags: body.youtubeTags,
-      }).catch((e) => {
-        console.error("[agentShort async] export failed:", (e as Error).message);
-        store.updateJob(job.id, { status: "FAILED", errorMessage: (e as Error).message });
-        emitJob(job.id, { status: "FAILED", error: (e as Error).message });
-      });
-
+      const { jobId } = await startShortJob(buildParams);
       res.json({
-        jobId: job.id,
+        jobId,
         status: "PROCESSING",
-        pollUrl: `/api/v1/export/jobs/${job.id}`,
-        eventsUrl: `/api/v1/export/jobs/${job.id}/events`,
-        downloadUrl: `/api/v1/export/jobs/${job.id}/download`,
+        pollUrl: `/api/v1/export/jobs/${jobId}`,
+        eventsUrl: `/api/v1/export/jobs/${jobId}/events`,
+        downloadUrl: `/api/v1/export/jobs/${jobId}/download`,
         message: "Short generation in progress",
-        defaults: {
-          aspect: "9:16",
-          resolution: body.resolution,
-          format: "mp4",
-          quality: "medium",
-          fps: 60,
-          fitToVoice: true,
-          voice: body.voice,
-          subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle",
-          background: "ONLY minecraft_parkour high quality 1080p 4K 80s cache",
-        },
+        defaults: defaults(body),
       });
       return;
     }
 
     // Synchronous execution
-    const result = await buildShortVideo({
-      topic: body.topic,
-      voice: body.voice,
-      resolution: body.resolution,
-      youtubeUrl: body.youtubeUrl,
-      backgroundFileKey: body.backgroundFileKey,
-      useDefaultBackground: body.useDefaultBackground,
-      userId,
-      autoPublishYouTube: body.autoPublishYouTube,
-      youtubePrivacy: body.youtubePrivacy,
-      youtubeTags: body.youtubeTags,
-    });
+    const result = await buildShortVideo(buildParams);
 
     res.json({
       jobId: result.jobId,
@@ -737,168 +682,35 @@ router.post("/generate-short", optionalAuth, validate({ body: generateShortSchem
       script: result.script,
       duration: result.duration,
       cues: result.cuesCount,
-      defaults: {
-        aspect: "9:16",
-        resolution: body.resolution,
-        format: "mp4",
-        quality: "medium",
-        fps: 60,
-        fitToVoice: true,
-        voice: body.voice,
-        subtitleStyle: "TikTok #8B5CF6 Montserrat 800 56px middle",
-        background: "ONLY minecraft_parkour high quality 1080p 4K 80s cache",
-      },
+      background: result.background,
+      defaults: defaults(body),
     });
   } catch (err: any) {
     console.error("[agentShort] Generation failed:", err);
-    res.status(500).json({ error: err.message || "Failed to generate viral short" });
-  }
-});
-
-// Upload custom gameplay footage directly into the 60s background pool
-router.post("/background-pool/upload", poolUpload.single("video"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No video file provided." });
-    }
-
-    const tempDir = path.join(config.uploadsDir, "temp");
-    fs.mkdirSync(tempDir, { recursive: true });
-    const safeName = (req.file.originalname || "custom.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
-    const tempPath = path.join(tempDir, `pool_upload_${Date.now()}_${safeName}`);
-    fs.writeFileSync(tempPath, req.file.buffer);
-
-    console.log(`[background-pool/upload] Received custom video upload: ${safeName} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
-    const clipsCreated = await backgroundPool.addCustomVideoFile(tempPath, req.file.originalname);
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {}
-
-    res.json({
-      ok: true,
-      clipsAdded: clipsCreated,
-      status: backgroundPool.getStatus(),
+    res.status(httpStatusFor(err)).json({
+      error: err.message || "Failed to generate viral short",
+      code: err instanceof OrbitalError ? err.code : undefined,
     });
-  } catch (err: any) {
-    console.error("[background-pool/upload] Error:", err.message);
-    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
   }
 });
 
-// Background pool status & management endpoints
-router.get("/background-pool", (_req, res) => {
+// ── Orbital NCG background history ─────────────────────────────────────────
+// Which Orbital videos were already used, which are left, and a reset.
+router.get("/orbital", (_req, res) => {
+  res.json(getOrbitalStatus());
+});
+
+router.post("/orbital/refresh", async (_req, res) => {
   try {
-    res.json(backgroundPool.getStatus());
+    const catalog = await getOrbitalCatalog({ force: true });
+    res.json({ ok: !catalog.stale, error: catalog.error, status: getOrbitalStatus() });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(502).json({ ok: false, error: err.message, status: getOrbitalStatus() });
   }
 });
 
-// Full inspection data for media viewer modal
-router.get("/background-pool/inspect", (_req, res) => {
-  try {
-    const poolClips = backgroundPool.getPoolClipsDetails();
-    const masterVideos = backgroundPool.getMasterVideosDetails();
-    const customVideos = backgroundPool.getCustomVideosDetails();
-    const status = backgroundPool.getStatus();
-
-    res.json({
-      ok: true,
-      poolClips,
-      masterVideos,
-      customVideos,
-      status,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Stream video preview with native HTTP 206 Partial Content support
-router.get("/background-pool/preview/:type/:filename", (req, res) => {
-  try {
-    const { type, filename } = req.params;
-    if (!type || !filename) {
-      return res.status(400).json({ error: "Invalid parameters" });
-    }
-    const resolvedPath = backgroundPool.resolveClipPath(type, filename);
-    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
-      return res.status(404).json({ error: "Clip not found" });
-    }
-    res.setHeader("Content-Type", "video/mp4");
-    res.sendFile(resolvedPath);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Delete a clip or video file from inspector
-router.delete("/background-pool/clip/:type/:filename", (req, res) => {
-  try {
-    const { type, filename } = req.params;
-    if (!type || !filename) {
-      return res.status(400).json({ error: "Invalid parameters" });
-    }
-    const deleted = backgroundPool.deleteClip(type, filename);
-    res.json({ ok: deleted, status: backgroundPool.getStatus() });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Re-slice master parkour video into 60s clips on-demand
-router.post("/background-pool/slice-master", async (_req, res) => {
-  try {
-    const clipsAdded = await backgroundPool.sliceMasterVideo();
-    res.json({ ok: clipsAdded > 0, clipsAdded, status: backgroundPool.getStatus() });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post("/background-pool/purge", (_req, res) => {
-  try {
-    const purged = backgroundPool.purgeOldClips();
-    res.json({ ok: true, purged, status: backgroundPool.getStatus() });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
-  }
-});
-
-router.post("/background-pool/replenish", async (req, res) => {
-  try {
-    const url = typeof req.body?.url === "string" && req.body.url.trim() ? req.body.url.trim() : undefined;
-    // Link-import only: the system never downloads videos on its own anymore.
-    if (!url) {
-      return res.status(400).json({ error: "A YouTube link is required to import.", status: backgroundPool.getStatus() });
-    }
-    const ok = await backgroundPool.replenishPool(url);
-    res.json({ ok, status: backgroundPool.getStatus() });
-  } catch (err: any) {
-    console.error("[background-pool/replenish] Error:", err.message);
-    res.json({ ok: false, error: err.message, status: backgroundPool.getStatus() });
-  }
-});
-
-router.post("/background-pool/add-url", (req, res) => {
-  try {
-    const url = req.body?.url;
-    if (!url) return res.status(400).json({ error: "URL is required" });
-    const added = backgroundPool.addCustomUrl(url);
-    res.json({ added, status: backgroundPool.getStatus() });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, status: backgroundPool.getStatus() });
-  }
-});
-
-// List cached background video chunks available
-router.get("/backgrounds", async (_req, res) => {
-  const found = findCachedChunk();
-  res.json({
-    cached: !!found,
-    path: found,
-    preset: "minecraft_parkour_80s_master",
-  });
+router.post("/orbital/reset", (_req, res) => {
+  res.json({ ok: true, status: resetOrbitalHistory() });
 });
 
 // GET /defaults
@@ -935,14 +747,15 @@ router.get("/defaults", (_req, res) => {
       animIn: "scale",
     },
     background: {
-      type: "minecraft_parkour",
-      only: "minecraft_parkour high quality 1080p 4K",
-      blacklist: BLACKLIST,
-      cacheChunkDuration: 80,
+      source: "orbital_ncg",
+      channelUrl: ORBITAL_CHANNEL_URL,
+      policy: "Every short uses an Orbital NCG video that has never been used before",
+      importer: "YouTube link importer (POST /api/v1/upload/youtube)",
+      history: "GET /api/v1/agent/orbital",
     },
     workflow: {
       oneClickEndpoint: "POST /api/v1/agent/generate-short",
-      body: { topic: "motivation", voice: "en-US-GuyNeural", useDefaultBackground: true, resolution: "720p" },
+      body: { topic: "motivation", voice: "en-US-GuyNeural", resolution: "720p" },
       result: "downloadUrl -> ~/Downloads/soundwave_short_*.mp4",
     },
   });

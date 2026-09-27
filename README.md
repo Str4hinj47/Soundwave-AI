@@ -41,7 +41,6 @@ soundwave-ai/
 │   ├── viral_engine.py  # 7 High-performing niches & 6 viral hook frameworks
 │   ├── short_runner.py  # 1-Click & batch vertical video pipeline orchestrator
 │   ├── hud.py           # Futuristic acoustic visualizer HUD (no weird 3D avatar)
-│   ├── cache_manager.py # 80s Minecraft parkour gameplay chunk caching
 │   ├── main.py          # Unified CLI & GUI desktop launcher
 │   └── plugins/         # Clean, modular plugin extensions
 ├── frontend/            # Vite + React SPA
@@ -146,9 +145,12 @@ cd frontend && npm run build     # production build
 | POST | `/api/v1/export/video` | ✓ | start FFmpeg export job (16:9 or 9:16 portrait) |
 | GET | `/api/v1/export/jobs/:id` | ✓ | job status (SSE stream supported) |
 | GET | `/api/v1/export/jobs/:id/download` | ✓ | download finished export |
-| POST | `/api/v1/agent/generate-short` | — | 1-click viral short generation (script + Jenny + TikTok + gameplay) |
+| POST | `/api/v1/agent/generate-short` | — | 1-click viral short generation (script + voice + TikTok captions + an unused Orbital NCG video imported via the YouTube link importer) |
 | GET | `/api/v1/agent/defaults` | — | default 9:16 vertical short configuration & presets |
-| GET | `/api/v1/agent/status` | — | agent status, binary availability & background cache size |
+| GET | `/api/v1/agent/status` | — | agent status, binary availability & Orbital NCG background counts |
+| GET | `/api/v1/agent/orbital` | — | Orbital NCG background history: used videos, unused count, skipped videos |
+| POST | `/api/v1/agent/orbital/refresh` | — | re-list the Orbital NCG channel (picks up new uploads) |
+| POST | `/api/v1/agent/orbital/reset` | — | forget which Orbital NCG videos were used |
 | GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
 | POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
 | GET | `/api/v1/ghost/macros` | — | list built-in and user custom automation macros |

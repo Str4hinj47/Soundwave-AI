@@ -20,7 +20,7 @@ if %ERRORLEVEL% NEQ 0 (
 ) else (
     where pip >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
-        echo [INFO] Verifying Python dependencies for YouTube Parkour Clipper...
+        echo [INFO] Verifying Python dependencies for the agent and YouTube link importer...
         pip install -r requirements.txt --quiet
     )
 )
