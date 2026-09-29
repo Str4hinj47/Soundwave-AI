@@ -133,11 +133,8 @@ jobs:
           if (-not $cli) { throw "whisper-cli.exe not found in whisper-bin-x64.zip" }
           Copy-Item $cli.FullName $dest -Force
           # whisper.dll + ggml*.dll (incl. every CPU variant); SDL2 is only for the mic demos.
+          # (The Microsoft C++ runtime DLLs they import are added by the next step.)
           Get-ChildItem $cli.DirectoryName -Filter *.dll | Where-Object { $_.Name -ne "SDL2.dll" } | Copy-Item -Destination $dest -Force
-          # The Microsoft C++ runtime, app-local: PCs without the VC++ redistributable work too.
-          foreach ($dll in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll") {
-            Copy-Item (Join-Path $env:WINDIR "System32\$dll") $dest -Force
-          }
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ggml-org/whisper.cpp/$tag/LICENSE" -OutFile "$dest/LICENSE-whisper.cpp.txt"
           Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$model" -OutFile "$dest/$model"
           $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path "$dest/$model"))
@@ -156,15 +153,17 @@ jobs:
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ggml-org/whisper.cpp/$tag/samples/jfk.wav" -OutFile desktop/jfk.wav
           Get-ChildItem $dest | Format-Table Name, Length
 
+      # Copies the Microsoft C++ runtime DLLs the engine imports next to it
+      # (app-local), then fails if anything else it needs isn't Windows itself.
       - name: Check the speech engine runs on a clean PC (every DLL it needs ships with it)
         working-directory: desktop
-        run: node check-dlls.mjs bin/whisper
+        run: node check-dlls.mjs bin/whisper --copy-runtime-from "$env:WINDIR\System32"
 
       - name: Install desktop tooling (Electron + electron-builder)
         working-directory: desktop
         run: npm ci
 
-      - name: Test the desktop shell's helpers (settings, voice bar placement)
+      - name: Test the desktop shell's helpers (settings, voice bar placement, DLL gate)
         working-directory: desktop
         run: npm test
 

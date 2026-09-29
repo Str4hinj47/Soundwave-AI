@@ -3,9 +3,13 @@
 // of Windows itself. (Build machines have the Visual C++ runtime installed,
 // so "it runs in CI" alone would not catch a missing vcruntime140.dll.)
 //
-//   node check-dlls.mjs bin/whisper
+//   node check-dlls.mjs bin/whisper [--copy-runtime-from C:\Windows\System32]
+//   (tested by test/check-dlls.test.mjs)
 //
-// Reads the PE import and delay-import tables directly — no Windows SDK needed.
+// With --copy-runtime-from, missing Microsoft C++ runtime DLLs (vcruntime*,
+// msvcp*, vcomp*, concrt*) are copied app-locally from that folder first —
+// Microsoft allows redistributing them next to the exe. Reads the PE import
+// and delay-import tables directly — no Windows SDK needed.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,11 +135,38 @@ export function missingDlls(dir) {
   return report;
 }
 
+/** The Microsoft C++ runtime (redistributable app-locally). */
+export function isMsvcRuntime(name) {
+  return /^(vcruntime|msvcp|vcomp|concrt)\d.*\.dll$/i.test(name);
+}
+
+/** Copy missing C++ runtime DLLs from `sourceDir` into `dir` (repeats for their own imports). */
+export function copyMissingRuntime(dir, sourceDir) {
+  // Import tables often say "VCOMP140.DLL" while the file is "vcomp140.dll": match names case-insensitively.
+  const available = new Map(fs.readdirSync(sourceDir).map((f) => [f.toLowerCase(), f]));
+  const copied = [];
+  for (let round = 0; round < 5; round++) {
+    const wanted = new Set(missingDlls(dir).flatMap((r) => r.missing).filter(isMsvcRuntime).map((n) => n.toLowerCase()));
+    const found = [...wanted].filter((name) => available.has(name));
+    if (!found.length) break;
+    for (const name of found) {
+      fs.copyFileSync(path.join(sourceDir, available.get(name)), path.join(dir, name));
+      copied.push(name);
+    }
+  }
+  return copied;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dir = path.resolve(process.argv[2] ?? "bin/whisper");
   if (!fs.existsSync(dir)) {
     console.error(`[check-dlls] no such folder: ${dir}`);
     process.exit(1);
+  }
+  const fromFlag = process.argv.indexOf("--copy-runtime-from");
+  if (fromFlag > 0 && process.argv[fromFlag + 1]) {
+    const copied = copyMissingRuntime(dir, process.argv[fromFlag + 1]);
+    console.log(`[check-dlls] C++ runtime copied app-locally: ${copied.length ? copied.join(", ") : "nothing was missing"}`);
   }
   const report = missingDlls(dir);
   let bad = 0;

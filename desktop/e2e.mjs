@@ -169,8 +169,9 @@ try {
   const barHeard = (await voiceTurns(main)).at(-1);
   if (!EXPECT.test(barHeard ?? "")) await fail(`the voice bar heard "${barHeard}"`);
   ok(`voice bar → whisper.cpp → agent, and the turn is in the Command Center's conversation: "${barHeard}"`);
-  await overlay.waitForFunction(() => !/listening|transcribing|thinking/i.test(document.body.innerText), null, { timeout: 60_000 }).catch(() => {});
-  await overlay.screenshot({ path: path.join(shotsDir, "5-voice-bar-reply.png") });
+  await overlay.waitForFunction(() => !/listening|transcribing|thinking/i.test(document.body.innerText), null, { timeout: 60_000, polling: 500 }).catch(() => {});
+  // It tucks itself away a few seconds after answering — screenshot only if it's still up.
+  if ((await shell()).overlayVisible) await overlay.screenshot({ path: path.join(shotsDir, "5-voice-bar-reply.png"), timeout: 10_000 }).catch(() => {});
   const barText = (await overlay.evaluate(() => document.body.innerText)).replace(/\s+/g, " ").trim();
   annotate("notice", "Desktop E2E: voice bar", `Heard "${barHeard}". Voice bar now shows: ${barText.slice(0, 200)}`);
 
