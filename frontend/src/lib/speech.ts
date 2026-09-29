@@ -1,0 +1,108 @@
+// ── The agent's voice: always a Soundwave (Microsoft neural) voice ─────────
+// Replies stream from /api/v1/agent/speak/stream while Microsoft renders
+// them, so the agent starts talking almost at once. It's same-origin audio,
+// which the desktop app's CSP allows (media-src 'self'). There is no
+// robotic browser/OS fallback: when the voice service is down, callers show
+// why (voiceProblemReason).
+
+import { isSoundwaveVoice, loadAgentVoice } from "./voices";
+
+/** What the agent reads aloud: no links or markdown, and cut at a sentence end. */
+export function speechTextFor(text: string, max = 1200): string {
+  const clean = text
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[*_#`>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return (end > max * 0.5 ? cut.slice(0, end + 1) : cut).trim();
+}
+
+export interface SpeakHandlers {
+  /** Audio started playing. */
+  onStart?: () => void;
+  /** Finished normally. */
+  onEnd?: () => void;
+  /** The voice service failed (see voiceProblemReason). */
+  onError?: () => void;
+  /** The browser refused to play sound before any user interaction. */
+  onBlocked?: () => void;
+}
+
+let active: HTMLAudioElement | null = null;
+let token = 0;
+
+/** Silence the current reply (aborting the stream, so the server stops synthesizing). */
+export function stopSpeaking(): void {
+  token++;
+  const audio = active;
+  active = null;
+  if (!audio) return;
+  audio.onplaying = null;
+  audio.onended = null;
+  audio.onerror = null;
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+}
+
+export function isSpeaking(): boolean {
+  return active !== null;
+}
+
+/**
+ * Speak `text` in a Soundwave voice (default: the agent's voice from
+ * Settings). Interrupts whatever was being said. Returns false when there was
+ * nothing to say.
+ */
+export function speak(text: string, voice?: string, handlers: SpeakHandlers = {}): boolean {
+  if (typeof window === "undefined") return false;
+  const clean = speechTextFor(text);
+  if (!clean) return false;
+
+  stopSpeaking();
+  const mine = ++token;
+  const current = () => token === mine;
+  const chosen = isSoundwaveVoice(voice) ? voice : loadAgentVoice();
+
+  const audio = new Audio(`/api/v1/agent/speak/stream?voice=${encodeURIComponent(chosen)}&text=${encodeURIComponent(clean)}`);
+  audio.preload = "auto";
+  active = audio;
+  audio.onplaying = () => {
+    if (current()) handlers.onStart?.();
+  };
+  audio.onended = () => {
+    if (!current()) return;
+    active = null;
+    handlers.onEnd?.();
+  };
+  audio.onerror = () => {
+    if (!current()) return;
+    active = null;
+    handlers.onError?.();
+  };
+  audio.play().catch((err: DOMException) => {
+    if (!current() || err?.name === "AbortError") return;
+    if (err?.name === "NotAllowedError") {
+      active = null;
+      handlers.onBlocked?.();
+    }
+    // Anything else surfaces through onerror.
+  });
+  return true;
+}
+
+/** Why the last reply couldn't be spoken, in words for a toast. */
+export async function voiceProblemReason(): Promise<string> {
+  let reason = "Couldn't reach Microsoft's neural voice service. Check the internet connection and try again.";
+  try {
+    const res = await fetch("/api/v1/agent/speak/status");
+    const health = await res.json();
+    if (health?.lastError) reason = health.lastError;
+  } catch {
+    /* keep the generic reason */
+  }
+  return reason;
+}

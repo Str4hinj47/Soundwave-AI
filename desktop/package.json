@@ -1,9 +1,9 @@
 {
   "name": "soundwave-ai-desktop",
   "productName": "Soundwave AI",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
-  "description": "Soundwave AI studio — neural TTS, subtitles and video compositing in one desktop app.",
+  "description": "Soundwave AI — an AI agent that makes YouTube Shorts; talk to it with a global voice shortcut.",
   "author": {
     "name": "Soundwave AI"
   },
@@ -12,6 +12,7 @@
   "scripts": {
     "assemble": "node assemble.mjs",
     "smoke": "node smoke.mjs",
+    "test": "node --test test/desktop-settings.test.cjs",
     "dist:win": "electron-builder --win",
     "dist:dir": "electron-builder --win dir"
   },

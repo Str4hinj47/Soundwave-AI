@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
@@ -9,6 +9,7 @@ import { ORBITAL_CHANNEL_URL, getOrbitalCatalog, getOrbitalStatus } from "../lib
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, getActiveShortJobs, startShortJob } from "./agentShort.js";
 import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { DEFAULT_AGENT_VOICE, getVoiceHealth, normalizeVoiceId, streamEdgeTTS, synthesizeEdgeTTS } from "../lib/edgeTts.js";
+import { SttError, getSttStatus, transcribe } from "../lib/stt.js";
 
 const router = Router();
 
@@ -97,6 +98,38 @@ router.get("/speak/stream", optionalAuth, async (req, res) => {
 // GET /speak/status — why the last reply couldn't be spoken (shown in the app).
 router.get("/speak/status", (_req, res) => {
   res.json(getVoiceHealth());
+});
+
+// ── Voice input: speech → text on this PC (whisper.cpp) ─────────────────────
+// The Command Center's mic and the desktop voice bar post a short recording;
+// the text comes back and goes to /chat like a typed message.
+
+// GET /transcribe/status — can voice input work here, and if not, why.
+router.get("/transcribe/status", (_req, res) => {
+  res.json(getSttStatus());
+});
+
+// POST /transcribe — body: the recording (16 kHz mono WAV from the app's
+// recorder; other formats are converted with ffmpeg).
+router.post("/transcribe", optionalAuth, express.raw({ type: () => true, limit: "12mb" }), async (req, res, next) => {
+  const controller = new AbortController();
+  // The person cancelled (or recorded again): stop transcribing.
+  res.on("close", () => {
+    if (!res.writableFinished) controller.abort();
+  });
+  try {
+    const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const result = await transcribe(audio, { signal: controller.signal });
+    res.json(result);
+  } catch (err) {
+    if (err instanceof SttError) {
+      if (err.code === "STT_ABORTED") return;
+      const status = err.code === "STT_UNAVAILABLE" ? 503 : err.code === "BAD_AUDIO" ? 400 : err.code === "STT_BUSY" ? 429 : 500;
+      if (err.code === "STT_FAILED") console.warn(`[voice-input] ${err.message}`);
+      return res.status(status).json({ error: { code: err.code, message: err.message } });
+    }
+    next(err);
+  }
 });
 
 // ── POST /chat — Intelligent Conversational Agent & Tool Dispatcher ──────────

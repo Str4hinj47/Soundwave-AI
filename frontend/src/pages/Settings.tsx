@@ -1,13 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  Bell,
+  CheckCircle2,
   CreditCard,
   Database,
   Download,
+  Loader2,
+  Mic,
+  MonitorSmartphone,
   Palette,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  TriangleAlert,
   User,
 } from "lucide-react";
 import { useAuth } from "../store/auth";
@@ -22,18 +28,38 @@ import { Select } from "../components/ui/Select";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { AGENT_VOICES, agentVoiceLabel, loadAgentVoice, saveAgentVoice } from "../lib/voices";
+import { Toggle } from "../components/ui/Toggle";
+import {
+  fetchVoiceInputStatus,
+  loadVoicePrefs,
+  saveVoicePrefs,
+  startRecording,
+  transcribeRecording,
+  type Recorder,
+  type VoiceInputStatus,
+  type VoicePrefs,
+} from "../lib/voiceInput";
+import { getDesktop, hotkeyLabel, type DesktopSettings, type DesktopState } from "../lib/desktop";
+import { notifyUser } from "../lib/notify";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "preferences", label: "Preferences", icon: <SlidersHorizontal className="h-4 w-4" /> },
+  { id: "voice", label: "Voice & Desktop", icon: <Mic className="h-4 w-4" /> },
 ];
 
 export function Settings() {
   const location = useLocation();
   const navigate = useNavigate();
   const { refreshQuota } = useAuth();
-  const active = location.pathname.includes("/billing") ? "billing" : location.pathname.includes("/preferences") ? "preferences" : "profile";
+  const active = location.pathname.includes("/billing")
+    ? "billing"
+    : location.pathname.includes("/preferences")
+      ? "preferences"
+      : location.pathname.includes("/voice")
+        ? "voice"
+        : "profile";
 
   useEffect(() => {
     void refreshQuota();
@@ -66,6 +92,7 @@ export function Settings() {
         {active === "profile" && <ProfileTab />}
         {active === "billing" && <BillingTab />}
         {active === "preferences" && <PreferencesTab />}
+        {active === "voice" && <VoiceDesktopTab />}
       </div>
     </div>
   );
@@ -334,6 +361,228 @@ function PreferencesTab() {
             <Button size="sm" variant="outline" icon={<Download className="h-4 w-4" />} onClick={downloadData}>Export</Button>
           </div>
         </div>
+      </Card>
+    </>
+  );
+}
+
+// ── Voice & Desktop ─────────────────────────────────────────────────────────
+function SettingRow({ title, hint, children }: { title: string; hint?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-t border-gray-800 py-3 first:border-t-0 first:pt-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-white">{title}</p>
+        {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function VoiceDesktopTab() {
+  const desktop = getDesktop();
+  const [status, setStatus] = useState<VoiceInputStatus | null>(null);
+  const [prefs, setPrefs] = useState<VoicePrefs>(() => loadVoicePrefs());
+  const [desk, setDesk] = useState<DesktopState | null>(null);
+  const [savingDesk, setSavingDesk] = useState(false);
+  // Microphone test
+  const [test, setTest] = useState<"idle" | "listening" | "transcribing">("idle");
+  const [level, setLevel] = useState(0);
+  const [heard, setHeard] = useState<string | null>(null);
+  const recorderRef = useRef<Recorder | null>(null);
+
+  useEffect(() => {
+    void fetchVoiceInputStatus().then(setStatus);
+    desktop
+      ?.getState()
+      .then(setDesk)
+      .catch(() => undefined);
+    return () => recorderRef.current?.cancel();
+  }, [desktop]);
+
+  const updatePrefs = (patch: Partial<VoicePrefs>) => setPrefs(saveVoicePrefs(patch));
+
+  const updateDesk = async (patch: Partial<DesktopSettings>) => {
+    if (!desktop) return;
+    setSavingDesk(true);
+    try {
+      const next = await desktop.updateSettings(patch);
+      setDesk(next);
+      if (patch.hotkey || patch.hotkeyEnabled) {
+        if (next.hotkeyEnabled && !next.hotkeyRegistered) toast.error("Shortcut not available", next.hotkeyError ?? "Another app uses it — pick a different one.");
+        else if (next.hotkeyEnabled) toast.success("Voice shortcut set", `Press ${next.hotkeyLabel} from any app to talk to Soundwave.`);
+      }
+    } catch (e) {
+      toast.error("Couldn't save", (e as Error).message);
+    } finally {
+      setSavingDesk(false);
+    }
+  };
+
+  const finishTest = async (stopReason: "manual" | "silence" | "max" | "no-speech" = "manual") => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    recorderRef.current = null;
+    setTest("transcribing");
+    setLevel(0);
+    try {
+      const recording = await recorder.stop(stopReason);
+      if (!recording.hadSpeech && stopReason === "no-speech") {
+        setHeard("");
+        setTest("idle");
+        return;
+      }
+      const transcript = await transcribeRecording(recording.wav);
+      setHeard(transcript.text);
+    } catch (e) {
+      toast.error("Microphone test failed", (e as Error).message);
+      setHeard(null);
+    } finally {
+      setTest("idle");
+      void fetchVoiceInputStatus().then(setStatus);
+    }
+  };
+
+  const startTest = async () => {
+    setHeard(null);
+    try {
+      recorderRef.current = await startRecording({
+        autoStop: true,
+        maxMs: 10_000,
+        onLevel: setLevel,
+        onAutoStop: (reason) => void finishTest(reason),
+      });
+      setTest("listening");
+    } catch (e) {
+      toast.error("Microphone problem", (e as Error).message);
+    }
+  };
+
+  const hotkeyOptions = [
+    ...(desk?.hotkeyChoices ?? []).map((c) => ({ value: c.accelerator, label: c.label })),
+    { value: "off", label: "Off" },
+  ];
+
+  return (
+    <>
+      <Card title="Voice input" icon={<Mic className="h-4 w-4" />}>
+        <div className="space-y-4">
+          <div
+            className={cn(
+              "flex items-start gap-2.5 rounded-lg border p-3 text-sm",
+              status?.available ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-200" : "border-amber-500/30 bg-amber-500/5 text-amber-200",
+            )}
+          >
+            {status === null ? (
+              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+            ) : status.available ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <div>
+              {status === null
+                ? "Checking the speech engine…"
+                : status.available
+                  ? `Speech is recognized on this PC by whisper.cpp (${status.model} model). Your voice is never uploaded.`
+                  : `Voice input isn't available: ${status.reason ?? "the speech engine is missing"}`}
+              {status?.lastError && <p className="mt-1 text-xs text-amber-300/90">Last problem: {status.lastError}</p>}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              icon={test === "transcribing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+              onClick={() => (test === "listening" ? void finishTest("manual") : void startTest())}
+              disabled={test === "transcribing" || status?.available === false}
+            >
+              {test === "listening" ? "Stop" : test === "transcribing" ? "Transcribing…" : "Test microphone"}
+            </Button>
+            {test === "listening" && (
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="h-2 w-40 overflow-hidden rounded-full bg-gray-800">
+                  <span className="block h-full rounded-full bg-emerald-400 transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
+                </span>
+                Say something…
+              </div>
+            )}
+            {heard !== null && test === "idle" && (
+              <p className="text-sm text-gray-300">{heard ? <>I heard: “<span className="text-white">{heard}</span>”</> : "I didn't hear anything — check the microphone."}</p>
+            )}
+          </div>
+
+          <div>
+            <SettingRow title="Send when I stop talking" hint="Tap the mic (or the shortcut) and just talk — it sends after a short pause. Off: tap again to send.">
+              <Toggle checked={prefs.autoStop} onChange={(v) => updatePrefs({ autoStop: v })} label="Send when I stop talking" />
+            </SettingRow>
+            <SettingRow title="Sound cues" hint="A soft chime when listening starts and stops.">
+              <Toggle checked={prefs.earcons} onChange={(v) => updatePrefs({ earcons: v })} label="Sound cues" />
+            </SettingRow>
+            <SettingRow title="Speak replies aloud" hint="The agent answers in its Soundwave voice.">
+              <Toggle checked={prefs.speakReplies} onChange={(v) => updatePrefs({ speakReplies: v })} label="Speak replies aloud" />
+            </SettingRow>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Desktop app" icon={<MonitorSmartphone className="h-4 w-4" />}>
+        {!desktop ? (
+          <p className="text-sm text-gray-400">
+            The global voice shortcut, the tray icon and Windows notifications are part of the Soundwave AI desktop app for Windows.
+          </p>
+        ) : !desk ? (
+          <p className="flex items-center gap-2 text-sm text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </p>
+        ) : (
+          <div>
+            <SettingRow
+              title="Voice shortcut"
+              hint={
+                !desk.hotkeyEnabled ? (
+                  "Off — use the mic button in the Command Center."
+                ) : desk.hotkeyRegistered ? (
+                  <>Works from any app: press it, talk, and the voice bar answers. Press it again to send right away.</>
+                ) : (
+                  <span className="text-amber-300">{desk.hotkeyError ?? "Another app uses this shortcut."}</span>
+                )
+              }
+            >
+              <div className="w-48">
+                <Select
+                  value={desk.hotkeyEnabled ? desk.hotkey : "off"}
+                  onChange={(v) => void updateDesk(v === "off" ? { hotkeyEnabled: false } : { hotkey: v, hotkeyEnabled: true })}
+                  options={hotkeyOptions}
+                  ariaLabel="Voice shortcut"
+                  disabled={savingDesk}
+                />
+              </div>
+            </SettingRow>
+            <SettingRow title="Keep running in the tray" hint="Closing the window keeps Soundwave listening for the shortcut and finishing your shorts. Quit from the tray icon.">
+              <Toggle checked={desk.closeToTray} onChange={(v) => void updateDesk({ closeToTray: v })} label="Keep running in the tray" disabled={savingDesk} />
+            </SettingRow>
+            <SettingRow title="Start with Windows" hint="Starts quietly in the tray when you sign in, so the shortcut always works.">
+              <Toggle checked={desk.openAtLogin} onChange={(v) => void updateDesk({ openAtLogin: v })} label="Start with Windows" disabled={savingDesk} />
+            </SettingRow>
+            <SettingRow title="Notifications" hint="A Windows notification when a short is ready or fails while you're in another app.">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Bell className="h-4 w-4" />}
+                  onClick={() => notifyUser({ title: "Soundwave AI", body: "Notifications work. You'll hear from me when a short is ready.", route: "/agent" })}
+                  disabled={!desk.notifications}
+                >
+                  Test
+                </Button>
+                <Toggle checked={desk.notifications} onChange={(v) => void updateDesk({ notifications: v })} label="Notifications" disabled={savingDesk} />
+              </div>
+            </SettingRow>
+            <p className="pt-2 text-xs text-gray-600">Soundwave AI {desk.version} · shortcut {hotkeyLabel(desk.hotkey)}</p>
+          </div>
+        )}
       </Card>
     </>
   );

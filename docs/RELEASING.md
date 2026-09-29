@@ -19,10 +19,15 @@ runs the same build and attaches the installers to that Actions run as the
 a GitHub Release.
 
 CI (GitHub Actions, `windows-latest`) runs: typecheck + tests → frontend
-build → downloads ffmpeg and the **nightly** yt-dlp into `desktop/bin/` →
-assembles the app tree → **smoke-tests the real assembled app on Windows** →
-`electron-builder` → **verifies the packaged exe works as yt-dlp's JavaScript
-runtime** (`desktop/verify-runtime.mjs`) → produces:
+build → downloads ffmpeg, the **nightly** yt-dlp and the **whisper.cpp speech
+engine + English model** into `desktop/bin/` → checks every DLL the speech
+engine needs ships with it (`desktop/check-dlls.mjs`) → assembles the app tree
+→ **smoke-tests the real assembled app on Windows** (incl. transcribing a real
+recording) → `electron-builder` → **verifies the packaged exe works as yt-dlp's
+JavaScript runtime** (`desktop/verify-runtime.mjs`) → **end-to-end test of the
+packaged app** (`desktop/e2e.mjs`: fake microphone → mic button and the
+Ctrl+Shift+Space voice bar → transcription → agent reply; tray, close-to-tray,
+preload bridge) → produces:
 
 | Artifact | What it is |
 | --- | --- |
@@ -30,9 +35,33 @@ runtime** (`desktop/verify-runtime.mjs`) → produces:
 | `SoundwaveAI-Portable-1.0.0.exe` | Single portable exe — double-click, nothing to install |
 
 The customer needs **nothing preinstalled**: no Node, no Python, no ffmpeg,
-no terminal, no `.bat`. Node runtime (inside Electron), ffmpeg, and yt-dlp all
-ship in the package; first run generates its own JWT secrets and uses
-`%APPDATA%\Soundwave AI\` for all data.
+no terminal, no `.bat`, no Visual C++ redistributable. Node runtime (inside
+Electron), ffmpeg, yt-dlp and the speech engine all ship in the package; first
+run generates its own JWT secrets and uses `%APPDATA%\Soundwave AI\` for all
+data.
+
+## Voice input (whisper.cpp) in the desktop app
+
+- **Local speech recognition.** `resources\bin\whisper\` holds whisper.cpp's
+  official Windows build (pinned release + SHA-256 in the workflow; it picks
+  the best CPU code path at runtime, AVX-512 down to plain x64), the Microsoft
+  C++ runtime DLLs app-locally, and OpenAI's Whisper **base.en** model
+  (5-bit, ~57 MB). Both whisper.cpp and the model are MIT licensed
+  (`LICENSE-whisper.cpp.txt` ships next to the exe). Nothing is uploaded.
+- **How it's used.** The server's `POST /api/v1/agent/transcribe` runs
+  `whisper-cli` per voice command: model by file name from its own folder,
+  audio on stdin, text on stdout — so non-ASCII Windows user names in the
+  install path can't break it. `GET /api/v1/agent/transcribe/status` says
+  whether it's available and why not.
+- **Desktop shell.** Global shortcut (Ctrl+Shift+Space by default; Ctrl+Alt+Space
+  or Alt+Space in Settings → Voice & Desktop) opens an always-on-top voice bar
+  that never takes focus from the app you're in. The app keeps running in the
+  tray when its window is closed, can start with Windows (`--hidden`, in the
+  tray), and posts Windows notifications (attributed to the `appId`) when a
+  short is ready or fails.
+- **Dev machines:** put `whisper-cli` and a ggml model (e.g.
+  `ggml-base.en-q5_1.bin`) in `vendor/whisper/`, or set `WHISPER_CLI_PATH` /
+  `WHISPER_MODEL_PATH`.
 
 ## YouTube import (yt-dlp) in the desktop app
 
@@ -75,8 +104,8 @@ What this repo already guarantees (no extra action needed):
 - **No `.bat` / PowerShell downloaders** anywhere in the customer path.
 - **No console windows** (child processes spawn with `windowsHide`).
 - **No admin/UAC prompt** (`requestedExecutionLevel: asInvoker`).
-- **No runtime `npm install`** — binaries are in the installer, fetched at
-  build time. The one deliberate runtime download is yt-dlp updating its own
+- **No runtime `npm install`** — binaries (incl. the speech model) are in the
+  installer, fetched at build time. The one deliberate runtime download is yt-dlp updating its own
   copy in `%APPDATA%\Soundwave AI\bin\` (see above) — the same thing every
   yt-dlp front-end does, because YouTube breaks old versions within weeks.
 - Proper exe metadata (product name, version, icon, company copyright).

@@ -9,7 +9,9 @@ import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
 import { AgentHub } from "./pages/AgentHub";
 import { CreatorStudio } from "./pages/CreatorStudio";
+import { VoiceOverlay } from "./pages/VoiceOverlay";
 import { NotFound } from "./pages/NotFound";
+import { BackgroundServices } from "./components/agent/BackgroundServices";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -28,6 +30,8 @@ export default function App() {
     <>
       <ScrollToTop />
       <ToastHost />
+      {/* Notifications for finished shorts + the desktop shell's voice shortcut. */}
+      <BackgroundServices />
       <Routes>
         {/* Root → the Command Center */}
         <Route path="/" element={<Navigate to={HOME} replace />} />
@@ -44,6 +48,9 @@ export default function App() {
         <Route path="/jarvis" element={<Navigate to={HOME} replace />} />
         <Route path="/automation" element={<Navigate to={HOME} replace />} />
         <Route path="/studio/*" element={<Navigate to={HOME} replace />} />
+
+        {/* The desktop app's floating voice bar (its own transparent window). */}
+        <Route path="/overlay" element={<VoiceOverlay />} />
 
         <Route
           path="/agent"

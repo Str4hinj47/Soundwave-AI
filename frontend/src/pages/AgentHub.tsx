@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { 
   Sparkles, 
   Download, 
@@ -23,6 +23,7 @@ import {
   Eye, 
   Youtube, 
   ExternalLink, 
+  Loader2,
 } from "lucide-react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
@@ -30,6 +31,33 @@ import { toast } from "../store/toast";
 import { ThinkingOrbVisualizer, ALL_ORB_STATES } from "../components/agent/ThinkingOrbVisualizer";
 import type { OrbState } from "thinking-orbs";
 import { AGENT_VOICES, agentVoiceLabel, displayNameFor, isSoundwaveVoice, loadAgentVoice, saveAgentVoice } from "../lib/voices";
+import {
+  CHAT_STORAGE_KEY,
+  chatTime,
+  completionMessage,
+  describeSection,
+  failureMessage,
+  historyForRequest,
+  loadChatHistory,
+  newMessageId,
+  openJobs,
+  parseChatHistory,
+  replyToMessage,
+  saveChatHistory,
+  sendChat,
+  startedShortJob,
+  type ChatMessage,
+  type ShortBackground,
+  type ShortJob,
+} from "../lib/agentChat";
+import { speak, stopSpeaking, voiceProblemReason } from "../lib/speech";
+import { HOLD_MS, useVoiceCapture } from "../hooks/useVoiceCapture";
+import { VOICE_PREFS_EVENT, VoiceInputError, fetchVoiceInputStatus, isVoicePrefKey, loadVoicePrefs, saveVoicePrefs, type VoiceInputStatus } from "../lib/voiceInput";
+import { DEFAULT_HOTKEY, getDesktop, hotkeyLabel } from "../lib/desktop";
+import { JOB_STARTED_EVENT, VOICE_COMMAND_EVENT } from "../components/agent/BackgroundServices";
+import { notifyJobOutcome } from "../lib/notify";
+
+export type { ShortBackground };
 
 interface NicheInfo {
   id: string;
@@ -61,17 +89,6 @@ function getNicheIcon(iconName: string) {
   }
 }
 
-/** Where a rendered short's background came from (server: ShortBackgroundInfo). */
-export interface ShortBackground {
-  source: "orbital_ncg";
-  channelName: string;
-  channelUrl: string;
-  videoId: string;
-  url: string;
-  title: string;
-  section: { start: number; end: number } | null;
-}
-
 interface OrbitalUsedEntry {
   id: string;
   url: string;
@@ -100,50 +117,11 @@ export interface OrbitalStatus {
 
 const ORBITAL_CHANNEL_URL = "https://www.youtube.com/@OrbitalNCG";
 
-function formatClock(secs: number): string {
-  const s = Math.max(0, Math.round(secs));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = String(s % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
-}
-
-function describeSection(section: { start: number; end: number } | null | undefined): string {
-  return section ? `${formatClock(section.start)}–${formatClock(section.end)}` : "full video";
-}
-
-/** What the agent reads aloud: no links or markdown, and cut at a sentence end. */
-function speechTextFor(text: string, max = 1200): string {
-  const clean = text
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[*_#`>]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (clean.length <= max) return clean;
-  const cut = clean.slice(0, max);
-  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
-  return (end > max * 0.5 ? cut.slice(0, end + 1) : cut).trim();
-}
-
 /** The center column (orb + dock) never scrolls: the orb shrinks to fit the window. */
 const ORB_MAX = 300;
 const ORB_MIN = 120;
 /** Height the center column needs besides the orb: name, status, dock, spacing. */
 const CENTER_RESERVED_PX = 214;
-
-interface ChatMessage {
-  id: string;
-  sender: "user" | "assistant" | "system";
-  text: string;
-  actionOutput?: string;
-  time: string;
-  tag?: "SYS" | "RPA" | "VOICE" | "USER" | "AUDIO";
-  videoUrl?: string;
-  downloadUrl?: string;
-  youtubeUrl?: string;
-  /** Orbital NCG video the short's background was imported from. */
-  background?: ShortBackground;
-}
 
 interface MacroWorkflow {
   id: string;
@@ -159,7 +137,6 @@ export function AgentHub() {
   // Assistant Identity & State
   const [assistantName, setAssistantName] = useState("S.O.U.N.D.W.A.V.E");
   const [assistantState, setAssistantState] = useState<"STANDBY" | "LISTENING" | "THINKING" | "SPEAKING" | "GENERATING">("STANDBY");
-  const [isMicActive, setIsMicActive] = useState(false);
   const [currentTimeStr, setCurrentTimeStr] = useState("");
   const [currentDateStr, setCurrentDateStr] = useState("");
   const [uptimeSeconds, setUptimeSeconds] = useState(439);
@@ -195,24 +172,25 @@ export function AgentHub() {
 
   // Chat conversation stream
   const [userPrompt, setUserPrompt] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    try {
-      const saved = localStorage.getItem("soundwave_agent_chat_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return [
-      {
-        id: "init",
-        sender: "assistant",
-        text: "Hello, I am Soundwave. Neural acoustic core online, 16 desktop controls loaded, and Ghost Operator RPA standby. How can I assist you today, creator?",
-        time: "2:45 PM",
-        tag: "VOICE",
-      },
-    ];
-  });
+  // One conversation for every window: the desktop voice bar (/overlay) adds
+  // its turns to the same stored history (see lib/agentChat).
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
+    () =>
+      loadChatHistory() ?? [
+        {
+          id: "init",
+          sender: "assistant",
+          text: "Hello, I am Soundwave. Talk to me with the mic button, or type below. I write, narrate and render your YouTube Shorts. How can I help today, creator?",
+          time: chatTime(),
+          tag: "VOICE",
+        },
+      ],
+  );
+  /** Latest messages, for callbacks that outlive a render. */
+  const chatMessagesRef = useRef(chatMessages);
+  chatMessagesRef.current = chatMessages;
+  /** Set when an update came from another window (don't write it straight back). */
+  const skipPersistRef = useRef(false);
 
   // Modals & Tools
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -278,7 +256,16 @@ export function AgentHub() {
     "Preferred export resolution is 9:16 vertical 720p 60fps.",
   ]);
   const [newMemoryText, setNewMemoryText] = useState("");
-  const [voiceFeedback, setVoiceFeedback] = useState(true);
+  // "Speak replies aloud" — stored, so the desktop voice bar follows it too.
+  const [voiceFeedback, setVoiceFeedbackState] = useState(() => loadVoicePrefs().speakReplies);
+  const setVoiceFeedback = (on: boolean) => {
+    setVoiceFeedbackState(on);
+    saveVoicePrefs({ speakReplies: on });
+  };
+  /** Local speech engine (whisper.cpp) status, for the mic's tooltip and errors. */
+  const [voiceInputStatus, setVoiceInputStatus] = useState<VoiceInputStatus | null>(null);
+  const desktop = getDesktop();
+  const [voiceHotkey, setVoiceHotkey] = useState<string | null>(desktop ? DEFAULT_HOTKEY : null);
 
   // Refs
   /** The chat's own scroll box — the only thing (besides the left column) that scrolls. */
@@ -315,11 +302,13 @@ export function AgentHub() {
     } catch {}
   };
 
-  // Save chat to localStorage
+  // Save chat to localStorage (shared with the desktop voice bar)
   useEffect(() => {
-    try {
-      localStorage.setItem("soundwave_agent_chat_history", JSON.stringify(chatMessages.slice(-60)));
-    } catch {}
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    saveChatHistory(chatMessages);
   }, [chatMessages]);
 
   // Load macros & restore recent generated video
@@ -375,12 +364,9 @@ export function AgentHub() {
 
   // ── Agent speech: always a Soundwave voice ─────────────────────────────
   // Replies stream from /api/v1/agent/speak/stream while Microsoft renders
-  // them, so the agent starts talking almost at once. It's same-origin audio,
-  // which the desktop app's CSP allows (the old data: URL was blocked there,
-  // and the browser's robotic built-in voice read the reply instead). There is
-  // no non-neural fallback: if the voice service is down, a toast says why.
-  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
-  const speechTokenRef = useRef(0);
+  // them (lib/speech). Same-origin audio, which the desktop app's CSP allows.
+  // There is no non-neural fallback: if the voice service is down, a toast
+  // says why.
   const lastVoiceErrorAtRef = useRef(0);
   // Latest picks, for callbacks that outlive a render (e.g. a short finishing minutes later).
   const selectedVoiceRef = useRef(selectedVoice);
@@ -390,71 +376,31 @@ export function AgentHub() {
 
   const idleState = () => (activeJobIdRef.current ? "GENERATING" : "STANDBY");
 
-  const stopSpeaking = () => {
-    const audio = activeAudioRef.current;
-    activeAudioRef.current = null;
-    if (!audio) return;
-    audio.onplaying = null;
-    audio.onended = null;
-    audio.onerror = null;
-    audio.pause();
-    // Dropping the source aborts the stream, so the server stops synthesizing.
-    audio.removeAttribute("src");
-    audio.load();
-  };
-
   useEffect(() => () => stopSpeaking(), []);
 
   const reportVoiceProblem = async () => {
     const now = Date.now();
     if (now - lastVoiceErrorAtRef.current < 15_000) return;
     lastVoiceErrorAtRef.current = now;
-    let reason = "Couldn't reach Microsoft's neural voice service. Check the internet connection and try again.";
-    try {
-      const res = await fetch("/api/v1/agent/speak/status");
-      const health = await res.json();
-      if (health?.lastError) reason = health.lastError;
-    } catch {}
-    toast.error("Soundwave voice unavailable", reason);
+    toast.error("Soundwave voice unavailable", await voiceProblemReason());
   };
 
   /** Speak `text`. Pass `voice` to speak even when "Speak replies aloud" is off (explicit replay/test). */
   const speakText = (text: string, voiceOverride?: string) => {
-    if (typeof window === "undefined") return;
     if (!voiceFeedbackRef.current && !voiceOverride) return;
-    const clean = speechTextFor(text);
-    if (!clean) return;
-
-    stopSpeaking();
-    const token = ++speechTokenRef.current;
-    const isCurrent = () => speechTokenRef.current === token;
     const current = selectedVoiceRef.current;
     const voice = isSoundwaveVoice(voiceOverride) ? voiceOverride : isSoundwaveVoice(current) ? current : loadAgentVoice();
-
-    const audio = new Audio(`/api/v1/agent/speak/stream?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(clean)}`);
-    audio.preload = "auto";
-    activeAudioRef.current = audio;
-    audio.onplaying = () => {
-      if (isCurrent()) setAssistantState("SPEAKING");
-    };
-    audio.onended = () => {
-      if (!isCurrent()) return;
-      activeAudioRef.current = null;
-      setAssistantState(idleState());
-    };
-    audio.onerror = () => {
-      if (!isCurrent()) return;
-      activeAudioRef.current = null;
-      setAssistantState(idleState());
-      void reportVoiceProblem();
-    };
-    audio.play().catch((err: DOMException) => {
-      if (!isCurrent() || err?.name === "AbortError") return;
-      if (err?.name === "NotAllowedError") {
+    speak(text, voice, {
+      onStart: () => setAssistantState("SPEAKING"),
+      onEnd: () => setAssistantState(idleState()),
+      onError: () => {
+        setAssistantState(idleState());
+        void reportVoiceProblem();
+      },
+      onBlocked: () => {
         setAssistantState(idleState());
         toast.info("Click anywhere to let Soundwave talk", "The browser blocks sound until you interact with the page.");
-      }
-      // Anything else surfaces through onerror.
+      },
     });
   };
 
@@ -463,13 +409,28 @@ export function AgentHub() {
     if (!voiceFeedback) stopSpeaking();
   }, [voiceFeedback]);
 
+  // Voice settings changed (here, in Settings, or in another window).
+  useEffect(() => {
+    const sync = () => setVoiceFeedbackState(loadVoicePrefs().speakReplies);
+    const onStorage = (e: StorageEvent) => {
+      if (isVoicePrefKey(e.key)) sync();
+    };
+    window.addEventListener(VOICE_PREFS_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(VOICE_PREFS_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   // Sidebar "Generate Short" (?tab=generator) and the Voice Library's
   // "Use in Command Center" (?voice=…) land here.
   const handledSearchRef = useRef<string | null>(null);
   useEffect(() => {
     const voice = searchParams.get("voice");
     const openGenerator = searchParams.get("tab") === "generator";
-    if (!voice && !openGenerator) {
+    const listen = searchParams.get("listen") === "1";
+    if (!voice && !openGenerator && !listen) {
       handledSearchRef.current = null;
       return;
     }
@@ -481,8 +442,10 @@ export function AgentHub() {
       toast.success("Voice selected", `${displayNameFor(voice)} now speaks for the agent and narrates your shorts.`);
     }
     if (openGenerator) setGeneratorModalOpen(true);
+    if (listen) window.setTimeout(() => toggleListening(), 150);
     const next = new URLSearchParams(searchParams);
     next.delete("voice");
+    next.delete("listen");
     if (openGenerator) next.delete("tab");
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -543,90 +506,226 @@ export function AgentHub() {
   };
 
   // ── Conversation Dispatcher ─────────────────────────────────────────────
-  const handleUserSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userPrompt.trim()) return;
-
-    const query = userPrompt.trim();
-    setUserPrompt("");
+  /** Send a typed or spoken message to the agent and show / speak its reply. */
+  const sendMessage = async (text: string, opts: { viaVoice?: boolean } = {}) => {
+    const query = text.trim();
+    if (!query) return;
     setCommandsCount((c) => c + 1);
 
     const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+      id: newMessageId(),
       sender: "user",
       text: query,
-      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+      time: chatTime(),
+      ...(opts.viaVoice ? { viaVoice: true } : {}),
     };
+    const history = historyForRequest(chatMessagesRef.current);
     setChatMessages((prev) => [...prev, userMsg]);
     setAssistantState("THINKING");
 
     try {
-      const historyContext = chatMessages.slice(-6).map((m) => ({
-        sender: m.sender,
-        text: m.text,
-      }));
-
-      const res = await fetch("/api/v1/agent/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: query,
-          prompt: query,
-          history: historyContext,
-          voice: selectedVoice,
-          resolution,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // "generate a yt short …" → the server started a background job
-        // (unused Orbital NCG video → YouTube link importer → render); follow it.
-        const startedShortJob =
-          data.action === "soundwave_shorts" && data.status === "PROCESSING" && typeof data.jobId === "string";
-        const videoLink = data.videoUrl || data.downloadUrl;
-        const aiMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          sender: "assistant",
-          text: data.reply || "Command executed.",
-          actionOutput: data.actionOutput,
-          videoUrl: videoLink,
-          downloadUrl: videoLink,
-          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-          tag: data.tag || (data.action === "ghost_macro" ? "RPA" : "VOICE"),
-        };
-        if (videoLink) {
-          setCompletedVideoUrl(videoLink);
-        }
-        setChatMessages((prev) => [...prev, aiMsg]);
-        speakText(aiMsg.text);
-        if (startedShortJob && activeJobIdRef.current !== data.jobId) {
-          void trackShortJob(data.jobId, data.topic || query);
-        }
-      } else {
-        const fallbackMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          sender: "assistant",
-          text: `Processed command: "${query}". Neural dispatch complete.`,
-          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-          tag: "VOICE",
-        };
-        setChatMessages((prev) => [...prev, fallbackMsg]);
-        speakText(fallbackMsg.text);
+      const data = await sendChat({ message: query, history, voice: selectedVoiceRef.current, resolution });
+      // "generate a yt short …" → the server started a background job
+      // (unused Orbital NCG video → YouTube link importer → render); follow it.
+      const aiMsg = replyToMessage(data, query);
+      const videoLink = aiMsg.videoUrl;
+      if (videoLink) {
+        setCompletedVideoUrl(videoLink);
+      }
+      setChatMessages((prev) => [...prev, aiMsg]);
+      speakText(aiMsg.text);
+      if (startedShortJob(data) && activeJobIdRef.current !== data.jobId) {
+        void trackShortJob(data.jobId, data.topic || query);
       }
     } catch {
       const fallbackMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: newMessageId(),
         sender: "assistant",
-        text: `Command "${query}" logged into buffer.`,
-        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-        tag: "VOICE",
+        text: `I couldn't process "${query}" just now — the local agent server didn't answer. Try again in a moment.`,
+        time: chatTime(),
+        tag: "SYS",
       };
       setChatMessages((prev) => [...prev, fallbackMsg]);
     } finally {
-      setAssistantState(activeJobIdRef.current ? "GENERATING" : "STANDBY");
+      setAssistantState((prev) => (prev === "SPEAKING" ? prev : idleState()));
     }
   };
+
+  const handleUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userPrompt.trim()) return;
+    const query = userPrompt.trim();
+    setUserPrompt("");
+    void sendMessage(query);
+  };
+
+  // ── Voice input: mic button, orb, Ctrl+Shift+Space ─────────────────────
+  // Recorded here, transcribed on this PC by whisper.cpp (nothing goes to a
+  // cloud service), then sent exactly like a typed message. Tap = talk until
+  // you pause; hold = push-to-talk (release to send).
+  const capture = useVoiceCapture({
+    onTranscript: (text) => void sendMessage(text, { viaVoice: true }),
+    onNothingHeard: () => {
+      setAssistantState(idleState());
+      toast.info("I didn't catch that", "Nothing was heard — try again, a little closer to the microphone.");
+    },
+    onError: (err) => {
+      setAssistantState(idleState());
+      const engine = err instanceof VoiceInputError && err.code === "engine";
+      toast.error(engine ? "Voice input unavailable" : "Microphone problem", err.message);
+      if (engine) void fetchVoiceInputStatus().then(setVoiceInputStatus);
+    },
+  });
+  const micPhase = capture.phase;
+  const isMicActive = micPhase === "starting" || micPhase === "listening";
+  const { toggle: toggleListening, finish: finishListening, cancel: cancelListening, holdStarted, tapConfirmed } = capture;
+
+  useEffect(() => {
+    if (micPhase === "starting" || micPhase === "listening") setAssistantState("LISTENING");
+    else if (micPhase === "transcribing") setAssistantState("THINKING");
+    else setAssistantState((prev) => (prev === "LISTENING" ? idleState() : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micPhase]);
+
+  // Mic button: a tap toggles listening, holding it is push-to-talk.
+  const micPressRef = useRef<{ at: number; wasActive: boolean; holdTimer?: number } | null>(null);
+  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const wasActive = capture.phaseRef.current !== "idle";
+    // Event timestamps, not the clock: a busy page can deliver the release late.
+    const press: { at: number; wasActive: boolean; holdTimer?: number } = { at: e.timeStamp, wasActive };
+    micPressRef.current = press;
+    if (!wasActive) {
+      void capture.start();
+      press.holdTimer = window.setTimeout(holdStarted, HOLD_MS);
+    }
+  };
+  const onMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const press = micPressRef.current;
+    micPressRef.current = null;
+    if (!press) return;
+    window.clearTimeout(press.holdTimer);
+    const phase = capture.phaseRef.current;
+    const recording = phase === "listening" || phase === "starting";
+    if (press.wasActive) {
+      if (recording) void finishListening("manual"); // second tap: send
+      return;
+    }
+    if (recording && e.timeStamp - press.at >= HOLD_MS) {
+      void finishListening("manual"); // push-to-talk released
+      return;
+    }
+    // A quick tap keeps listening until the speaker pauses (or taps again).
+    tapConfirmed();
+  };
+
+  // Ctrl+Shift+Space on this page (the desktop app registers it system-wide
+  // and routes it here while this window has focus).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && !e.repeat) {
+        e.preventDefault();
+        toggleListening();
+      }
+    };
+    const onCommand = (e: Event) => {
+      const command = (e as CustomEvent<string>).detail;
+      if (command === "cancel") cancelListening();
+      else if (command === "stop") void finishListening("manual");
+      else toggleListening();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener(VOICE_COMMAND_EVENT, onCommand);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(VOICE_COMMAND_EVENT, onCommand);
+    };
+  }, [toggleListening, finishListening, cancelListening]);
+
+  // Speech engine + shortcut status (tooltips, Settings hints).
+  useEffect(() => {
+    void fetchVoiceInputStatus().then(setVoiceInputStatus);
+    desktop
+      ?.getState()
+      .then((st) => setVoiceHotkey(st.hotkeyEnabled && st.hotkeyRegistered ? st.hotkey : null))
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The voice bar (another window) added to the conversation: show it here,
+  // and follow any short it started.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== CHAT_STORAGE_KEY) return;
+      const next = parseChatHistory(e.newValue);
+      if (!next) return;
+      skipPersistRef.current = true;
+      setChatMessages(next);
+      if (!activeJobIdRef.current) {
+        const open = openJobs(next);
+        const latest = open[open.length - 1];
+        if (latest) void trackShortJob(latest.jobId, latest.topic);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On open: settle shorts the conversation announced but never reported on
+  // (started from the voice bar, or finished while another page was open),
+  // and pick up a render that's still running.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      for (const { jobId, topic } of openJobs(chatMessagesRef.current)) {
+        try {
+          const res = await fetch(`/api/v1/export/jobs/${jobId}`);
+          if (cancelled) return;
+          if (res.status === 404) {
+            setChatMessages((prev) =>
+              prev.some((m) => m.jobId === jobId && m.jobState !== "started") ? prev : [...prev, failureMessage(jobId, topic, "that render is no longer available.")],
+            );
+            continue;
+          }
+          if (!res.ok) continue;
+          const { job } = (await res.json()) as { job: ShortJob };
+          if (cancelled) return;
+          if (job.status === "COMPLETED") {
+            const videoUrl = job.outputUrl || `/api/v1/export/jobs/${jobId}/download`;
+            setCompletedVideoUrl(videoUrl);
+            setChatMessages((prev) =>
+              prev.some((m) => m.jobId === jobId && m.jobState === "done")
+                ? prev
+                : [...prev, completionMessage(jobId, topic, { videoUrl, youtubeUrl: job.settings?.youtubeUrl, background: job.settings?.background })],
+            );
+          } else if (job.status === "FAILED") {
+            setChatMessages((prev) =>
+              prev.some((m) => m.jobId === jobId && m.jobState === "failed") ? prev : [...prev, failureMessage(jobId, topic, job.errorMessage || "rendering failed")],
+            );
+          } else if (!activeJobIdRef.current) {
+            void trackShortJob(jobId, topic);
+          }
+        } catch {
+          /* server busy — try on the next visit */
+        }
+      }
+      if (cancelled || activeJobIdRef.current) return;
+      try {
+        const res = await fetch("/api/v1/agent/jobs?status=PROCESSING&kind=short&limit=1");
+        const { jobs } = (await res.json()) as { jobs?: Array<{ id: string; settings?: { topic?: string } }> };
+        const running = jobs?.[0];
+        if (!cancelled && running && !activeJobIdRef.current) void trackShortJob(running.id, running.settings?.topic || "your short");
+      } catch {
+        /* nothing running */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Ghost Operator Macro Runner ─────────────────────────────────────────
   const runMacro = async (macroId: string) => {
@@ -795,6 +894,7 @@ export function AgentHub() {
   // include the Orbital NCG link being pasted into the YouTube link importer.
   const trackShortJob = (jobId: string, topic: string): Promise<void> => {
     activeJobIdRef.current = jobId;
+    window.dispatchEvent(new CustomEvent(JOB_STARTED_EVENT, { detail: jobId }));
     setIsGenerating(true);
     setCompletedVideoUrl(null);
     setUploadedYoutubeUrl(null);
@@ -861,25 +961,14 @@ export function AgentHub() {
         }
 
         const hasYt = !!resultData.youtubeUrl;
-        const backgroundLine = background
-          ? `\nBackground: "${background.title}" (${describeSection(background.section)}) — Orbital NCG video imported via the YouTube link importer: ${background.url}`
-          : "";
-        const successNotice: ChatMessage = {
-          id: Date.now().toString(),
-          sender: "assistant",
-          text:
-            (hasYt
-              ? `Rendered viral short for "${topic}" and automatically published it to YouTube Shorts: ${resultData.youtubeUrl}`
-              : `Rendered viral short for "${topic}". Your video is ready to preview, download, or post to YouTube!`) + backgroundLine,
-          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-          tag: "AUDIO",
+        const successNotice = completionMessage(jobId, topic, {
           videoUrl: finalVideoUrl,
-          downloadUrl: finalVideoUrl,
           youtubeUrl: resultData.youtubeUrl,
           background,
-        };
-        setChatMessages((prev) => [...prev, successNotice]);
+        });
+        setChatMessages((prev) => (prev.some((m) => m.jobId === jobId && m.jobState === "done") ? prev : [...prev, successNotice]));
         speakText(hasYt ? "Your short has been rendered and posted to YouTube Shorts!" : "Your video has finished rendering and is ready to download!");
+        void notifyJobOutcome({ id: jobId, status: "COMPLETED", topic, youtubeUrl: resultData.youtubeUrl });
         toast.success(hasYt ? "Published to YouTube!" : "Video Ready", hasYt ? resultData.youtubeUrl : "Short generated successfully.");
         finish();
       };
@@ -890,17 +979,11 @@ export function AgentHub() {
         setAssistantState("STANDBY");
         setProgressPercent(0);
         setCurrentStep("Ready");
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            sender: "assistant",
-            text: `I couldn't finish the short about "${topic}": ${errMessage}`,
-            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-            tag: "SYS",
-          },
-        ]);
+        setChatMessages((prev) =>
+          prev.some((m) => m.jobId === jobId && m.jobState === "failed") ? prev : [...prev, failureMessage(jobId, topic, errMessage)],
+        );
         toast.error("Generation Error", errMessage);
+        void notifyJobOutcome({ id: jobId, status: "FAILED", topic, error: errMessage });
         finish();
       };
 
@@ -1451,11 +1534,7 @@ export function AgentHub() {
               size={orbSize}
               orbMode={orbMode}
               className="my-3"
-              onOrbClick={() => {
-                if (assistantState === "STANDBY") {
-                  setIsMicActive(!isMicActive);
-                }
-              }}
+              onOrbClick={toggleListening}
             />
 
             {/* Assistant Name Label */}
@@ -1466,16 +1545,22 @@ export function AgentHub() {
             {/* Dynamic Status Capsule */}
             <div className="mt-3">
               <span className="inline-flex items-center gap-2 rounded-full border border-[#172A4A] bg-[#0C172E] px-4 py-1 text-xs text-gray-300 font-mono shadow-inner">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                {assistantState === "LISTENING" || isMicActive
-                  ? "Listening to voice input..."
+                <span className={`h-2 w-2 rounded-full animate-pulse ${isMicActive ? "bg-emerald-400" : micPhase === "transcribing" ? "bg-cyan-400" : "bg-emerald-400"}`} />
+                {micPhase === "starting"
+                  ? "Starting microphone..."
+                  : isMicActive
+                  ? "Listening... pause or tap the mic to send"
+                  : micPhase === "transcribing"
+                  ? "Transcribing your voice..."
                   : assistantState === "THINKING"
                   ? "Neural processing..."
                   : assistantState === "SPEAKING"
                   ? `Speaking as ${displayNameFor(selectedVoice)}...`
                   : assistantState === "GENERATING" || isGenerating
                   ? `Rendering short (${progressPercent}%)...`
-                  : "Listening for wake word..."}
+                  : voiceHotkey
+                  ? `Tap the mic or press ${hotkeyLabel(voiceHotkey)} to talk`
+                  : "Tap the mic to talk"}
               </span>
             </div>
           </div>
@@ -1491,24 +1576,46 @@ export function AgentHub() {
             </button>
 
             <button
-              onClick={() => {
-                const next = !isMicActive;
-                setIsMicActive(next);
-                setAssistantState(next ? "LISTENING" : "STANDBY");
-                if (next) {
-                  toast.info("Microphone Engaged", "Listening for voice instructions...");
-                } else {
-                  toast.info("Microphone Standby", "Muted.");
+              type="button"
+              onPointerDown={onMicPointerDown}
+              onPointerUp={onMicPointerUp}
+              onPointerCancel={onMicPointerUp}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+                  e.preventDefault();
+                  toggleListening();
                 }
               }}
-              className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+              onContextMenu={(e) => e.preventDefault()}
+              className={`relative flex h-12 w-12 touch-none items-center justify-center rounded-xl border transition-all cursor-pointer ${
                 isMicActive
-                  ? "border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-lg shadow-emerald-500/25 animate-pulse"
+                  ? "border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-lg shadow-emerald-500/25"
+                  : micPhase === "transcribing"
+                  ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-300"
+                  : voiceInputStatus && !voiceInputStatus.available
+                  ? "border-[#172A4A] bg-[#0C172E] text-gray-500 hover:border-amber-500/40"
                   : "border-[#172A4A] bg-[#0C172E] text-gray-300 hover:border-cyan-500/50 hover:text-white"
               }`}
-              title={isMicActive ? "Mute Microphone" : "Push-to-Talk"}
+              style={isMicActive ? { boxShadow: `0 0 0 ${2 + Math.round(capture.level * 10)}px rgba(52, 211, 153, 0.22)` } : undefined}
+              title={
+                voiceInputStatus && !voiceInputStatus.available
+                  ? `Voice input unavailable: ${voiceInputStatus.reason ?? "speech engine missing"}`
+                  : isMicActive
+                  ? "Tap to send (or just pause)"
+                  : `Talk to Soundwave — tap, or hold to talk${voiceHotkey ? ` · ${hotkeyLabel(voiceHotkey)}` : ""}`
+              }
+              aria-label={isMicActive ? "Stop listening and send" : "Talk to Soundwave"}
+              aria-pressed={isMicActive}
             >
-              {isMicActive ? <Mic className="h-5 w-5 text-emerald-400" /> : <MicOff className="h-5 w-5" />}
+              {micPhase === "transcribing" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : isMicActive ? (
+                <Mic className="h-5 w-5 text-emerald-400" />
+              ) : voiceInputStatus && !voiceInputStatus.available ? (
+                <MicOff className="h-5 w-5" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
             </button>
 
             <button
@@ -1656,8 +1763,9 @@ export function AgentHub() {
                 )}
 
                 <div className="flex items-center justify-between text-[10px] text-gray-500 mt-2 pt-1 border-t border-white/[0.04]">
-                  <span className="uppercase text-[9px] font-bold tracking-wider text-cyan-400">
-                    {msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
+                  <span className="flex items-center gap-1 uppercase text-[9px] font-bold tracking-wider text-cyan-400">
+                    {msg.viaVoice && <Mic className="h-2.5 w-2.5" aria-label="Spoken" />}
+                    {msg.viaVoice ? "YOU (VOICE)" : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {msg.sender === "assistant" && (
@@ -2170,6 +2278,29 @@ export function AgentHub() {
                   >
                     {voiceFeedback ? "Enabled" : "Disabled"}
                   </button>
+                </div>
+
+                {/* Voice input (local speech recognition) */}
+                <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-[#172A4A] bg-[#070D18]">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white">Voice Input</p>
+                    <p className="text-[10px] text-gray-400">
+                      {voiceInputStatus?.available
+                        ? `Recognized on this PC (whisper.cpp · ${voiceInputStatus.model}) — nothing is uploaded. Tap the mic, hold it to talk${
+                            voiceHotkey ? `, or press ${hotkeyLabel(voiceHotkey)} from any app` : ""
+                          }.`
+                        : voiceInputStatus
+                        ? `Unavailable: ${voiceInputStatus.reason ?? "speech engine missing"}`
+                        : "Checking the speech engine..."}
+                    </p>
+                  </div>
+                  <Link
+                    to="/settings/voice"
+                    onClick={() => setSettingsOpen(false)}
+                    className="shrink-0 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-[#070B14] transition-all"
+                  >
+                    Options
+                  </Link>
                 </div>
 
                 {/* Learned Memory */}

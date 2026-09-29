@@ -2,7 +2,7 @@
 // Used by BOTH the Electron main process (src/main.js) and the standalone
 // smoke test (smoke.mjs) — one source of truth for how a packaged install
 // configures the API: loopback-only bind, user-data folders, generated JWT
-// secrets, bundled ffmpeg/yt-dlp, SPA served from WEB_DIST.
+// secrets, bundled ffmpeg/yt-dlp/whisper, SPA served from WEB_DIST.
 "use strict";
 
 const path = require("node:path");
@@ -97,6 +97,7 @@ function prepareYtDlp({ binDir, userDataDir }) {
  *     scripts/assets bundled static assets (music, …)
  *   binDir/
  *     ffmpeg.exe, yt-dlp.exe                              (runtime binaries)
+ *     whisper/whisper-cli.exe + DLLs + ggml-*.bin         (voice input)
  *   userDataDir/bin/
  *     yt-dlp.exe                  writable copy that runs (see prepareYtDlp)
  */
@@ -146,6 +147,11 @@ async function applyServerEnv({ appRoot, binDir, userDataDir, autoUpdateYtDlp = 
     // ("off", "stable", …) wins.
     if (autoUpdateYtDlp && ytdlp.writable) env.YTDLP_AUTO_UPDATE = process.env.YTDLP_AUTO_UPDATE || "nightly";
   }
+
+  // Voice input: the bundled whisper.cpp CLI + model (bin/whisper/). The
+  // server finds the model next to the CLI.
+  const whisperCli = path.join(binDir, "whisper", isWin ? "whisper-cli.exe" : "whisper-cli");
+  if (fs.existsSync(whisperCli)) env.WHISPER_CLI_PATH = whisperCli;
 
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
   process.chdir(serverRoot);

@@ -33,6 +33,36 @@ function get(url) {
   });
 }
 
+function post(url, body, contentType, timeoutMs = 180_000) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method: "POST", headers: { "Content-Type": contentType, "Content-Length": body.length } }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let json = null;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          /* not JSON */
+        }
+        resolve({ status: res.statusCode, body: json ?? text });
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("timeout")));
+    req.end(body);
+  });
+}
+
+// On GitHub Actions, key results also become annotations on the run page.
+function annotate(level, title, message) {
+  if (process.env.GITHUB_ACTIONS !== "true") return;
+  const data = (v) => String(v).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  const prop = (v) => data(v).replace(/:/g, "%3A").replace(/,/g, "%2C");
+  console.log(`::${level} title=${prop(title)}::${data(message)}`);
+}
+
 function assert(cond, label) {
   if (!cond) {
     console.error(`[smoke] ✗ FAIL: ${label}`);
@@ -101,6 +131,43 @@ try {
     assert(/^\d{4}\.\d{2}\.\d{2}/.test(version), `user-data yt-dlp copy executes (version ${version})`);
   } else {
     console.log(`[smoke] – no bundled yt-dlp in ${binDir}; skipping the yt-dlp copy check`);
+  }
+
+  // Voice input: the bundled whisper.cpp (bin/whisper) must turn real speech
+  // into text through the app's own endpoint — exactly what the mic does.
+  const whisperCli = path.join(binDir, "whisper", process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli");
+  if (fs.existsSync(whisperCli)) {
+    assert(process.env.WHISPER_CLI_PATH === whisperCli, "voice input uses the bundled speech engine");
+    const status = JSON.parse((await get(`${appUrl}/api/v1/agent/transcribe/status`)).body);
+    assert(status.available === true && typeof status.model === "string", `speech engine ready (whisper.cpp, ${status.model} model)`);
+
+    const sample = path.join(desktopDir, "jfk.wav"); // CI downloads it; never shipped
+    if (fs.existsSync(sample)) {
+      const r = await post(`${appUrl}/api/v1/agent/transcribe`, fs.readFileSync(sample), "audio/wav");
+      const text = typeof r.body === "object" ? r.body.text : "";
+      assert(r.status === 200 && /ask not what your country/i.test(text || ""), `transcribes a real recording: "${text}" (${r.body?.elapsedMs} ms)`);
+      annotate("notice", "Voice input (whisper.cpp)", `JFK sample → "${text}" in ${r.body?.elapsedMs} ms with the ${status.model} model.`);
+    } else {
+      console.log(`[smoke] – no ${sample}; skipping the recorded-speech check`);
+    }
+
+    // A spoken command in a Soundwave voice (needs Microsoft's online voices —
+    // informational when they can't be reached), sent as MP3 so the server's
+    // ffmpeg conversion runs too.
+    const phrase = "Make a YouTube short about black holes.";
+    const spoken = await post(`${appUrl}/api/v1/agent/speak`, Buffer.from(JSON.stringify({ text: phrase, voice: "en-US-GuyNeural" })), "application/json", 60_000).catch(
+      (e) => ({ status: 0, body: { error: e.message } }),
+    );
+    if (spoken.status === 200 && spoken.body?.audioBase64) {
+      const r = await post(`${appUrl}/api/v1/agent/transcribe`, Buffer.from(spoken.body.audioBase64, "base64"), "audio/mpeg");
+      const text = typeof r.body === "object" ? r.body.text || "" : "";
+      assert(r.status === 200 && /short/i.test(text) && /black ?holes?/i.test(text), `understands a spoken command: "${text}" (${r.body?.elapsedMs} ms)`);
+      annotate("notice", "Voice command round trip", `Guy said "${phrase}" → heard "${text}" (${r.body?.elapsedMs} ms).`);
+    } else {
+      console.log(`[smoke] – Soundwave voice unavailable here (${spoken.body?.error ?? spoken.status}); skipping the spoken-command check`);
+    }
+  } else {
+    console.log(`[smoke] – no bundled speech engine in ${path.dirname(whisperCli)}; skipping the voice input checks`);
   }
 
   console.log("[smoke] PASS — assembled app boots and serves the Command Center.");

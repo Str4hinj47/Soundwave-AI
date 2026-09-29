@@ -9,6 +9,14 @@ service), burns word-by-word captions, and renders it over an Orbital NCG
 gameplay video it hasn't used before. The agent is the only thing in the app
 that makes videos; it also answers in the chat, out loud, in the same voice.
 
+**Talk to it.** Tap the mic in the Command Center (or hold it to talk) — or,
+in the desktop app, press **Ctrl+Shift+Space** from any app: a small voice bar
+pops up above the taskbar, listens, and answers out loud. Speech is recognized
+**on your PC** by [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with a
+bundled English model — no account, no API key, nothing uploaded. The desktop
+app lives in the tray (closing the window keeps it running), can start with
+Windows, and sends a Windows notification when a short is ready.
+
 ---
 
 ## Get the app (Windows)
@@ -25,6 +33,10 @@ Both are built by CI from this repo (see [docs/RELEASING.md](docs/RELEASING.md)
 prompt). All your projects, uploads and settings live in
 `%APPDATA%\Soundwave AI\`.
 
+The installers also include the speech engine for voice input (whisper.cpp +
+OpenAI's Whisper base.en model, ~60 MB, both MIT licensed) and the Microsoft
+C++ runtime it needs, so voice input works on a fresh Windows install.
+
 The app's YouTube import keeps working through YouTube changes: its yt-dlp
 lives in `%APPDATA%\Soundwave AI\bin\` and updates itself to the latest
 nightly build each time the app starts (just restart the app if an import
@@ -39,6 +51,7 @@ JavaScript runtime yt-dlp needs — no Node or Deno install required.
 | --- | --- |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, Zustand, React Hook Form + Zod |
 | Agent Engine | Python 3 Autonomous Shorts Creator, 2026 Viral Research Hooks, Reactive Soundwave HUD, Batch Automation |
+| Voice input | Local speech-to-text: whisper.cpp (`whisper-cli`) + Whisper base.en, run per command by the server (`POST /api/v1/agent/transcribe`); the browser records 16 kHz WAV (AudioWorklet) and detects the end of speech itself |
 | Voice | **Soundwave voices** = Microsoft neural voices (Edge TTS). A direct WebSocket client streams replies as they are synthesized (24 kHz mono MP3 + word timings); `node-edge-tts` is the backup engine. No robotic fallback voice: if the service is unreachable the app says why |
 | Backend | Express 5 + TypeScript, PostgreSQL + Prisma (JSON-file store fallback), JWT sessions (httpOnly cookies + refresh rotation + CSRF), Stripe billing stubs, SSE export jobs |
 | Media | FFmpeg (`libx264`/`libvpx-vp9`, `libass` subtitles + ASS watermark, volume/fades, media probing) |
@@ -64,7 +77,7 @@ soundwave-ai/
 ├── deploy/              # Dockerfile.api, nginx.conf
 ├── voiceclone/          # optional OmniVoice voice-cloning sidecar (see its README)
 ├── docker-compose.yml
-└── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import)
+└── vendor/              # static ffmpeg (export) + yt-dlp zipapp (YouTube import); whisper/ (voice input, git-ignored)
 ```
 
 ---
@@ -132,11 +145,19 @@ Without `DATABASE_URL` (Postgres) the API transparently uses a JSON-file store
 > the internet to talk. `cd server && npx tsx scripts/edge-tts-smoke.ts` checks
 > every Soundwave voice against the live service (CI runs it on each desktop
 > build).
+>
+> **Voice input** (the mic) needs a local speech engine: put `whisper-cli`
+> ([build whisper.cpp](https://github.com/ggml-org/whisper.cpp#quick-start) or
+> take its release binary) and a ggml model such as `ggml-base.en-q5_1.bin`
+> (from huggingface.co/ggerganov/whisper.cpp) in `vendor/whisper/` — or point
+> `WHISPER_CLI_PATH` / `WHISPER_MODEL_PATH` at them. Without it the mic says
+> why it's unavailable; typing works as usual. The desktop app bundles both.
 
 ### Tests
 
 ```bash
-cd server && npm test            # vitest: unit + API tests
+cd server && npm test            # vitest: unit + API tests (STT_REAL_SAMPLE=…/jfk.wav adds a real whisper.cpp run)
+cd desktop && npm test           # desktop shell helpers (node --test)
 cd frontend && npm run typecheck # tsc --noEmit
 cd frontend && npm run build     # production build
 ```
@@ -179,6 +200,8 @@ cd frontend && npm run build     # production build
 | GET | `/api/v1/agent/speak/stream` | — | the agent's reply as streamed MP3 in a Soundwave voice (`?text=&voice=`) |
 | POST | `/api/v1/agent/speak` | — | same, as base64 JSON (used by the Python desktop runner) |
 | GET | `/api/v1/agent/speak/status` | — | why the last reply couldn't be spoken (if it couldn't) |
+| POST | `/api/v1/agent/transcribe` | — | voice input: body = the recording (16 kHz mono WAV; other formats via ffmpeg) → `{ text, noSpeech, durationMs, elapsedMs, model }`, transcribed locally by whisper.cpp |
+| GET | `/api/v1/agent/transcribe/status` | — | whether voice input is available here (and why not) |
 | GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
 | POST | `/api/v1/agent/generate-script`| — | generate high-retention viral scripts on demand |
 | GET | `/api/v1/ghost/macros` | — | list built-in and user custom automation macros |
@@ -266,6 +289,7 @@ OAuth identity; new OAuth users are created email-verified with no password.
 | SMTP | not configured | emails are logged to stdout |
 | Stripe | not configured | billing returns 501 stubs |
 | Edge TTS (Microsoft) | unreachable | the agent shows why it can't speak (no robotic stand-in voice); a short fails with a clear message instead of being narrated by another voice |
+| Speech engine (whisper.cpp) | not in `vendor/whisper/` / `WHISPER_*` unset | `/agent/transcribe` answers 503 with the reason; the mic shows it; typing works |
 | Voice cloning | `VOICECLONE_URL` unset or sidecar down | `/tts/clone*` answers with a clear error; the Soundwave voices are unaffected |
 
 ### Voice cloning (OmniVoice)

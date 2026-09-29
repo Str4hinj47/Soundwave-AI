@@ -69,6 +69,14 @@ body {
   }
 }
 
+/* ── Desktop voice bar (/overlay): a transparent, frameless window ───── */
+html.sw-overlay,
+html.sw-overlay body,
+html.sw-overlay #root {
+  background: transparent !important;
+  overflow: hidden;
+}
+
 /* ── Custom range inputs ─────────────────────────────────────────────── */
 .sw-range {
   -webkit-appearance: none;

@@ -6,19 +6,48 @@
 // runtime download is yt-dlp keeping its user-data copy current (YouTube
 // breaks old builds), and yt-dlp's JavaScript runtime is this very binary
 // running as Node (ELECTRON_RUN_AS_NODE — see server/src/lib/jsRuntime.ts).
+//
+// Voice: a system-wide shortcut (Ctrl+Shift+Space by default) opens a small
+// always-on-top voice bar (/overlay) that listens, asks the agent and speaks
+// the answer; speech is recognized locally by the bundled whisper.cpp. The app
+// lives in the tray (closing the window keeps it running), can start with
+// Windows, and posts Windows notifications when a short is ready.
 "use strict";
 
-const { app, BrowserWindow, shell, dialog } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Notification,
+  Tray,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  nativeImage,
+  screen,
+  session,
+  shell,
+} = require("electron");
 const path = require("node:path");
 const http = require("node:http");
 const { pathToFileURL } = require("node:url");
 const { applyServerEnv } = require("./server-env.cjs");
+const {
+  HOTKEY_CHOICES,
+  applySettingsPatch,
+  hotkeyLabel,
+  loadSettings,
+  overlayBounds,
+  safeRoute,
+  sanitizeNotification,
+  saveSettings,
+} = require("./desktop-settings.cjs");
 
 // ── Child-process hygiene ────────────────────────────────────────────────────
-// The server spawns ffmpeg / yt-dlp helpers. A GUI app on Windows would flash
-// a console window for each of those unless windowsHide is set — patch the
-// builtins ONCE, before the server is imported. (ESM named imports of
-// node:child_process reflect the patched CJS exports.)
+// The server spawns ffmpeg / yt-dlp / whisper helpers. A GUI app on Windows
+// would flash a console window for each of those unless windowsHide is set —
+// patch the builtins ONCE, before the server is imported. (ESM named imports
+// of node:child_process reflect the patched CJS exports.)
 const cp = require("node:child_process");
 const wrapHide = (fn) =>
   function (...args) {
@@ -32,8 +61,32 @@ for (const name of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execF
   if (typeof cp[name] === "function") cp[name] = wrapHide(cp[name]);
 }
 
+/** Must equal electron-builder's appId: Windows attributes notifications to it. */
+const APP_ID = "ai.soundwave.desktop";
+/** Started by Windows at sign-in ("Start with Windows"): stay in the tray. */
+const START_HIDDEN = process.argv.includes("--hidden");
+const OVERLAY_SIZE = { width: 480, height: 150 };
+const BUILD_DIR = path.join(__dirname, "..", "build");
+const ICON_PNG = path.join(BUILD_DIR, "icon.png");
+const ICON_ICO = path.join(BUILD_DIR, "icon.ico");
+const PRELOAD = path.join(__dirname, "preload.cjs");
+
 let mainWindow = null;
+let overlayWindow = null;
+/** The voice bar's page subscribed to shortcut presses (earlier presses wait in pendingVoice). */
+let overlayListening = false;
+let pendingVoice = [];
+let tray = null;
+let isQuitting = false;
 let serverStarted = false;
+let serverUrl = "";
+let appOrigin = "";
+let settings = null;
+let settingsFile = "";
+let hotkeyState = { registered: false, error: null };
+const liveNotifications = new Set();
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function pollHealth(url, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -57,28 +110,26 @@ function pollHealth(url, timeoutMs) {
   });
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 860,
-    minWidth: 1024,
-    minHeight: 640,
-    show: false,
-    backgroundColor: "#0a0e17",
-    title: "Soundwave AI",
-    autoHideMenuBar: true,
-    icon: path.join(__dirname, "..", "build", "icon.png"),
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      spellcheck: false,
-    },
-  });
-  mainWindow.setMenuBarVisibility(false);
+function isAppUrl(url) {
+  try {
+    return Boolean(appOrigin) && new URL(url).origin === appOrigin;
+  } catch {
+    return false;
+  }
+}
 
-  // Never let the shell wander off-origin or open arbitrary windows.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+/** IPC only from the app's own pages. */
+function trusted(event) {
+  return isAppUrl((event.senderFrame && event.senderFrame.url) || "");
+}
+
+function alive(win) {
+  return Boolean(win) && !win.isDestroyed();
+}
+
+/** Never let a window wander off-origin or open arbitrary windows. */
+function lockNavigation(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url);
       if (parsed.protocol === "https:" || parsed.protocol === "http:" || parsed.protocol === "mailto:") {
@@ -89,55 +140,406 @@ function createWindow() {
     }
     return { action: "deny" };
   });
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(serverUrl)) {
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppUrl(url)) {
       event.preventDefault();
       shell.openExternal(url).catch(() => {});
     }
   });
+}
 
+function loginItemOptions() {
+  // The portable build runs from a temporary extraction; start the real exe.
+  return { path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: ["--hidden"] };
+}
+
+function supportsLoginItems() {
+  return process.platform === "win32" || process.platform === "darwin";
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+function publicState() {
+  return {
+    ...settings,
+    version: app.getVersion(),
+    hotkeyLabel: hotkeyLabel(settings.hotkey),
+    hotkeyRegistered: hotkeyState.registered,
+    hotkeyError: hotkeyState.error,
+    hotkeyChoices: HOTKEY_CHOICES.map((c) => ({ ...c })),
+  };
+}
+
+function updateSettings(patch) {
+  const before = settings;
+  settings = applySettingsPatch(settings, patch);
+  if (settings.hotkey !== before.hotkey || settings.hotkeyEnabled !== before.hotkeyEnabled) applyHotkey();
+  if (settings.openAtLogin !== before.openAtLogin && supportsLoginItems()) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, ...loginItemOptions() });
+    } catch (err) {
+      console.warn("[soundwave-desktop] could not change the login item:", err.message);
+    }
+  }
+  saveSettings(settingsFile, settings);
+  refreshTrayMenu();
+  return publicState();
+}
+
+// ── Main window ──────────────────────────────────────────────────────────────
+
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1360,
+    height: 860,
+    minWidth: 1024,
+    minHeight: 640,
+    show: false,
+    backgroundColor: "#0a0e17",
+    title: "Soundwave AI",
+    autoHideMenuBar: true,
+    icon: ICON_PNG,
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+      // Hidden in the tray the page is throttled like any background tab (no
+      // wasted CPU); render progress arrives over SSE regardless.
+      autoplayPolicy: "no-user-gesture-required",
+    },
+  });
+  mainWindow.setMenuBarVisibility(false);
+  lockNavigation(mainWindow);
+
+  // Closing the window keeps Soundwave in the tray (shortcut, renders and
+  // notifications keep working) unless that's turned off.
+  mainWindow.on("close", (event) => {
+    if (isQuitting || !settings.closeToTray || !tray) return;
+    event.preventDefault();
+    mainWindow.hide();
+    if (!settings.trayHintShown) {
+      settings = { ...settings, trayHintShown: true };
+      saveSettings(settingsFile, settings);
+      notify({
+        title: "Soundwave AI is still running",
+        body: settings.hotkeyEnabled
+          ? `Press ${hotkeyLabel(settings.hotkey)} to talk to it from any app. Right-click the tray icon to quit.`
+          : "It keeps working in the tray. Right-click the tray icon to quit.",
+      });
+    }
+  });
+  // Windows is signing out / shutting down: really close (don't hide to the tray).
+  mainWindow.on("session-end", () => {
+    isQuitting = true;
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
+    // Tray mode off (or quitting): closing the window ends the app.
+    if (!isQuitting) app.quit();
   });
   return mainWindow;
 }
 
-let serverUrl = "";
+function showMainWindow(route) {
+  if (!alive(mainWindow)) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  const target = safeRoute(route);
+  if (target) mainWindow.webContents.send("soundwave:navigate", target);
+}
+
+// ── Voice bar (overlay) ──────────────────────────────────────────────────────
+
+function createOverlayWindow() {
+  if (alive(overlayWindow) || !serverUrl) return;
+  overlayListening = false;
+  overlayWindow = new BrowserWindow({
+    width: OVERLAY_SIZE.width,
+    height: OVERLAY_SIZE.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    // Never steals focus from the app you're in (clicks still work).
+    focusable: false,
+    hasShadow: false,
+    title: "Soundwave AI — Voice",
+    icon: ICON_PNG,
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+      autoplayPolicy: "no-user-gesture-required",
+    },
+  });
+  overlayWindow.setAlwaysOnTop(true, "screen-saver");
+  lockNavigation(overlayWindow);
+  overlayWindow.on("closed", () => {
+    overlayWindow = null;
+    overlayListening = false;
+  });
+  overlayWindow.webContents.on("render-process-gone", () => {
+    // Rebuilt on the next shortcut press.
+    if (alive(overlayWindow)) overlayWindow.destroy();
+  });
+  overlayWindow.loadURL(`${serverUrl}/overlay`).catch((err) => console.warn("[soundwave-desktop] voice bar failed to load:", err.message));
+}
+
+function positionOverlay() {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  overlayWindow.setBounds(overlayBounds(display.workArea, OVERLAY_SIZE));
+}
+
+function sendToOverlay(command) {
+  if (overlayListening && alive(overlayWindow)) overlayWindow.webContents.send("soundwave:voice", command);
+  else pendingVoice.push(command);
+}
+
+function toggleVoiceBar() {
+  if (!alive(overlayWindow)) createOverlayWindow();
+  if (!alive(overlayWindow)) return;
+  if (!overlayWindow.isVisible()) {
+    positionOverlay();
+    overlayWindow.showInactive();
+  }
+  sendToOverlay("toggle");
+}
+
+function hideOverlay() {
+  if (alive(overlayWindow) && overlayWindow.isVisible()) overlayWindow.hide();
+  setTrayTooltip("idle");
+}
+
+/** The voice shortcut: the Command Center's own mic when it's in front, the voice bar otherwise. */
+function onVoiceShortcut() {
+  if (alive(mainWindow) && mainWindow.isVisible() && mainWindow.isFocused() && !mainWindow.isMinimized()) {
+    mainWindow.webContents.send("soundwave:voice", "toggle");
+    return;
+  }
+  toggleVoiceBar();
+}
+
+function applyHotkey() {
+  globalShortcut.unregisterAll();
+  hotkeyState = { registered: false, error: null };
+  if (!settings.hotkeyEnabled) return;
+  const label = hotkeyLabel(settings.hotkey);
+  try {
+    const ok = globalShortcut.register(settings.hotkey, onVoiceShortcut);
+    hotkeyState = ok
+      ? { registered: true, error: null }
+      : { registered: false, error: `${label} is already used by another app. Pick a different shortcut in Settings → Voice & Desktop.` };
+  } catch (err) {
+    hotkeyState = { registered: false, error: `${label} can't be used as a shortcut (${err.message}).` };
+  }
+}
+
+// ── Tray ─────────────────────────────────────────────────────────────────────
+
+function setTrayTooltip(state) {
+  if (!tray) return;
+  tray.setToolTip(state === "listening" ? "Soundwave AI — listening…" : state === "working" ? "Soundwave AI — thinking…" : "Soundwave AI");
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+  const shortcut = settings.hotkeyEnabled && hotkeyState.registered ? `  (${hotkeyLabel(settings.hotkey)})` : "";
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Open Soundwave AI", click: () => showMainWindow() },
+      { label: `Talk to Soundwave${shortcut}`, click: () => toggleVoiceBar() },
+      { label: "Generate a short", click: () => showMainWindow("/agent?tab=generator") },
+      { type: "separator" },
+      ...(supportsLoginItems()
+        ? [{ label: "Start with Windows", type: "checkbox", checked: settings.openAtLogin, click: (item) => updateSettings({ openAtLogin: item.checked }) }]
+        : []),
+      {
+        label: "Keep running in the tray when closed",
+        type: "checkbox",
+        checked: settings.closeToTray,
+        click: (item) => updateSettings({ closeToTray: item.checked }),
+      },
+      { label: "Voice & desktop settings…", click: () => showMainWindow("/settings/voice") },
+      { type: "separator" },
+      {
+        label: "Quit Soundwave AI",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+}
+
+function createTray() {
+  try {
+    const image = nativeImage.createFromPath(process.platform === "win32" ? ICON_ICO : ICON_PNG);
+    tray = new Tray(image.isEmpty() ? nativeImage.createFromPath(ICON_PNG) : image);
+  } catch (err) {
+    console.warn("[soundwave-desktop] no tray icon:", err.message);
+    tray = null;
+    return;
+  }
+  setTrayTooltip("idle");
+  tray.on("click", () => showMainWindow());
+  tray.on("double-click", () => showMainWindow());
+  refreshTrayMenu();
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+function notify({ title, body, route }) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body: body || "", icon: ICON_PNG, silent: false });
+  // Keep a reference until it's dismissed — otherwise the click handler can be
+  // garbage-collected on Windows.
+  liveNotifications.add(n);
+  const release = () => liveNotifications.delete(n);
+  n.on("click", () => {
+    release();
+    showMainWindow(route || undefined);
+  });
+  n.on("close", release);
+  n.on("failed", release);
+  n.show();
+  setTimeout(release, 10 * 60_000).unref?.();
+}
+
+// ── IPC from the app's pages (preload.cjs) ──────────────────────────────────
+
+function registerIpc() {
+  ipcMain.handle("soundwave:get-state", (event) => (trusted(event) ? publicState() : null));
+  ipcMain.handle("soundwave:update-settings", (event, patch) => (trusted(event) ? updateSettings(patch) : null));
+  ipcMain.handle("soundwave:is-app-focused", (event) => {
+    if (!trusted(event)) return false;
+    return alive(mainWindow) && mainWindow.isVisible() && mainWindow.isFocused() && !mainWindow.isMinimized();
+  });
+  ipcMain.on("soundwave:voice-listener", (event) => {
+    if (!trusted(event) || !alive(overlayWindow) || event.sender !== overlayWindow.webContents) return;
+    overlayListening = true;
+    const queued = pendingVoice;
+    pendingVoice = [];
+    for (const command of queued) overlayWindow.webContents.send("soundwave:voice", command);
+  });
+  ipcMain.on("soundwave:notify", (event, payload) => {
+    if (!trusted(event) || !settings.notifications) return;
+    const n = sanitizeNotification(payload);
+    if (n) notify(n);
+  });
+  ipcMain.on("soundwave:show-app", (event, route) => {
+    if (trusted(event)) showMainWindow(route);
+  });
+  ipcMain.on("soundwave:hide-overlay", (event) => {
+    if (trusted(event)) hideOverlay();
+  });
+  ipcMain.on("soundwave:voice-state", (event, state) => {
+    if (trusted(event) && (state === "idle" || state === "listening" || state === "working")) setTrayTooltip(state);
+  });
+  ipcMain.on("soundwave:open-mic-settings", (event) => {
+    if (!trusted(event)) return;
+    if (process.platform === "win32") shell.openExternal("ms-settings:privacy-microphone").catch(() => {});
+  });
+}
+
+/** Microphone (audio only), notifications etc. — for the app's own origin only. */
+function restrictPermissions() {
+  const ses = session.defaultSession;
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const url = (details && details.requestingUrl) || webContents.getURL();
+    if (!isAppUrl(url)) return callback(false);
+    if (permission === "media") {
+      const types = (details && details.mediaTypes) || [];
+      return callback(types.every((t) => t === "audio"));
+    }
+    callback(true);
+  });
+  ses.setPermissionCheckHandler((_webContents, _permission, requestingOrigin) => isAppUrl(requestingOrigin || ""));
+}
+
+// ── Startup ──────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Single instance — a second launch focuses the running window.
+  // Single instance — a second launch shows the running window.
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
   }
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  app.on("second-instance", () => showMainWindow());
+  if (process.platform === "win32") app.setAppUserModelId(APP_ID);
 
   const appRoot = path.join(__dirname, "..", "app");
-  const binDir = app.isPackaged
-    ? path.join(process.resourcesPath, "bin")
-    : path.join(__dirname, "..", "bin");
+  const binDir = app.isPackaged ? path.join(process.resourcesPath, "bin") : path.join(__dirname, "..", "bin");
   const userDataDir = app.getPath("userData");
+
+  settingsFile = path.join(userDataDir, "desktop-settings.json");
+  settings = loadSettings(settingsFile);
+  if (supportsLoginItems()) {
+    try {
+      settings = { ...settings, openAtLogin: app.getLoginItemSettings(loginItemOptions()).openAtLogin };
+    } catch {
+      /* keep the saved value */
+    }
+  }
 
   const { appUrl } = await applyServerEnv({ appRoot, binDir, userDataDir, autoUpdateYtDlp: true });
   serverUrl = appUrl;
+  appOrigin = new URL(appUrl).origin;
+  restrictPermissions();
+  registerIpc();
 
   // Import the bundled server (ESM) — this starts listening on loopback.
   await import(pathToFileURL(path.join(appRoot, "server", "dist", "index.js")).href);
   serverStarted = true;
 
-  const win = createWindow();
+  createTray();
+  applyHotkey();
+  refreshTrayMenu();
+
+  const win = createMainWindow();
   const healthy = await pollHealth(appUrl, 45_000);
   if (!healthy) {
     console.error("[soundwave-desktop] server health check timed out; loading anyway");
   }
   await win.loadURL(appUrl);
-  win.show();
+  if (!START_HIDDEN || !tray) win.show();
+
+  // Get the voice bar ready in the background so the first shortcut press is instant.
+  setTimeout(createOverlayWindow, 1500);
+
+  if (settings.hotkeyEnabled && !hotkeyState.registered && hotkeyState.error) {
+    notify({ title: "Voice shortcut unavailable", body: hotkeyState.error, route: "/settings/voice" });
+  }
 }
+
+// Debug/test handle for the main process (desktop/e2e.mjs drives it through
+// Playwright's electronApp.evaluate). Not reachable from web pages.
+globalThis.__soundwaveShell = {
+  voiceShortcut: () => onVoiceShortcut(),
+  toggleVoiceBar: () => toggleVoiceBar(),
+  state: () => ({
+    serverUrl,
+    tray: Boolean(tray),
+    hotkey: publicState(),
+    mainVisible: alive(mainWindow) && mainWindow.isVisible(),
+    overlayVisible: alive(overlayWindow) && overlayWindow.isVisible(),
+    overlayListening,
+  }),
+  mainWindow: () => mainWindow,
+  overlayWindow: () => overlayWindow,
+};
 
 app.whenReady().then(() =>
   main().catch((err) => {
@@ -147,6 +549,7 @@ app.whenReady().then(() =>
       `${err && err.message ? err.message : String(err)}\n\n` +
         "Try restarting the app. If it keeps happening, reinstalling the app usually fixes it.",
     );
+    isQuitting = true;
     app.quit();
   }),
 );
@@ -156,6 +559,15 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  isQuitting = true;
   // Server runs in-process — quitting the app stops the API with it.
   if (serverStarted) console.log("[soundwave-desktop] shutting down");
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
 });

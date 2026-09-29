@@ -1,4 +1,4 @@
-import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck } from "lucide-react";
+import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck, AudioLines } from "lucide-react";
 import { Link } from "react-router-dom";
 
 /** Soundwave AI — Complete Documentation & Architecture Guide */
@@ -35,6 +35,18 @@ export function Help() {
             <li><strong className="text-white">TikTok Subtitle Styling:</strong> Auto-synced word cues rendered in bold Montserrat 800 with high-contrast violet backgrounds (#8B5CF6) and dynamic center scaling.</li>
             <li><strong className="text-white">Fresh Orbital NCG Backgrounds:</strong> For every short the agent picks a video from youtube.com/@OrbitalNCG it has never used before, pastes its link into the YouTube link importer, and imports just the gameplay the short needs.</li>
             <li><strong className="text-white">Server-Side FFmpeg Engine:</strong> Professional H.264 rendering in 720p or 1080p 60fps vertical format (9:16), fit-to-voice audio duration, and seamless looping.</li>
+          </ul>
+        </Section>
+
+        {/* Talking to the agent */}
+        <Section icon={<AudioLines className="h-4 w-4" />} title="Talk to Soundwave (Voice Input)">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
+            <li><strong className="text-white">Tap the mic and talk:</strong> in the Command Center, tap the microphone (or the orb) and say what you'd type — "make a short about black holes". It sends by itself when you pause; tap again to send sooner. <strong className="text-white">Hold</strong> the mic instead for push-to-talk.</li>
+            <li><strong className="text-white">From any app (desktop):</strong> press <kbd className="rounded bg-gray-800 px-1.5 py-0.5 text-xs">Ctrl+Shift+Space</kbd> — a small voice bar appears above the taskbar, listens, and answers out loud. Your words and the reply also land in the Command Center's conversation.</li>
+            <li><strong className="text-white">Private by design:</strong> speech is recognized on your PC by whisper.cpp with a bundled English model — no account, no API key, and your voice is never uploaded. (Replies are still spoken with Microsoft's online Soundwave voices.)</li>
+            <li><strong className="text-white">Tray & notifications (desktop):</strong> closing the window keeps Soundwave in the system tray, so the shortcut keeps working and shorts keep rendering; a Windows notification tells you when a short is ready. Quit from the tray icon.</li>
+            <li><strong className="text-white">Options:</strong> <Link to="/settings/voice" className="text-cyan-300 hover:text-cyan-200">Settings → Voice &amp; Desktop</Link> — test the microphone, change the shortcut, start with Windows, sound cues, notifications.</li>
+            <li><strong className="text-white">Microphone blocked?</strong> On Windows: Settings → Privacy &amp; security → Microphone → turn on "Microphone access" and "Let desktop apps access your microphone".</li>
           </ul>
         </Section>
 
