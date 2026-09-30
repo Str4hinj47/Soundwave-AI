@@ -1,0 +1,179 @@
+// End-to-end test of the phone app on a real Android emulator (CI).
+// The PC side is the real Soundwave server running on the CI machine with the
+// phone companion on; the emulator reaches it at 10.0.2.2. Playwright attaches
+// to the app's WebView (debug build) and drives it like a person would.
+//
+//   COMPANION_APK=…/app-debug.apk  PC_URL=http://127.0.0.1:4000  node mobile/e2e/android-e2e.mjs
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { _android as android } from "playwright-core";
+
+const PKG = "ai.soundwave.companion";
+const PC = process.env.PC_URL || "http://127.0.0.1:4000";
+const APK = process.env.COMPANION_APK;
+const SHOTS = path.resolve(process.env.SHOTS_DIR || "mobile/e2e-shots");
+const ADB = process.env.ANDROID_HOME ? path.join(process.env.ANDROID_HOME, "platform-tools", "adb") : "adb";
+fs.mkdirSync(SHOTS, { recursive: true });
+
+const clean = (s) => String(s).replace(/\r?\n/g, " ").slice(0, 900);
+const annotate = (level, title, message) => console.log(`::${level} title=${title}::${clean(message)}`);
+const ok = (m) => {
+  console.log(`✓ ${m}`);
+  annotate("notice", "Phone app E2E", m);
+};
+let failed = false;
+const fail = (m) => {
+  failed = true;
+  console.log(`✗ ${m}`);
+  annotate("error", "Phone app E2E", m);
+};
+
+const adb = (...args) => execFileSync(ADB, args, { encoding: "utf8", timeout: 120_000 });
+const screenshot = (name) => {
+  try {
+    fs.writeFileSync(path.join(SHOTS, `${name}.png`), execFileSync(ADB, ["exec-out", "screencap", "-p"], { maxBuffer: 64 * 1024 * 1024 }));
+  } catch (e) {
+    console.log(`(screenshot ${name} failed: ${e.message})`);
+  }
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function pc(route, body, method = body === undefined ? "GET" : "POST") {
+  const res = await fetch(`${PC}${route}`, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${method} ${route} → ${res.status} ${JSON.stringify(json).slice(0, 200)}`);
+  return json;
+}
+
+async function attach(device) {
+  const webview = await device.webView({ pkg: PKG }, { timeout: 90_000 });
+  const page = await webview.page();
+  page.setDefaultTimeout(45_000);
+  return page;
+}
+
+const bodyHas = (page, re, timeout = 45_000) =>
+  page.waitForFunction((src) => new RegExp(src, "i").test(document.body.innerText), re.source, { timeout, polling: 300 });
+
+let device;
+try {
+  if (!APK || !fs.existsSync(APK)) throw new Error(`COMPANION_APK not found: ${APK}`);
+  console.log(adb("install", "-r", "-g", APK).trim());
+  const sdk = adb("shell", "getprop", "ro.build.version.sdk").trim();
+  const release = adb("shell", "getprop", "ro.build.version.release").trim();
+  ok(`installed on Android ${release} (API ${sdk})`);
+
+  // The PC: phone access on, a fresh pairing code.
+  await pc("/api/v1/companion/enabled", { enabled: true });
+  const status = await pc("/api/v1/companion/pairing", {});
+  const link = status.pairing.link;
+  if (!/[?&]h=[^&]*10\.0\.2\.2/.test(link)) throw new Error(`pairing link doesn't include the emulator's host address: ${link}`);
+  console.log(`pairing link: ${link.replace(/c=[^&]+/, "c=…")}`);
+
+  // Pair the way the system camera would: open the soundwave:// link.
+  adb("shell", `am start -W -a android.intent.action.VIEW -d '${link}' ${PKG}`);
+  [device] = await android.devices({ omitDriverInstall: true });
+  if (!device) throw new Error("no Android device visible to Playwright");
+  let page = await attach(device);
+  const ua = await page.evaluate(() => navigator.userAgent);
+  const webviewVersion = /Chrome\/([\d.]+)/.exec(ua)?.[1] ?? "unknown";
+  await page.waitForSelector('[data-testid="chat"]', { timeout: 90_000 });
+  await bodyHas(page, /Connected to/, 60_000);
+  const paired = (await pc("/api/v1/companion")).devices;
+  ok(`paired from the soundwave:// link and connected (WebView ${webviewVersion}); the PC lists it as "${paired[0]?.name}" (${paired[0]?.model ?? "?"})`);
+  await sleep(1500);
+  screenshot("1-paired");
+
+  // Secure context + encryption available in the WebView (https://localhost page → http://10.0.2.2).
+  const env = await page.evaluate(() => ({ secure: window.isSecureContext, subtle: Boolean(crypto.subtle), origin: location.origin }));
+  if (!env.secure || !env.subtle) fail(`WebView isn't a secure context (${JSON.stringify(env)})`);
+  else ok(`app page ${env.origin} is a secure context with Web Crypto`);
+
+  // Phone → agent.
+  await page.fill('[data-testid="composer-input"]', "hello from the Android emulator");
+  await page.click('[data-testid="send-button"]');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="msg-agent"]').length > 0, null, { timeout: 45_000 });
+  const reply = await page.$$eval('[data-testid="msg-agent"]', (els) => els.at(-1)?.innerText ?? "");
+  ok(`sent a message over the encrypted channel; the agent answered: "${reply.split("\n").find((l) => l.length > 20)?.slice(0, 90)}…"`);
+  const onPc = (await pc("/api/v1/companion/conversation")).messages.find((m) => m.text === "hello from the Android emulator");
+  if (onPc?.via === "phone") ok("the message is in the PC's conversation, marked as sent from the phone");
+  else fail("the phone's message isn't in the PC's conversation");
+
+  // PC → phone (the Command Center pushes a message; the phone's long-poll brings it).
+  const pushedAt = Date.now();
+  await pc("/api/v1/companion/conversation", { messages: [{ id: `${pushedAt}-ci-pc`, sender: "user", text: "Typed in the Command Center during CI", time: "", at: pushedAt }] });
+  await bodyHas(page, /Typed in the Command Center during CI/, 30_000);
+  ok(`a message typed on the PC reached the phone in ${Date.now() - pushedAt} ms (long-poll)`);
+  await sleep(800);
+  screenshot("2-conversation");
+
+  // The keyboard must not cover the message box.
+  const before = await page.evaluate(() => window.innerHeight);
+  await page.tap('[data-testid="composer-input"]').catch(async () => page.click('[data-testid="composer-input"]'));
+  await sleep(2500);
+  const ime = adb("shell", "dumpsys input_method").match(/mInputShown=(true|false)/)?.[1];
+  const layout = await page.evaluate(() => {
+    const r = document.querySelector('[data-testid="composer-input"]').getBoundingClientRect();
+    return { innerHeight: window.innerHeight, bottom: r.bottom, top: r.top };
+  });
+  if (ime === "true") {
+    screenshot("3-keyboard");
+    if (layout.innerHeight < before && layout.bottom <= layout.innerHeight && layout.top >= 0) {
+      ok(`keyboard open: the page shrank from ${before}px to ${layout.innerHeight}px and the message box stays visible`);
+    } else {
+      fail(`keyboard open but the message box is covered (page ${before}→${layout.innerHeight}px, box ${Math.round(layout.top)}–${Math.round(layout.bottom)}px)`);
+    }
+    adb("shell", "input keyevent 4"); // BACK closes the keyboard
+    await sleep(800);
+  } else {
+    annotate("notice", "Phone app E2E", `keyboard check skipped (the emulator didn't show a soft keyboard: mInputShown=${ime})`);
+  }
+
+  // Settings sheet.
+  await page.click('[data-testid="settings-button"]');
+  await bodyHas(page, /Read replies aloud/);
+  await sleep(900);
+  screenshot("4-settings");
+  adb("shell", "input keyevent 4"); // Android back closes the sheet
+  await page.waitForFunction(() => !/Read replies aloud/.test(document.body.innerText), null, { timeout: 10_000 });
+  ok("Android back button closes the settings sheet");
+
+  // The PC turns phone access off → the phone says so; back on → it reconnects.
+  await pc("/api/v1/companion/enabled", { enabled: false });
+  await page.waitForSelector('[data-testid="offline-banner"]', { timeout: 60_000 });
+  await sleep(600);
+  screenshot("5-offline");
+  ok('shows "Can\'t reach" when the PC stops listening');
+  await pc("/api/v1/companion/enabled", { enabled: true });
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Try now/.test(b.textContent ?? ""))?.click());
+  await bodyHas(page, /Connected to/, 60_000);
+  ok("reconnected when phone access came back on");
+
+  // Restart the app: still paired, conversation still there.
+  adb("shell", `am force-stop ${PKG}`);
+  await sleep(1000);
+  adb("shell", `monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`);
+  page = await attach(device);
+  await page.waitForSelector('[data-testid="chat"]', { timeout: 90_000 });
+  await bodyHas(page, /Typed in the Command Center during CI/, 30_000);
+  await bodyHas(page, /Connected to/, 60_000);
+  ok("after a restart the app is still paired and shows the conversation");
+  await sleep(1000);
+  screenshot("6-after-restart");
+} catch (err) {
+  fail(`stopped: ${err.message}`);
+  screenshot("zz-failure");
+} finally {
+  try {
+    fs.writeFileSync(path.join(SHOTS, "logcat.txt"), adb("logcat", "-d", "-t", "3000"));
+  } catch {
+    /* no device */
+  }
+  await device?.close().catch(() => undefined);
+}
+process.exit(failed ? 1 : 0);

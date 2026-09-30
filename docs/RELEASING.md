@@ -63,6 +63,23 @@ data.
   `ggml-base.en-q5_1.bin`) in `vendor/whisper/`, or set `WHISPER_CLI_PATH` /
   `WHISPER_MODEL_PATH`.
 
+## The phone companion (Android APK)
+
+The desktop app (1.2.0+) has **Settings → Phone**, which opens a separate,
+encrypted listener for the Soundwave phone app — off until the person turns it
+on (`COMPANION=1` is set by `desktop/src/server-env.cjs`; hosted/web builds
+never expose it). The smoke test and the packaged-app E2E turn it on, check it
+answers on its own port (and that the app's API isn't reachable there), and
+turn it off again.
+
+The phone app itself is built by `.github/workflows/android-companion.yml`
+(artifact `soundwave-companion-apk`) and tested on an Android 15 emulator
+against the real server. Signing: add the repository secrets
+`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` (/ `ANDROID_KEY_ALIAS`)
+for a permanent key so updates install over each other; without them every
+build is signed with a one-off key. Details and the keytool command:
+[mobile/README.md](../mobile/README.md).
+
 ## YouTube import (yt-dlp) in the desktop app
 
 YouTube changes regularly break older yt-dlp builds (e.g. "The page needs to

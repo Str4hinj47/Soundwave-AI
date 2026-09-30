@@ -17,6 +17,13 @@ bundled English model — no account, no API key, nothing uploaded. The desktop
 app lives in the tray (closing the window keeps it running), can start with
 Windows, and sends a Windows notification when a short is ready.
 
+**From your phone.** The **Soundwave** Android app is a remote for the agent
+on your PC: type or talk, start shorts, watch them when they're done — the
+same conversation as the Command Center. It talks straight to the PC over
+your Wi-Fi, end-to-end encrypted, and works while Soundwave AI runs there
+(the tray counts). Pair it once by scanning the QR code in **Settings →
+Phone**.
+
 ---
 
 ## Get the app (Windows)
@@ -42,6 +49,24 @@ lives in `%APPDATA%\Soundwave AI\bin\` and updates itself to the latest
 nightly build each time the app starts (just restart the app if an import
 fails with a YouTube-side error), and it uses the app itself as the
 JavaScript runtime yt-dlp needs — no Node or Deno install required.
+
+## Get the phone app (Android)
+
+CI builds **`SoundwaveCompanion-*.apk`** (the `soundwave-companion-apk`
+artifact of the *Android Companion* workflow) and tests it on an Android 15
+emulator against the real PC server. To use it:
+
+1. Install the desktop app **1.2.0 or newer** on your PC.
+2. On the phone, open the APK and allow installing from that source
+   (Android asks once). Android 7.0+.
+3. On the PC: **Settings → Phone → Let my phone connect** (Windows may ask to
+   allow Soundwave AI on private networks — allow it).
+4. In the app: **Scan QR code**. Done — the phone remembers the PC.
+
+It only works while Soundwave AI is running on the PC, and the phone must be
+on the same network (or on a VPN such as Tailscale with the PC — the pairing
+code includes VPN addresses). See [mobile/README.md](mobile/README.md) for how
+it works and how to build it.
 
 ---
 
@@ -200,6 +225,7 @@ cd frontend && npm run build     # production build
 | GET | `/api/v1/agent/speak/stream` | — | the agent's reply as streamed MP3 in a Soundwave voice (`?text=&voice=`) |
 | POST | `/api/v1/agent/speak` | — | same, as base64 JSON (used by the Python desktop runner) |
 | GET | `/api/v1/agent/speak/status` | — | why the last reply couldn't be spoken (if it couldn't) |
+| GET/POST | `/api/v1/companion…` | local app only | Settings → Phone (status, on/off, pairing code, paired phones) and the conversation shared with the phone (`/conversation`, `/conversation/clear`) — desktop app only (`COMPANION=1`) |
 | POST | `/api/v1/agent/transcribe` | — | voice input: body = the recording (16 kHz mono WAV; other formats via ffmpeg) → `{ text, noSpeech, durationMs, elapsedMs, model }`, transcribed locally by whisper.cpp |
 | GET | `/api/v1/agent/transcribe/status` | — | whether voice input is available here (and why not) |
 | GET | `/api/v1/agent/niches` | — | 7 viral niches with hooks & sample scripts |
@@ -244,6 +270,16 @@ State-changing requests require the `X-CSRF-Token` header matching the
   shown in full only once.
 - **TTS**: text is sent server-side to Microsoft's Edge TTS service for
   synthesis only and is never persisted; quota is enforced before synthesis.
+- **Phone companion** (desktop app only): off until the person turns it on in
+  Settings → Phone. It then opens a separate listener on the local network
+  that answers only `hello`, `pair` and encrypted requests — the app's own API
+  stays on 127.0.0.1. Pairing uses a one-time 12-character code (QR) from
+  which both sides derive a key with PBKDF2-SHA256 (the code never crosses the
+  network); the PC then gives the phone its own random 256-bit key. Every
+  request/answer is AES-256-GCM with per-direction HKDF keys, timestamped and
+  nonce-checked (no replays), and each answer is bound to its request. Phones
+  can be removed on the PC at any time. The Settings API refuses other sites
+  (Origin) and DNS rebinding (Host). Details: [mobile/README.md](mobile/README.md).
 
 ## Quotas & plans
 

@@ -24,6 +24,7 @@ import {
   Youtube, 
   ExternalLink, 
   Loader2,
+  Smartphone,
 } from "lucide-react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
@@ -33,12 +34,14 @@ import type { OrbState } from "thinking-orbs";
 import { AGENT_VOICES, agentVoiceLabel, displayNameFor, isSoundwaveVoice, loadAgentVoice, saveAgentVoice } from "../lib/voices";
 import {
   CHAT_STORAGE_KEY,
+  CHAT_SYNCED_EVENT,
   chatTime,
   completionMessage,
   describeSection,
   failureMessage,
   historyForRequest,
   loadChatHistory,
+  mergeChat,
   newMessageId,
   openJobs,
   parseChatHistory,
@@ -56,6 +59,7 @@ import { VOICE_PREFS_EVENT, VoiceInputError, fetchVoiceInputStatus, isVoicePrefK
 import { DEFAULT_HOTKEY, getDesktop, hotkeyLabel } from "../lib/desktop";
 import { JOB_STARTED_EVENT, VOICE_COMMAND_EVENT } from "../components/agent/BackgroundServices";
 import { notifyJobOutcome } from "../lib/notify";
+import { clearSharedConversation, type ChatSyncedDetail } from "../lib/conversationSync";
 
 export type { ShortBackground };
 
@@ -517,6 +521,7 @@ export function AgentHub() {
       sender: "user",
       text: query,
       time: chatTime(),
+      at: Date.now(),
       ...(opts.viaVoice ? { viaVoice: true } : {}),
     };
     const history = historyForRequest(chatMessagesRef.current);
@@ -670,6 +675,32 @@ export function AgentHub() {
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The phone companion added to the conversation (lib/conversationSync put it
+  // in storage): merge — never replace, so a message this window is adding
+  // right now can't be lost — and follow any short the phone started.
+  useEffect(() => {
+    const onSynced = (e: Event) => {
+      const stored = loadChatHistory();
+      if (!stored) return;
+      if ((e as CustomEvent<ChatSyncedDetail>).detail?.replaced) {
+        setChatMessages(stored); // a new conversation ("Clear")
+        return;
+      }
+      setChatMessages((prev) => {
+        const next = mergeChat(prev, stored);
+        return next.length === prev.length && next.every((m, i) => m === prev[i]) ? prev : next;
+      });
+      if (!activeJobIdRef.current) {
+        const open = openJobs(mergeChat(chatMessagesRef.current, stored));
+        const latest = open[open.length - 1];
+        if (latest) void trackShortJob(latest.jobId, latest.topic);
+      }
+    };
+    window.addEventListener(CHAT_SYNCED_EVENT, onSynced);
+    return () => window.removeEventListener(CHAT_SYNCED_EVENT, onSynced);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1644,15 +1675,17 @@ export function AgentHub() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setChatMessages([
-                    {
-                      id: "init",
-                      sender: "assistant",
-                      text: "Conversation cleared. Ready for your next command.",
-                      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
-                      tag: "SYS",
-                    },
-                  ]);
+                  const cleared: ChatMessage = {
+                    id: newMessageId(),
+                    sender: "assistant",
+                    text: "Conversation cleared. Ready for your next command.",
+                    time: chatTime(),
+                    at: Date.now(),
+                    tag: "SYS",
+                  };
+                  setChatMessages([cleared]);
+                  // The phone shows the same conversation: start over there too.
+                  void clearSharedConversation([cleared]);
                   toast.info("Log Cleared", "Message buffer reset.");
                 }}
                 className="flex items-center gap-1 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-1 text-[11px] text-gray-400 hover:text-cyan-400 transition-colors"
@@ -1764,8 +1797,15 @@ export function AgentHub() {
 
                 <div className="flex items-center justify-between text-[10px] text-gray-500 mt-2 pt-1 border-t border-white/[0.04]">
                   <span className="flex items-center gap-1 uppercase text-[9px] font-bold tracking-wider text-cyan-400">
+                    {msg.via === "phone" && <Smartphone className="h-2.5 w-2.5" aria-label="From your phone" />}
                     {msg.viaVoice && <Mic className="h-2.5 w-2.5" aria-label="Spoken" />}
-                    {msg.viaVoice ? "YOU (VOICE)" : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
+                    {msg.via === "phone"
+                      ? msg.viaVoice
+                        ? "YOU (PHONE, VOICE)"
+                        : "YOU (PHONE)"
+                      : msg.viaVoice
+                        ? "YOU (VOICE)"
+                        : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {msg.sender === "assistant" && (

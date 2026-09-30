@@ -1,8 +1,11 @@
-// ── The agent conversation, shared by every window ──────────────────────────
+// ── The agent conversation, shared by every window (and the phone) ──────────
 // The Command Center and the desktop voice bar (/overlay) talk to the same
 // /api/v1/agent/chat and keep ONE conversation in localStorage: the voice bar
 // appends its turns there, and an open Command Center picks them up through
-// the browser's `storage` event.
+// the browser's `storage` event. In the desktop app the conversation is also
+// synced with the PC's copy (lib/conversationSync), which the phone companion
+// reads and writes — so it's one conversation on the PC and the phone.
+// The server builds the same messages: server/src/lib/chatMessages.ts.
 
 /** Where a rendered short's background came from (server: ShortBackgroundInfo). */
 export interface ShortBackground {
@@ -35,10 +38,18 @@ export interface ChatMessage {
   topic?: string;
   /** The person said this (voice input) rather than typed it. */
   viaVoice?: boolean;
+  /** When it was said (ms since epoch) — orders the conversation across windows and the phone. */
+  at?: number;
+  /** Sent from the phone companion. */
+  via?: "phone";
 }
 
 export const CHAT_STORAGE_KEY = "soundwave_agent_chat_history";
 export const CHAT_HISTORY_LIMIT = 60;
+/** Window event: this window saved the conversation (the phone sync pushes it). */
+export const CHAT_SAVED_EVENT = "soundwave:chat-saved";
+/** Window event: the phone sync brought new messages into storage (the Command Center merges them). */
+export const CHAT_SYNCED_EVENT = "soundwave:chat-synced";
 
 export function chatTime(date = new Date()): string {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -70,9 +81,38 @@ export function loadChatHistory(): ChatMessage[] | null {
 export function saveChatHistory(messages: ChatMessage[]): void {
   try {
     localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages.slice(-CHAT_HISTORY_LIMIT)));
+    window.dispatchEvent(new CustomEvent(CHAT_SAVED_EVENT));
   } catch {
     /* storage full / unavailable */
   }
+}
+
+/**
+ * Where a message sits in the conversation: its `at`, else the timestamp its
+ * id starts with (`${Date.now()}-…`), else 0 (the greeting "init").
+ */
+export function messageOrder(m: Pick<ChatMessage, "id" | "at">): number {
+  if (typeof m.at === "number" && Number.isFinite(m.at)) return m.at;
+  const lead = /^(\d{12,14})(?:\D|$)/.exec(m.id);
+  return lead ? Number(lead[1]) : 0;
+}
+
+/**
+ * Union of two conversations by message id (a message already in `base`
+ * wins), in time order, newest `limit` kept. Idempotent — every window and
+ * the phone merge whatever they receive.
+ */
+export function mergeChat(base: ChatMessage[], incoming: ChatMessage[], limit = CHAT_HISTORY_LIMIT): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>();
+  for (const m of base) if (!byId.has(m.id)) byId.set(m.id, m);
+  for (const m of incoming) if (!byId.has(m.id)) byId.set(m.id, m);
+  const merged = [...byId.values()].sort((a, b) => messageOrder(a) - messageOrder(b));
+  return merged.length > limit ? merged.slice(merged.length - limit) : merged;
+}
+
+/** Same messages in the same order? (Cheap change check for syncing.) */
+export function sameConversation(a: ChatMessage[], b: ChatMessage[]): boolean {
+  return a.length === b.length && a.every((m, i) => m.id === b[i]?.id);
 }
 
 /** Append to the stored conversation (used by windows that don't render it). */
@@ -135,6 +175,7 @@ export function replyToMessage(data: ChatReply, query: string): ChatMessage {
     videoUrl: videoLink,
     downloadUrl: videoLink,
     time: chatTime(),
+    at: Date.now(),
     tag: data.tag || (data.action === "ghost_macro" ? "RPA" : "VOICE"),
     ...(started ? { jobId: data.jobId, jobState: "started" as const, topic: data.topic || query } : {}),
   };
@@ -164,6 +205,11 @@ export function describeSection(section: { start: number; end: number } | null |
   return section ? `${formatClock(section.start)}–${formatClock(section.end)}` : "full video";
 }
 
+/** Fixed ids: whoever posts a job's outcome first (this window, another, or the PC server), it appears once. */
+export function jobOutcomeId(jobId: string, state: "done" | "failed"): string {
+  return `job-${jobId}-${state}`;
+}
+
 /** The "your short is ready" message (with player + download) for a finished job. */
 export function completionMessage(
   jobId: string,
@@ -175,13 +221,14 @@ export function completionMessage(
     ? `\nBackground: "${background.title}" (${describeSection(background.section)}) — Orbital NCG video imported via the YouTube link importer: ${background.url}`
     : "";
   return {
-    id: newMessageId(),
+    id: jobOutcomeId(jobId, "done"),
     sender: "assistant",
     text:
       (youtubeUrl
         ? `Rendered viral short for "${topic}" and automatically published it to YouTube Shorts: ${youtubeUrl}`
         : `Rendered viral short for "${topic}". Your video is ready to preview, download, or post to YouTube!`) + backgroundLine,
     time: chatTime(),
+    at: Date.now(),
     tag: "AUDIO",
     videoUrl,
     downloadUrl: videoUrl,
@@ -195,10 +242,11 @@ export function completionMessage(
 
 export function failureMessage(jobId: string, topic: string, error: string): ChatMessage {
   return {
-    id: newMessageId(),
+    id: jobOutcomeId(jobId, "failed"),
     sender: "assistant",
     text: `I couldn't finish the short about "${topic}": ${error}`,
     time: chatTime(),
+    at: Date.now(),
     tag: "SYS",
     jobId,
     jobState: "failed",

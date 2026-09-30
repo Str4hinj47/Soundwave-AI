@@ -12,6 +12,7 @@ import {
   Palette,
   ShieldCheck,
   SlidersHorizontal,
+  Smartphone,
   Trash2,
   TriangleAlert,
   User,
@@ -41,12 +42,14 @@ import {
 } from "../lib/voiceInput";
 import { getDesktop, hotkeyLabel, type DesktopSettings, type DesktopState } from "../lib/desktop";
 import { notifyUser } from "../lib/notify";
+import { PhoneTab } from "./settings/PhoneTab";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "preferences", label: "Preferences", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "voice", label: "Voice & Desktop", icon: <Mic className="h-4 w-4" /> },
+  { id: "phone", label: "Phone", icon: <Smartphone className="h-4 w-4" /> },
 ];
 
 export function Settings() {
@@ -59,7 +62,9 @@ export function Settings() {
       ? "preferences"
       : location.pathname.includes("/voice")
         ? "voice"
-        : "profile";
+        : location.pathname.includes("/phone")
+          ? "phone"
+          : "profile";
 
   useEffect(() => {
     void refreshQuota();
@@ -93,6 +98,7 @@ export function Settings() {
         {active === "billing" && <BillingTab />}
         {active === "preferences" && <PreferencesTab />}
         {active === "voice" && <VoiceDesktopTab />}
+        {active === "phone" && <PhoneTab />}
       </div>
     </div>
   );

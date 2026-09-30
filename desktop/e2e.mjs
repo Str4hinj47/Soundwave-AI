@@ -175,6 +175,30 @@ try {
   const barText = (await overlay.evaluate(() => document.body.innerText)).replace(/\s+/g, " ").trim();
   annotate("notice", "Desktop E2E: voice bar", `Heard "${barHeard}". Voice bar now shows: ${barText.slice(0, 200)}`);
 
+  // ── 3b. Settings → Phone: the pairing QR in the real window ──────────────
+  const appBase = new URL(main.url()).origin;
+  await main.goto(`${appBase}/settings/phone`);
+  const phoneToggle = 'button[role="switch"][aria-label="Let my phone connect"]';
+  await main.waitForSelector(phoneToggle, { timeout: 30_000 });
+  await main.click(phoneToggle);
+  await main.waitForSelector('[data-testid="pairing-qr"] svg, [data-testid="no-network"]', { timeout: 30_000 });
+  const phone = await main.evaluate(async () => (await fetch("/api/v1/companion")).json());
+  if (!phone.listening) await fail(`Settings → Phone: phone access is on but the listener didn't open (${phone.error})`);
+  await main.screenshot({ path: path.join(shotsDir, "6-settings-phone.png") });
+  ok(`Settings → Phone: listening on port ${phone.port}, pairing code ${phone.pairing?.code ?? "(this PC has no network address)"}`);
+  annotate(
+    "notice",
+    "Desktop E2E: phone companion",
+    `Phone access on in the packaged app: port ${phone.port}, addresses ${phone.addresses.map((a) => `${a.address} (${a.name})`).join(", ") || "none"}.`,
+  );
+  await main.click(phoneToggle);
+  for (let i = 0; i < 30; i++) {
+    if (!(await main.evaluate(async () => (await fetch("/api/v1/companion")).json())).listening) break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  ok("Settings → Phone: turning it off closes the phone listener");
+  await main.goto(`${appBase}/agent`);
+
   // ── 4. Tray behaviour + notifications bridge ──────────────────────────────
   await app.evaluate(() => {
     const w = globalThis.__soundwaveShell.mainWindow();

@@ -170,6 +170,27 @@ try {
     console.log(`[smoke] – no bundled speech engine in ${path.dirname(whisperCli)}; skipping the voice input checks`);
   }
 
+  // Phone companion (Settings → Phone): off until turned on; then a separate
+  // listener answers the paired phone — and nothing else of the app's API.
+  const json = (value) => Buffer.from(JSON.stringify(value));
+  const comp = JSON.parse((await get(`${appUrl}/api/v1/companion`)).body);
+  assert(comp.available === true && comp.enabled === false && comp.listening === false, "phone companion is available and off by default");
+  const on = await post(`${appUrl}/api/v1/companion/enabled`, json({ enabled: true }), "application/json", 20_000);
+  assert(on.status === 200 && on.body.listening === true && on.body.port > 0, `phone access on: listening on port ${on.body.port}`);
+  const hello = await get(`http://127.0.0.1:${on.body.port}/companion/v1/hello`);
+  const helloBody = JSON.parse(hello.body);
+  assert(hello.status === 200 && helloBody.app === "soundwave" && helloBody.pcId === comp.pcId, `the phone listener answers (PC "${helloBody.pcName}")`);
+  const code = await post(`${appUrl}/api/v1/companion/pairing`, json({}), "application/json", 20_000);
+  assert(code.status === 200 && /^soundwave:\/\/pair\?/.test(code.body.pairing?.link ?? ""), `a pairing code is shown (${code.body.pairing?.code})`);
+  assert((await get(`http://127.0.0.1:${on.body.port}/api/v1/companion`)).status === 404, "the app's own API isn't reachable on the phone listener");
+  const off = await post(`${appUrl}/api/v1/companion/enabled`, json({ enabled: false }), "application/json", 20_000);
+  assert(off.status === 200 && off.body.listening === false, "phone access off: the listener closed");
+  annotate(
+    "notice",
+    "Phone companion",
+    `Listener opened on port ${on.body.port} and closed again. Addresses in the pairing code: ${(code.body.addresses ?? []).map((a) => `${a.address} (${a.name})`).join(", ") || "none"}.`,
+  );
+
   console.log("[smoke] PASS — assembled app boots and serves the Command Center.");
   process.exit(0);
 } catch (err) {

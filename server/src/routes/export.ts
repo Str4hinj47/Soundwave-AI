@@ -21,6 +21,20 @@ export function emitJob(jobId: string, payload: Record<string, unknown>): void {
 
 export { jobEvents };
 
+/** The rendered file of a finished job (also served to the phone companion), or null if it's gone. */
+export function resolveJobVideoFile(job: { id: string; settings?: unknown }): { path: string; ext: ".mp4" | ".webm" } | null {
+  const ext = (job.settings as { format?: string } | null | undefined)?.format === "webm" ? ".webm" : ".mp4";
+  const candidates: Array<[string, ".mp4" | ".webm"]> = [
+    [path.join(config.uploadsDir, "jobs", `${job.id}${ext}`), ext],
+    [path.join(config.uploadsDir, `soundwave_short_${job.id}${ext}`), ext],
+    [path.join(config.uploadsDir, `${job.id}${ext}`), ext],
+    [path.join(config.uploadsDir, "jobs", `${job.id}.mp4`), ".mp4"],
+    [path.join(config.uploadsDir, `soundwave_short_${job.id}.mp4`), ".mp4"],
+  ];
+  const hit = candidates.find(([f]) => fs.existsSync(f));
+  return hit ? { path: hit[0], ext: hit[1] } : null;
+}
+
 function isLocalAutomationUser(uid?: string | null): boolean {
   if (!uid) return false;
   return uid === "agent-local" || uid === "soundwave-local" || uid === "soundwave-agent" || uid === "jarvis-local";
@@ -144,16 +158,9 @@ router.get("/jobs/:jobId/download", optionalAuth, async (req, res, next) => {
     if (job.status !== "COMPLETED" || !job.outputUrl) {
       throw new ApiError(400, "NOT_READY", "This export is not ready for download yet.");
     }
-    const ext = (job.settings as { format?: string })?.format === "webm" ? ".webm" : ".mp4";
-    const candidates = [
-      path.join(config.uploadsDir, "jobs", `${job.id}${ext}`),
-      path.join(config.uploadsDir, `soundwave_short_${job.id}${ext}`),
-      path.join(config.uploadsDir, `${job.id}${ext}`),
-      path.join(config.uploadsDir, "jobs", `${job.id}.mp4`),
-      path.join(config.uploadsDir, `soundwave_short_${job.id}.mp4`),
-    ];
-    const p = candidates.find((f) => fs.existsSync(f));
-    if (!p) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+    const file = resolveJobVideoFile(job);
+    if (!file) throw new ApiError(404, "NOT_FOUND", "Export file expired. Please export again.");
+    const { path: p, ext } = file;
 
     const isDownload = req.query.download === "1" || req.query.dl === "1";
     if (isDownload) {

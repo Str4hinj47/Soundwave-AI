@@ -4,6 +4,8 @@ import { createApp } from "./app.js";
 import { getStore } from "./lib/store.js";
 import { startYtDlpSelfUpdate } from "./lib/ytdlp.js";
 import { ytDlpJsRuntime } from "./lib/jsRuntime.js";
+import { initConversation } from "./lib/conversation.js";
+import { initCompanion } from "./lib/companion/listener.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[soundwave] Handled asynchronous rejection:", reason);
@@ -41,6 +43,14 @@ async function main() {
   app.listen(config.port, config.bindHost, () => {
     console.log(`[soundwave] API listening on http://${config.bindHost}:${config.port} (${config.env})`);
   });
+
+  // The shared agent conversation: report shorts that finished (or died with
+  // the last session) while nobody was watching. Then the phone companion's
+  // LAN listener, if the person left "Let my phone connect" on.
+  initConversation();
+  if (config.companionAvailable) {
+    initCompanion().catch((err) => console.warn("[companion] could not start:", (err as Error).message));
+  }
 }
 
 main().catch((err) => {

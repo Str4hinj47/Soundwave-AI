@@ -73,6 +73,19 @@ export const config = {
   // Absolute path to a built frontend (frontend/dist). Packaged/desktop builds
   // set this so Express serves the SPA from one origin — no Vite, no second port.
   webDist: str("WEB_DIST", ""),
+  // Phone companion (lib/companion): the desktop app sets COMPANION=1. Only
+  // then can Settings → Phone open the LAN listener the paired phone app
+  // talks to (and only while the person has it turned on). Hosted/web
+  // deployments never expose it.
+  companionAvailable: env.COMPANION === "1",
+  companionPort: int("COMPANION_PORT", 47800),
+  // Extra addresses to put in the pairing code, comma-separated: a DNS/VPN
+  // name for this PC, or a full https:// origin that forwards to the phone
+  // listener. Detected network addresses are always included.
+  companionHosts: (env.COMPANION_HOSTS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)

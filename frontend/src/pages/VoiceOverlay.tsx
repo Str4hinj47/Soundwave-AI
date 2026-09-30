@@ -93,7 +93,7 @@ export function VoiceOverlay() {
       setStageNow("thinking");
       desktop?.setVoiceState("working");
       const earlier = loadChatHistory() ?? [];
-      const said: ChatMessage = { id: newMessageId(), sender: "user", text, time: chatTime(), viaVoice: true };
+      const said: ChatMessage = { id: newMessageId(), sender: "user", text, time: chatTime(), at: Date.now(), viaVoice: true };
       appendToChatHistory(said);
       try {
         const data = await sendChat({ message: text, history: historyForRequest(earlier), voice: loadAgentVoice(), resolution: "720p" });

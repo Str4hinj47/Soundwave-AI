@@ -372,6 +372,7 @@ function refreshTrayMenu() {
         click: (item) => updateSettings({ closeToTray: item.checked }),
       },
       { label: "Voice & desktop settings…", click: () => showMainWindow("/settings/voice") },
+      { label: "Connect your phone…", click: () => showMainWindow("/settings/phone") },
       { type: "separator" },
       {
         label: "Quit Soundwave AI",

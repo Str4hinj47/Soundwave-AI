@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getDesktop } from "../../lib/desktop";
 import { notifyJobOutcome } from "../../lib/notify";
 import { CHAT_STORAGE_KEY } from "../../lib/agentChat";
+import { startConversationSync } from "../../lib/conversationSync";
 
 /** Window event: a component started a short job (the notifier checks sooner). */
 export const JOB_STARTED_EVENT = "soundwave:job-started";
@@ -108,6 +109,15 @@ function DesktopBridge() {
   return null;
 }
 
+/**
+ * Desktop app: the conversation is shared with the phone companion — push
+ * what's said here, bring in what's said on the phone (lib/conversationSync).
+ */
+function ConversationSync() {
+  useEffect(() => startConversationSync(), []);
+  return null;
+}
+
 /** App-wide helpers for the main window (not the voice bar overlay). */
 export function BackgroundServices() {
   const { pathname } = useLocation();
@@ -116,6 +126,7 @@ export function BackgroundServices() {
     <>
       <JobNotifier />
       <DesktopBridge />
+      <ConversationSync />
     </>
   );
 }

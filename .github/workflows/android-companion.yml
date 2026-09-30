@@ -1,0 +1,222 @@
+name: Android Companion
+
+# Builds the Soundwave phone app (mobile/) into an APK, then runs it on an
+# Android emulator against the real PC server (the phone companion on) and
+# drives it end to end. The APK is uploaded as the `soundwave-companion-apk`
+# artifact (a test build — nothing is published).
+#
+# Signing: with the repository secrets ANDROID_KEYSTORE_BASE64 (+ _PASSWORD,
+# optional ANDROID_KEY_ALIAS) every build is signed with that permanent key,
+# so new versions install over old ones. Without them each build gets a
+# one-off key: uninstall the previous test build before installing a new one.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "mobile/**"
+      - "frontend/src/lib/agentChat.ts"
+      - "frontend/src/lib/voiceInput.ts"
+      - "frontend/src/lib/voices.ts"
+      - "frontend/src/lib/desktop.ts"
+      - "frontend/src/lib/types.ts"
+      - "frontend/public/audio/**"
+      - "server/src/lib/companion/**"
+      - "server/src/lib/conversation.ts"
+      - "server/src/lib/chatMessages.ts"
+      - "server/src/routes/companion.ts"
+      - "server/src/routes/agent.ts"
+      - ".github/workflows/android-companion.yml"
+    tags: ["companion-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-companion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install the phone app's dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck and unit-test the phone app
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build the app page and copy it into the Android project
+        working-directory: mobile
+        run: |
+          npx vite build
+          npx cap sync android
+
+      - name: Signing key
+        id: sign
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          ks="$RUNNER_TEMP/soundwave-release.p12"
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
+            pw="$KEYSTORE_PASSWORD"
+            alias="${KEY_ALIAS:-soundwave}"
+            echo "::notice title=APK signing::Signed with the permanent key from the repository secrets — installs over earlier builds."
+          else
+            pw="$(openssl rand -hex 24)"
+            alias="soundwave"
+            keytool -genkeypair -keystore "$ks" -storetype PKCS12 -alias "$alias" -keyalg RSA -keysize 3072 -validity 36500 \
+              -storepass "$pw" -keypass "$pw" -dname "CN=Soundwave AI phone companion (test build)" >/dev/null
+            echo "::notice title=APK signing::One-off key for this build (no ANDROID_KEYSTORE_BASE64 secret) — uninstall an older test build before installing this one."
+          fi
+          echo "::add-mask::$pw"
+          {
+            echo "SW_KEYSTORE=$ks"
+            echo "SW_KEYSTORE_PASSWORD=$pw"
+            echo "SW_KEY_ALIAS=$alias"
+            echo "SW_KEY_PASSWORD=$pw"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the APKs (release to install, debug for the emulator test)
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon --stacktrace assembleRelease assembleDebug
+
+      - name: Check the APK (signature, package, permissions)
+        id: meta
+        run: |
+          set -euo pipefail
+          apk=mobile/android/app/build/outputs/apk/release/app-release.apk
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$bt/apksigner" verify --verbose --print-certs "$apk" | tee "$RUNNER_TEMP/apksigner.txt"
+          "$bt/aapt2" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          head -3 "$RUNNER_TEMP/badging.txt"
+          grep -E "uses-permission|sdkVersion|targetSdkVersion" "$RUNNER_TEMP/badging.txt" || true
+          version="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | head -1)"
+          pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
+          min="$(sed -n "s/^sdkVersion:'\([0-9]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
+          target="$(sed -n "s/^targetSdkVersion:'\([0-9]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
+          perms="$(sed -n "s/^uses-permission: name='android.permission.\([A-Z_]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | tr '\n' ' ')"
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" "$RUNNER_TEMP/apksigner.txt"
+          [ "$pkg" = "ai.soundwave.companion" ]
+          mkdir -p dist
+          cp "$apk" "dist/SoundwaveCompanion-$version.apk"
+          size="$(du -h "dist/SoundwaveCompanion-$version.apk" | cut -f1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Soundwave phone app::SoundwaveCompanion-$version.apk ($size) — $pkg, Android ${min}+ (target API $target), permissions: $perms"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundwave-companion-apk
+          path: dist/SoundwaveCompanion-*.apk
+          if-no-files-found: error
+
+      - name: Upload the debug APK (for the emulator test)
+        uses: actions/upload-artifact@v4
+        with:
+          name: companion-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+
+  emulator-e2e:
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-debug-apk
+          path: ${{ runner.temp }}/apk
+
+      - name: Enable KVM (hardware-accelerated emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start the PC side (Soundwave server with the phone companion on)
+        working-directory: server
+        env:
+          NODE_ENV: production
+          COMPANION: "1"
+          # The emulator reaches this machine at 10.0.2.2 — put it in the pairing code.
+          COMPANION_HOSTS: 10.0.2.2
+          BIND_HOST: 0.0.0.0
+          PORT: "4000"
+          DATA_DIR: ${{ runner.temp }}/swdata
+          UPLOADS_DIR: ${{ runner.temp }}/swdata/uploads
+          JWT_ACCESS_SECRET: ci-access-secret-for-the-phone-e2e
+          JWT_REFRESH_SECRET: ci-refresh-secret-for-the-phone-e2e
+        run: |
+          npm ci
+          npm run build
+          nohup node dist/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:4000/api/health >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:4000/api/v1/companion | head -c 300; echo
+
+      - name: Install the test driver (Playwright for Android)
+        run: npm install --no-save --no-package-lock --prefix mobile/e2e playwright-core@1.63.0
+
+      - name: Run the phone app on an Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          COMPANION_APK: ${{ runner.temp }}/apk/app-debug.apk
+          PC_URL: http://127.0.0.1:4000
+          SHOTS_DIR: mobile/e2e-shots
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: node mobile/e2e/android-e2e.mjs
+
+      - name: PC server log
+        if: always()
+        run: tail -n 80 "$RUNNER_TEMP/server.log" || true
+
+      - name: Upload emulator screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: companion-e2e-screenshots
+          path: mobile/e2e-shots
+          if-no-files-found: ignore

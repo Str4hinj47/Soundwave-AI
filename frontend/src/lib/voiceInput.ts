@@ -105,6 +105,8 @@ function microphoneError(err: unknown): VoiceInputError {
 export type StopReason = "manual" | "silence" | "max" | "no-speech";
 
 export interface RecorderOptions {
+  /** Where the recorder worklet is served (the phone app bundles its own copy). */
+  workletUrl?: string;
   /** Stop by itself once the speaker goes quiet (tap-to-talk). Push-to-talk passes false. */
   autoStop?: boolean;
   /** Quiet time after speech that ends a tap-to-talk command. */
@@ -246,7 +248,7 @@ export async function startRecording(opts: RecorderOptions = {}): Promise<Record
   let node: AudioNode;
   if (debug) console.debug(`[voice] microphone open (${rate} Hz, context ${ctx.state})`);
   try {
-    await ctx.audioWorklet.addModule(WORKLET_URL);
+    await ctx.audioWorklet.addModule(opts.workletUrl ?? WORKLET_URL);
     const worklet = new AudioWorkletNode(ctx, "soundwave-recorder", {
       numberOfInputs: 1,
       numberOfOutputs: 1,

@@ -86,6 +86,8 @@ function prepareYtDlp({ binDir, userDataDir }) {
 
 /**
  * Apply the packaged-mode environment and chdir into the bundled server.
+ * The API itself stays loopback-only; the phone companion (COMPANION=1) opens
+ * its separate LAN listener only while Settings → Phone has it turned on.
  * Returns { serverRoot, appUrl, port } once configured (server not started yet).
  * `autoUpdateYtDlp` (the desktop shell sets it) lets the server update the
  * user-data yt-dlp copy to the nightly build in the background at startup.
@@ -132,6 +134,9 @@ async function applyServerEnv({ appRoot, binDir, userDataDir, autoUpdateYtDlp = 
     WEB_DIST: webDist,
     JWT_ACCESS_SECRET: secrets.jwtAccess,
     JWT_REFRESH_SECRET: secrets.jwtRefresh,
+    // Settings → Phone: the phone companion's own listener (off until the
+    // person turns it on; it only answers paired, encrypted requests).
+    COMPANION: "1",
   };
 
   // Only point at bundled binaries that actually exist; otherwise let the
