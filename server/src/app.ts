@@ -23,6 +23,8 @@ import ghostRoutes from "./routes/ghost.js";
 import youtubeRoutes from "./routes/youtube.js";
 import companionRoutes from "./routes/companion.js";
 import brainRoutes from "./routes/brain.js";
+import memoryRoutes from "./routes/memory.js";
+import morningRoutes from "./routes/morning.js";
 
 export function createApp() {
   const app = express();
@@ -73,6 +75,8 @@ export function createApp() {
   app.use("/api/v1/companion", companionRoutes);
   // The agent's brain (Gemini): status + Settings → Brain.
   app.use("/api/v1/brain", brainRoutes);
+  app.use("/api/v1/memory", memoryRoutes);
+  app.use("/api/v1/morning", morningRoutes);
 
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");

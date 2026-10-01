@@ -97,6 +97,21 @@ export const config = {
   geminiApiKey: str("GEMINI_API_KEY", ""),
   geminiModel: str("GEMINI_MODEL", ""),
   geminiApiBase: str("GEMINI_API_BASE", "https://generativelanguage.googleapis.com").replace(/\/+$/, ""),
+  // The agent's memory (lib/memory.ts): notes, a summary of earlier
+  // conversations and the shorts made. The desktop app has it; MEMORY=1
+  // turns it on for local development.
+  memoryAvailable: env.DESKTOP_APP === "1" || env.MEMORY === "1",
+  // Gemini's address for paired phones chatting while the PC is off. Empty =
+  // Google's (tests point the emulator at a stand-in).
+  companionGeminiBase: str("COMPANION_GEMINI_BASE", "").replace(/\/+$/, ""),
+  // Morning Setup's weather: Open-Meteo (free, no key). Tests use a stand-in.
+  openMeteoGeocodingUrl: str("OPEN_METEO_GEOCODING_URL", "https://geocoding-api.open-meteo.com/v1/search"),
+  openMeteoForecastUrl: str("OPEN_METEO_FORECAST_URL", "https://api.open-meteo.com/v1/forecast"),
+  // YouTube: the Data API and Google's OAuth endpoints ("Connect YouTube
+  // account" signs in through the browser). Tests use stand-ins.
+  youtubeApiBase: str("YOUTUBE_API_BASE", "https://www.googleapis.com").replace(/\/+$/, ""),
+  googleOAuthAuthUrl: str("GOOGLE_OAUTH_AUTH_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
+  googleOAuthTokenUrl: str("GOOGLE_OAUTH_TOKEN_URL", "https://oauth2.googleapis.com/token"),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)

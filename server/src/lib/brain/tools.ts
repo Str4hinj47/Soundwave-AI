@@ -3,12 +3,17 @@
 // returns facts for Gemini to word its answer with, and may leave "effects"
 // on the reply (a short to follow, a video to show) for the app to render.
 
-import { getStore } from "../store.js";
+import { ago, listShorts } from "../shortsLibrary.js";
 import { findJob } from "../conversation.js";
 import { getActiveShortJobs, startShortJob } from "../../routes/agentShort.js";
 import { ORBITAL_CHANNEL_URL, getOrbitalCatalog, getOrbitalStatus } from "../orbitalBackground.js";
+import { config } from "../../config.js";
+import { pcMemoryStore } from "../memory.js";
+import { prepareMorning } from "../morning.js";
 import type { GeminiFunctionDeclaration } from "./gemini.js";
 import { openApp, openWebsite, pcStatus } from "./pc.js";
+import { guideTool } from "./core/guide.js";
+import { memoryTools, type MemoryStore } from "./core/memory.js";
 
 export interface ToolEffects {
   /** A short started (or already rendering) — the app follows its progress. */
@@ -27,6 +32,10 @@ export interface ToolContext {
   /** The server runs on the person's own PC (desktop app): it may open things here. */
   desktop: boolean;
   platform: NodeJS.Platform;
+  /** The message came from the phone app (through the PC). */
+  via?: "phone";
+  /** The agent's notes (remember / forget). */
+  memory?: MemoryStore;
   effects: ToolEffects;
 }
 
@@ -39,52 +48,6 @@ export interface AgentTool {
 }
 
 const str = (v: unknown, max = 500): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
-
-function ago(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
-  if (s < 90) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 90) return `${m} minutes ago`;
-  const h = Math.round(m / 60);
-  if (h < 36) return `${h} hours ago`;
-  return `${Math.round(h / 24)} days ago`;
-}
-
-interface ShortJob {
-  id: string;
-  topic: string;
-  status: string;
-  createdAt: string;
-  completedAt: string | null;
-  outputUrl: string | null;
-  youtubeUrl: string | null;
-  error: string | null;
-}
-
-/** Shorts the agent made (they carry a topic), newest first, whoever "owns" them locally. */
-async function listShorts(userId: string): Promise<ShortJob[]> {
-  const store = await getStore();
-  const byId = new Map<string, ShortJob>();
-  for (const owner of new Set([userId, "agent-local", "local-user"])) {
-    const jobs = await store.listJobs(owner).catch(() => []);
-    for (const j of jobs) {
-      const settings = (j.settings ?? {}) as { topic?: unknown; youtubeUrl?: unknown };
-      if (typeof settings.topic !== "string" || byId.has(j.id)) continue;
-      byId.set(j.id, {
-        id: j.id,
-        topic: settings.topic,
-        status: j.status,
-        createdAt: j.createdAt,
-        completedAt: j.completedAt,
-        outputUrl: j.outputUrl,
-        youtubeUrl: typeof settings.youtubeUrl === "string" ? settings.youtubeUrl : null,
-        error: j.errorMessage,
-      });
-    }
-  }
-  return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-}
 
 const videoUrlFor = (job: { id: string; outputUrl: string | null }) => job.outputUrl || `/api/v1/export/jobs/${job.id}/download`;
 
@@ -295,6 +258,36 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
 ];
 
+// ── Memory, Morning Setup and the Soundwave guide ───────────────────────────
+
+AGENT_TOOLS.push(
+  {
+    declaration: {
+      name: "run_morning_setup",
+      description:
+        "Run the user's Morning Setup: opens their morning websites and apps on this PC (as set in Settings → Morning Setup) and returns today's facts — the weather, what happened with their shorts since the last Morning Setup, YouTube channel numbers, backgrounds left, memory, and whether to suggest short ideas. Use it when the user asks for their morning setup or morning briefing (\"good morning, set me up\"). Then give the briefing from these facts in about 110–190 spoken words; if ideas is true, add three new, specific short ideas as \"Idea 1: …\" lines that differ from madeTopics, and offer to make one.",
+    },
+    available: (ctx) => ctx.desktop,
+    sideEffect: true,
+    async run(_args, ctx) {
+      const facts = await prepareMorning({ via: ctx.via === "phone" ? "phone" : "pc" });
+      ctx.effects.tag = "SYS";
+      for (const o of facts.opened) ctx.effects.log.push(o.ok ? `Opened ${o.label}` : `Couldn't open ${o.label}: ${o.error ?? "failed"}`);
+      return { ...facts, madeTopics: facts.madeTopics.slice(0, 25) };
+    },
+  },
+  ...memoryTools<Required<Pick<ToolContext, "memory">> & ToolContext>().map(
+    (t): AgentTool => ({
+      declaration: t.declaration,
+      sideEffect: t.sideEffect,
+      available: (ctx) => Boolean(ctx.memory),
+      run: (args, ctx) => t.run(args, { ...ctx, memory: ctx.memory! }),
+    }),
+  ),
+  guideTool<ToolContext>(),
+);
+
 export function toolsFor(ctx: ToolContext): AgentTool[] {
+  if (ctx.memory === undefined && config.memoryAvailable) ctx.memory = pcMemoryStore;
   return AGENT_TOOLS.filter((t) => !t.available || t.available(ctx));
 }

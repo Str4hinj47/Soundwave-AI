@@ -421,17 +421,20 @@ describe("Chat answered by Gemini", () => {
     await store.updateJob(job.id, { status: "FAILED" });
   });
 
-  it("keeps the PC tools out of hosted servers", async () => {
-    const c = config as { desktopApp: boolean };
+  it("keeps the PC tools (and the memory) out of hosted servers", async () => {
+    const c = config as { desktopApp: boolean; memoryAvailable: boolean };
     c.desktopApp = false;
+    c.memoryAvailable = false;
     try {
       fake.queue.push(text("Hi."));
       await chat("hi");
       const names = generateCalls()[0]!.body.tools[0].functionDeclarations.map((d: { name: string }) => d.name);
-      expect(names).toEqual(["make_youtube_short", "get_short_progress", "list_my_videos", "show_video"]);
-      expect(generateCalls()[0]!.body.systemInstruction.parts[0].text).not.toMatch(/open_website/);
+      expect(names).toEqual(["make_youtube_short", "get_short_progress", "list_my_videos", "show_video", "soundwave_guide"]);
+      const instruction = generateCalls()[0]!.body.systemInstruction.parts[0].text;
+      expect(instruction).not.toMatch(/open_website|with remember and forget|Your memory:/);
     } finally {
       c.desktopApp = true;
+      c.memoryAvailable = true;
     }
   });
 });
@@ -530,10 +533,10 @@ describe("brain helpers", () => {
   });
 
   it("tells Gemini when a message came from the phone", () => {
-    const desktop = prompt.agentInstruction({ tools: ["make_youtube_short", "open_website", "open_app"], webSearch: false, fromPhone: true });
+    const desktop = prompt.agentInstruction({ tools: ["make_youtube_short", "open_website", "open_app"], webSearch: false, surface: "phone" });
     expect(desktop).toMatch(/sent from the Soundwave phone app/);
     expect(desktop).toMatch(/appear on the PC, not on the phone — say "on your PC"/);
-    const noPcTools = prompt.agentInstruction({ tools: ["make_youtube_short"], webSearch: false, fromPhone: true });
+    const noPcTools = prompt.agentInstruction({ tools: ["make_youtube_short"], webSearch: false, surface: "phone" });
     expect(noPcTools).toMatch(/sent from the Soundwave phone app/);
     expect(noPcTools).not.toMatch(/on your PC/);
     expect(prompt.agentInstruction({ tools: ["make_youtube_short", "open_website"], webSearch: false })).not.toMatch(/phone app, so the user/);

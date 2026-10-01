@@ -6,6 +6,7 @@ import { startYtDlpSelfUpdate } from "./lib/ytdlp.js";
 import { ytDlpJsRuntime } from "./lib/jsRuntime.js";
 import { initConversation } from "./lib/conversation.js";
 import { initCompanion } from "./lib/companion/listener.js";
+import { initMemory } from "./lib/memory.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[soundwave] Handled asynchronous rejection:", reason);
@@ -48,6 +49,8 @@ async function main() {
   // the last session) while nobody was watching. Then the phone companion's
   // LAN listener, if the person left "Let my phone connect" on.
   initConversation();
+  // The agent's memory keeps a summary of what falls out of the recent conversation.
+  initMemory();
   if (config.companionAvailable) {
     initCompanion().catch((err) => console.warn("[companion] could not start:", (err as Error).message));
   }

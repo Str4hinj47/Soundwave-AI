@@ -124,12 +124,21 @@ export function appendToConversation(...messages: ChatMessage[]): ConversationSn
  */
 export function resetConversation(messages: ChatMessage[]): ConversationSnapshot {
   const s = load();
+  const cleared = s.messages;
   s.epoch = randomBytes(6).toString("hex");
   s.rev += 1;
   s.messages = mergeChatMessages([], messages, CONVERSATION_LIMIT);
   persist(s);
   changes.emit("change", s.rev);
+  // The memory folds the cleared conversation into its summary (lib/memory.ts).
+  if (cleared.length) changes.emit("reset", cleared);
   return getConversation();
+}
+
+/** Called with the old messages when the conversation is cleared. */
+export function onConversationReset(listener: (cleared: ChatMessage[]) => void): () => void {
+  changes.on("reset", listener);
+  return () => changes.off("reset", listener);
 }
 
 export function setConversationVoice(voice: string | undefined): void {

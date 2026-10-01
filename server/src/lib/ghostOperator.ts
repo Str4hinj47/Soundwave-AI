@@ -52,83 +52,8 @@ export interface MacroExecutionReport {
 }
 
 // ── Built-in Pro Workflows ──────────────────────────────────────────────────
+// (Morning Setup is real now — lib/morning.ts — and no longer a macro.)
 export const BUILTIN_MACROS: MacroWorkflow[] = [
-  {
-    id: "creator_morning_prep",
-    name: "🚀 Creator Workstation Setup",
-    description: "Launches browser, sets audio to 75%, runs system vitals check, and generates proactive briefing.",
-    category: "creator",
-    triggerPhrases: ["start my day", "creator setup", "morning prep", "daily routine", "boot workstation"],
-    icon: "Rocket",
-    createdAt: "2026-09-19T00:00:00.000Z",
-    isBuiltin: true,
-    steps: [
-      {
-        id: "step-1",
-        action: "open_app",
-        params: { app_name: "chrome" },
-        description: "Launch browser for creator workflow",
-        delayMs: 300,
-      },
-      {
-        id: "step-2",
-        action: "computer_settings",
-        params: { setting: "volume", value: 75 },
-        description: "Set system volume to 75%",
-        delayMs: 200,
-      },
-      {
-        id: "step-3",
-        action: "system_monitor",
-        params: { query: "all" },
-        description: "Verify CPU and RAM telemetry",
-        delayMs: 200,
-      },
-      {
-        id: "step-4",
-        action: "proactive",
-        params: {},
-        description: "Generate proactive schedule and vitals briefing",
-        delayMs: 200,
-      },
-    ],
-  },
-  {
-    id: "deep_focus_pomodoro",
-    name: "🎯 Deep Focus Mode (Pomodoro)",
-    description: "Minimizes open windows, mutes alert sounds, and sets a 25-minute Pomodoro focus timer.",
-    category: "productivity",
-    triggerPhrases: ["focus mode", "deep work", "pomodoro", "do not disturb", "concentrate"],
-    icon: "Target",
-    createdAt: "2026-09-19T00:00:00.000Z",
-    isBuiltin: true,
-    steps: [
-      {
-        id: "step-1",
-        action: "computer_control",
-        params: { action: "minimize_all" },
-        description: "Minimize cluttered background windows",
-        delayMs: 300,
-      },
-      {
-        id: "step-2",
-        action: "computer_settings",
-        params: { setting: "mute" },
-        description: "Mute distracting notification chimes",
-        delayMs: 200,
-      },
-      {
-        id: "step-3",
-        action: "reminder",
-        params: {
-          seconds: 1500,
-          message: "Deep Focus Pomodoro complete! Step back, hydrate, and stretch for 5 minutes.",
-        },
-        description: "Set 25-minute uninterrupted Pomodoro timer",
-        delayMs: 200,
-      },
-    ],
-  },
   {
     id: "viral_production_autopilot",
     name: "🎬 1-Click Viral Production Autopilot",

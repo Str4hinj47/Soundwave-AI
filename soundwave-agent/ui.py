@@ -440,7 +440,6 @@ class SoundwaveDesktopApp:
 
         quick_actions = [
             ("🌅 Morning Prep", "morning workflow"),
-            ("🎯 Deep Focus", "focus mode"),
             ("🎬 Viral Short", "make viral short"),
             ("🧹 Diagnostics", "run system diagnostics"),
         ]
@@ -689,7 +688,6 @@ class SoundwaveDesktopApp:
 
         macros = [
             ("🚀 Creator Workstation Setup", "creator_morning_prep", "Launches browser, sets audio to 75%, verifies vitals."),
-            ("🎯 Deep Focus Mode (Pomodoro)", "deep_focus_pomodoro", "Minimizes windows, mutes chimes, engages 25m focus."),
             ("🎬 1-Click Viral Production Autopilot", "viral_production_autopilot", "Generates hook script and buffers upload notice."),
             ("🧹 Workspace & System Diagnostics", "workspace_cleanup_diagnostics", "Audits local workspace files and hardware load."),
         ]

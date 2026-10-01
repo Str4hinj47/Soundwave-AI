@@ -64,6 +64,16 @@ export class YouTubeService {
       ...updates,
       defaultTags: updates.defaultTags || current.defaultTags,
     };
+    // New credentials (another account or client): the cached token and channel belong to the old ones.
+    const changed = (k: "clientId" | "clientSecret" | "refreshToken") => updates[k] !== undefined && (updates[k] ?? "").trim() !== (current[k] ?? "").trim();
+    if (changed("clientId") || changed("clientSecret") || changed("refreshToken")) {
+      delete merged.accessToken;
+      delete merged.tokenExpiry;
+      if (changed("refreshToken") || changed("clientId")) {
+        delete merged.channelTitle;
+        delete merged.channelId;
+      }
+    }
     fs.writeFileSync(this.configFile, JSON.stringify(merged, null, 2), "utf-8");
     return merged;
   }
@@ -92,7 +102,7 @@ export class YouTubeService {
       grant_type: "refresh_token",
     });
 
-    const res = await fetch("https://oauth2.googleapis.com/token", {
+    const res = await fetch(config.googleOAuthTokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),
@@ -122,7 +132,7 @@ export class YouTubeService {
     try {
       const token = await this.getValidAccessToken();
 
-      const res = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+      const res = await fetch(`${config.youtubeApiBase}/youtube/v3/channels?part=snippet&mine=true`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -148,6 +158,53 @@ export class YouTubeService {
     } catch (err: any) {
       return { ok: false, error: err.message };
     }
+  }
+
+  /**
+   * The linked channel's numbers and its latest uploads (Morning Setup) —
+   * needs the youtube.readonly permission, which "Connect YouTube account" asks for.
+   */
+  public async channelStats(): Promise<{
+    channelTitle: string;
+    subscribers: number | null;
+    views: number | null;
+    videos: number | null;
+    latest: Array<{ title: string; views: number | null; publishedAt: string | null }>;
+  } | null> {
+    const token = await this.getValidAccessToken();
+    const get = async (pathAndQuery: string): Promise<any> => {
+      const res = await fetch(`${config.youtubeApiBase}/youtube/v3/${pathAndQuery}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`YouTube API error (${res.status}): ${(await res.text()).slice(0, 200)}`);
+      return res.json();
+    };
+    const num = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
+    const ch = await get("channels?part=snippet,statistics,contentDetails&mine=true");
+    const c = ch.items?.[0];
+    if (!c) return null;
+    const stats = {
+      channelTitle: String(c.snippet?.title ?? ""),
+      subscribers: c.statistics?.hiddenSubscriberCount ? null : num(c.statistics?.subscriberCount),
+      views: num(c.statistics?.viewCount),
+      videos: num(c.statistics?.videoCount),
+      latest: [] as Array<{ title: string; views: number | null; publishedAt: string | null }>,
+    };
+    const uploads = c.contentDetails?.relatedPlaylists?.uploads;
+    if (uploads) {
+      try {
+        const list = await get(`playlistItems?part=contentDetails&maxResults=3&playlistId=${encodeURIComponent(uploads)}`);
+        const ids = (list.items ?? []).map((i: any) => i.contentDetails?.videoId).filter(Boolean);
+        if (ids.length) {
+          const vids = await get(`videos?part=snippet,statistics&id=${ids.join(",")}`);
+          stats.latest = (vids.items ?? []).map((v: any) => ({ title: String(v.snippet?.title ?? ""), views: num(v.statistics?.viewCount), publishedAt: v.snippet?.publishedAt ?? null }));
+        }
+      } catch {
+        /* the numbers without the latest uploads */
+      }
+    }
+    return stats;
   }
 
   /**
@@ -198,7 +255,7 @@ export class YouTubeService {
     console.log(`[YouTubeService] Initiating upload for "${finalTitle}" (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
 
     // Step 1: Initialize Resumable Upload Session
-    const initRes = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+    const initRes = await fetch(`${config.youtubeApiBase}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,

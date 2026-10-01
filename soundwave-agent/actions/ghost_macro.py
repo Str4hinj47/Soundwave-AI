@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 
 TOOL = {
     "name": "ghost_macro",
-    "description": "Executes multi-step task automation macros (e.g. 'creator_morning_prep', 'deep_focus_pomodoro') or decomposes chained instructions.",
+    "description": "Executes multi-step task automation macros (e.g. 'creator_morning_prep', 'viral_production_autopilot') or decomposes chained instructions.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -20,7 +20,7 @@ TOOL = {
             },
             "macro_id": {
                 "type": "STRING",
-                "description": "Macro ID: creator_morning_prep, deep_focus_pomodoro, viral_production_autopilot, workspace_cleanup_diagnostics"
+                "description": "Macro ID: creator_morning_prep, viral_production_autopilot, workspace_cleanup_diagnostics"
             },
             "instruction": {
                 "type": "STRING",
@@ -39,14 +39,6 @@ BUILTIN_CHAINS = {
             ("computer_settings", {"setting": "volume", "value": 75}, "Set volume to 75%"),
             ("system_monitor", {"query": "all"}, "Check system vitals"),
             ("proactive", {}, "Generate morning briefing"),
-        ]
-    },
-    "deep_focus_pomodoro": {
-        "name": "Deep Focus Mode (Pomodoro)",
-        "steps": [
-            ("computer_control", {"action": "minimize_all"}, "Minimize all windows"),
-            ("computer_settings", {"setting": "mute"}, "Mute alert audio"),
-            ("reminder", {"seconds": 1500, "message": "Pomodoro complete! Take a break."}, "Set 25-minute focus timer"),
         ]
     },
     "viral_production_autopilot": {

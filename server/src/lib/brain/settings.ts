@@ -10,7 +10,9 @@ import path from "node:path";
 import { config } from "../../config.js";
 import { bareModelId, describeGeminiError, GeminiError, modelLabel } from "./gemini.js";
 
-export type ThinkingLevel = "low" | "medium" | "high";
+import type { ThinkingLevel } from "./core/gemini.js";
+
+export type { ThinkingLevel };
 
 export const DEFAULT_MODEL = "gemini-3.8-flash";
 /**
