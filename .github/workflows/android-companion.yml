@@ -52,7 +52,7 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -120,7 +120,7 @@ jobs:
           grep -E "uses-permission|sdkVersion|targetSdkVersion" "$RUNNER_TEMP/badging.txt" || true
           version="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | head -1)"
           pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
-          min="$(sed -n "s/^sdkVersion:'\([0-9]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
+          min="$(grep -oE "^(minSdkVersion|sdkVersion):'[0-9]+'" "$RUNNER_TEMP/badging.txt" | head -1 | grep -oE "[0-9]+" || true)"
           target="$(sed -n "s/^targetSdkVersion:'\([0-9]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt")"
           perms="$(sed -n "s/^uses-permission: name='android.permission.\([A-Z_]*\)'.*/\1/p" "$RUNNER_TEMP/badging.txt" | tr '\n' ' ')"
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" "$RUNNER_TEMP/apksigner.txt"
@@ -173,7 +173,6 @@ jobs:
       - name: Start the PC side (Soundwave server with the phone companion on)
         working-directory: server
         env:
-          NODE_ENV: production
           COMPANION: "1"
           # The emulator reaches this machine at 10.0.2.2 — put it in the pairing code.
           COMPANION_HOSTS: 10.0.2.2
@@ -183,12 +182,15 @@ jobs:
           UPLOADS_DIR: ${{ runner.temp }}/swdata/uploads
           JWT_ACCESS_SECRET: ci-access-secret-for-the-phone-e2e
           JWT_REFRESH_SECRET: ci-refresh-secret-for-the-phone-e2e
+        # Install/build with dev dependencies (NODE_ENV=production would make
+        # npm skip them, and tsc fail); only the server itself runs in production mode.
         run: |
           npm ci
           npm run build
-          nohup node dist/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          NODE_ENV=production nohup node dist/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:4000/api/health >/dev/null && break; sleep 1; done
-          curl -sf http://127.0.0.1:4000/api/v1/companion | head -c 300; echo
+          curl -sf -o "$RUNNER_TEMP/companion.json" http://127.0.0.1:4000/api/v1/companion
+          cat "$RUNNER_TEMP/companion.json"; echo
 
       - name: Install the test driver (Playwright for Android)
         run: npm install --no-save --no-package-lock --prefix mobile/e2e playwright-core@1.63.0

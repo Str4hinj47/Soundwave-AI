@@ -207,11 +207,13 @@ function isCgnat(ip: string): boolean {
   return a === 100 && b >= 64 && b <= 127; // Tailscale and other overlay VPNs
 }
 
-/** Addresses for the pairing code: this PC's network addresses, plus any set in COMPANION_HOSTS. */
+/**
+ * Addresses for the pairing code: any set in COMPANION_HOSTS first (someone
+ * chose them on purpose — the code holds at most six), then this PC's own.
+ */
 export function pairingAddresses(): LocalAddress[] {
-  const found = localAddresses();
-  const extra = config.companionHosts.filter((h) => !found.some((a) => a.address === h)).map((h) => ({ address: h, name: "configured", kind: "other" as const }));
-  return [...found, ...extra];
+  const extra = config.companionHosts.map((h) => ({ address: h, name: "configured", kind: "other" as const }));
+  return [...extra, ...localAddresses().filter((a) => !config.companionHosts.includes(a.address))];
 }
 
 /** IPv4 addresses of this PC, best first: Wi-Fi/Ethernet, then VPNs (Tailscale), then the rest. */
