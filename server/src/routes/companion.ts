@@ -13,10 +13,11 @@
 // rebinding (Host must be loopback when the API only listens on loopback).
 // The phone never reaches these — it talks to lib/companion/listener.ts.
 
-import { Router, type RequestHandler } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import { config } from "../config.js";
 import { ApiError } from "../middleware/error.js";
+import { localAppGuard } from "../middleware/localApp.js";
 import { validate } from "../middleware/validate.js";
 import { getConversation, mergeUntrusted, resetConversation, setConversationVoice, waitForChange } from "../lib/conversation.js";
 import { sanitizeMessages } from "../lib/chatMessages.js";
@@ -25,32 +26,7 @@ import { companionStatus, listenerState, setCompanionEnabled, startListener } fr
 
 const router = Router();
 
-const LOOPBACK_BIND = new Set(["127.0.0.1", "localhost", "::1"]);
-
-function hostnameOf(hostHeader: string): string {
-  const h = hostHeader.trim().toLowerCase();
-  if (h.startsWith("[")) return h.slice(1, h.indexOf("]"));
-  return h.replace(/:\d+$/, "");
-}
-
-export const localAppOnly: RequestHandler = (req, _res, next) => {
-  if (!config.companionAvailable) return next(new ApiError(404, "NOT_FOUND", "The phone companion is only available in the desktop app."));
-  const host = req.headers.host ?? "";
-  if (LOOPBACK_BIND.has(config.bindHost) && !LOOPBACK_BIND.has(hostnameOf(host))) {
-    return next(new ApiError(403, "FORBIDDEN", "Not available from here."));
-  }
-  const origin = req.headers.origin;
-  if (origin) {
-    let sameOrigin = false;
-    try {
-      sameOrigin = new URL(origin).host.toLowerCase() === host.toLowerCase();
-    } catch {
-      /* malformed Origin */
-    }
-    if (!sameOrigin) return next(new ApiError(403, "FORBIDDEN", "Not available from other sites."));
-  }
-  next();
-};
+export const localAppOnly = localAppGuard(() => config.companionAvailable, "The phone companion is only available in the desktop app.");
 
 router.use(localAppOnly);
 

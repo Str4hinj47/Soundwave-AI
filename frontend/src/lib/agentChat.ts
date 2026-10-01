@@ -120,9 +120,9 @@ export function appendToChatHistory(...messages: ChatMessage[]): void {
   saveChatHistory([...(loadChatHistory() ?? []), ...messages]);
 }
 
-/** The last few turns, as the chat endpoint wants them. */
+/** The recent conversation, as the chat endpoint wants it (the agent's brain reads it for context). */
 export function historyForRequest(messages: ChatMessage[]): Array<{ sender: ChatMessage["sender"]; text: string }> {
-  return messages.slice(-6).map((m) => ({ sender: m.sender, text: m.text }));
+  return messages.slice(-24).map((m) => ({ sender: m.sender, text: m.text.slice(0, 4000) }));
 }
 
 export interface ChatReply {

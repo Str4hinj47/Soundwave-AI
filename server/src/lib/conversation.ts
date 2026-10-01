@@ -141,7 +141,7 @@ export function setConversationVoice(voice: string | undefined): void {
 }
 
 /** The last few turns before now, as the agent's `history`. */
-export function recentHistory(limit = 6): Array<{ sender: ChatMessage["sender"]; text: string }> {
+export function recentHistory(limit = 24): Array<{ sender: ChatMessage["sender"]; text: string }> {
   return load()
     .messages.slice(-limit)
     .map((m) => ({ sender: m.sender, text: m.text }));

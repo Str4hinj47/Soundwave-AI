@@ -22,6 +22,7 @@ import creatorRoutes from "./routes/creator.js";
 import ghostRoutes from "./routes/ghost.js";
 import youtubeRoutes from "./routes/youtube.js";
 import companionRoutes from "./routes/companion.js";
+import brainRoutes from "./routes/brain.js";
 
 export function createApp() {
   const app = express();
@@ -70,6 +71,8 @@ export function createApp() {
   app.use("/api/v1/youtube", youtubeRoutes);
   // Phone companion: Settings → Phone + the conversation the phone shares (desktop app only).
   app.use("/api/v1/companion", companionRoutes);
+  // The agent's brain (Gemini): status + Settings → Brain.
+  app.use("/api/v1/brain", brainRoutes);
 
   // Static voice sample clips (pre-generated, committed to the repo).
   const samplesDir = path.join(process.cwd(), "..", "frontend", "public", "voice-samples");

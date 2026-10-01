@@ -19,6 +19,7 @@ import { SttError, getSttStatus, transcribe } from "../stt.js";
 import { normalizeVoiceId, synthesizeEdgeTTS } from "../edgeTts.js";
 import { chatTime, newMessageId, openJobs, replyToMessage, type ChatMessage, type ChatReply } from "../chatMessages.js";
 import { appendToConversation, findJob, getConversation, recentHistory, waitForChange, type JobSnapshot } from "../conversation.js";
+import { HISTORY_MESSAGES } from "../brain/chat.js";
 import { getStore } from "../store.js";
 import { EnvelopeError, aad, deriveDeviceKeys, frame, open, seal, unframe } from "./crypto.js";
 import {
@@ -185,7 +186,7 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
   async send(args) {
     const message = str(args.text, 4000).trim();
     if (!message) throw new OpError("EMPTY", "Type or say something first.");
-    const history = recentHistory(6);
+    const history = recentHistory(HISTORY_MESSAGES);
     const now = Date.now();
     const userMsg: ChatMessage = {
       id: newMessageId(now),

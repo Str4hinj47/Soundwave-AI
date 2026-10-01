@@ -137,6 +137,9 @@ async function applyServerEnv({ appRoot, binDir, userDataDir, autoUpdateYtDlp = 
     // Settings → Phone: the phone companion's own listener (off until the
     // person turns it on; it only answers paired, encrypted requests).
     COMPANION: "1",
+    // The server runs on the person's own PC: Settings → Brain can save their
+    // Gemini API key (data\brain.json) and the agent may open websites/apps.
+    DESKTOP_APP: "1",
   };
 
   // Only point at bundled binaries that actually exist; otherwise let the

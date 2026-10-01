@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
+const { FAKE_HELLO, FAKE_KEY, startFakeGemini } = await import(pathToFileURL(path.join(desktopDir, "test", "fake-gemini.mjs")).href);
 const { applyServerEnv } = require(path.join(desktopDir, "src", "server-env.cjs"));
 
 const appRoot = path.join(desktopDir, "app");
@@ -33,9 +34,9 @@ function get(url) {
   });
 }
 
-function post(url, body, contentType, timeoutMs = 180_000) {
+function post(url, body, contentType, timeoutMs = 180_000, method = "POST") {
   return new Promise((resolve, reject) => {
-    const req = http.request(url, { method: "POST", headers: { "Content-Type": contentType, "Content-Length": body.length } }, (res) => {
+    const req = http.request(url, { method, headers: { "Content-Type": contentType, "Content-Length": body.length } }, (res) => {
       const chunks = [];
       res.on("data", (c) => chunks.push(c));
       res.on("end", () => {
@@ -70,6 +71,10 @@ function assert(cond, label) {
   }
   console.log(`[smoke] ✓ ${label}`);
 }
+
+// The agent's brain talks to a fake Gemini on loopback (no real key in CI).
+const fakeGemini = await startFakeGemini();
+process.env.GEMINI_API_BASE = fakeGemini.url;
 
 try {
   const { appUrl } = await applyServerEnv({ appRoot, binDir, userDataDir });
@@ -190,6 +195,41 @@ try {
     "Phone companion",
     `Listener opened on port ${on.body.port} and closed again. Addresses in the pairing code: ${(code.body.addresses ?? []).map((a) => `${a.address} (${a.name})`).join(", ") || "none"}.`,
   );
+
+  // The agent's brain (Settings → Brain): no key → it says so; a key → the
+  // agent answers through Gemini (the fake one) and its tools run on this PC.
+  const send = (method, url, value) => post(url, json(value ?? {}), "application/json", 30_000, method);
+  const brain0 = JSON.parse((await get(`${appUrl}/api/v1/brain`)).body);
+  assert(brain0.configured === false && brain0.settingsAvailable === true && brain0.desktopActions === true, "brain: Settings → Brain available, no key yet");
+  const noKey = await send("POST", `${appUrl}/api/v1/agent/chat`, { message: "hello" });
+  assert(noKey.status === 200 && noKey.body.needsBrain === true, "without a Gemini key the agent asks for one instead of making things up");
+  const saved = await send("PUT", `${appUrl}/api/v1/brain`, { apiKey: FAKE_KEY });
+  assert(saved.status === 200 && saved.body.configured === true && !JSON.stringify(saved.body).includes(FAKE_KEY), `brain: key saved, only a hint comes back (${saved.body.keyHint})`);
+  assert(fs.existsSync(path.join(userDataDir, "data", "brain.json")), "brain: the key is stored in the user-data folder");
+  const tested = await send("POST", `${appUrl}/api/v1/brain/test`, {});
+  assert(tested.status === 200 && tested.body.ok === true && tested.body.reply === "ready", `brain: Test → ${tested.body.modelLabel} answered in ${tested.body.latencyMs} ms`);
+  const hi = await send("POST", `${appUrl}/api/v1/agent/chat`, { message: "hello", history: [{ sender: "assistant", text: "Hi!" }] });
+  assert(hi.status === 200 && hi.body.reply === FAKE_HELLO && hi.body.brain?.model === "gemini-3.8-flash", "chat is answered by Gemini");
+  const asked = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1);
+  const toolNames = asked?.body?.tools?.find((t) => t.functionDeclarations)?.functionDeclarations.map((d) => d.name) ?? [];
+  assert(asked?.key === FAKE_KEY && toolNames.includes("make_youtube_short") && toolNames.includes("open_website"), `Gemini gets the key in its header and the agent's tools (${toolNames.join(", ")})`);
+  if (process.platform === "win32") assert(toolNames.includes("open_app"), "on Windows the agent can open Start menu apps");
+  const pcAsk = await send("POST", `${appUrl}/api/v1/agent/chat`, { message: "how is my PC doing?" });
+  const pcResult = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1)?.body?.contents?.at(-1)?.parts?.[0]?.functionResponse;
+  assert(
+    pcAsk.status === 200 && pcResult?.name === "get_pc_status" && pcResult.response?.cpu?.cores > 0 && pcResult.id === "pc-status-1",
+    `a tool runs on this PC and its result goes back to Gemini: ${pcResult?.response?.os}, ${pcResult?.response?.cpu?.cores} cores, ${pcResult?.response?.memory?.usedPercent}% memory used`,
+  );
+  let appsNote = "not on this OS";
+  if (process.platform === "win32") {
+    const abilities = JSON.parse((await get(`${appUrl}/api/v1/brain/abilities?app=notepad`)).body);
+    assert(abilities.openApps?.available === true && abilities.openApps.count > 0, `the agent sees ${abilities.openApps?.count} Start menu apps (${abilities.openApps?.source})`);
+    appsNote = `${abilities.openApps.count} Start menu apps via ${abilities.openApps.source}; "notepad" → ${abilities.openApps.match ?? "no match"}`;
+  }
+  annotate("notice", "Agent brain (fake Gemini)", `Key saved and tested; chat answered by Gemini; get_pc_status ran here: ${pcResult?.response?.os}, ${pcResult?.response?.cpu?.model}. Apps: ${appsNote}.`);
+  const removed = await send("DELETE", `${appUrl}/api/v1/brain/key`);
+  assert(removed.status === 200 && removed.body.configured === false, "brain: the key can be removed again");
+  await fakeGemini.close();
 
   console.log("[smoke] PASS — assembled app boots and serves the Command Center.");
   process.exit(0);

@@ -60,6 +60,7 @@ import { DEFAULT_HOTKEY, getDesktop, hotkeyLabel } from "../lib/desktop";
 import { JOB_STARTED_EVENT, VOICE_COMMAND_EVENT } from "../components/agent/BackgroundServices";
 import { notifyJobOutcome } from "../lib/notify";
 import { clearSharedConversation, type ChatSyncedDetail } from "../lib/conversationSync";
+import { useBrainStatus, type BrainStatus } from "../lib/brain";
 
 export type { ShortBackground };
 
@@ -143,21 +144,21 @@ export function AgentHub() {
   const [assistantState, setAssistantState] = useState<"STANDBY" | "LISTENING" | "THINKING" | "SPEAKING" | "GENERATING">("STANDBY");
   const [currentTimeStr, setCurrentTimeStr] = useState("");
   const [currentDateStr, setCurrentDateStr] = useState("");
-  const [uptimeSeconds, setUptimeSeconds] = useState(439);
+  const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [commandsCount, setCommandsCount] = useState(1);
   const [sessionCount] = useState(1);
 
-  // Telemetry & Hardware Stats
-  const [stats, setStats] = useState({
-    cpuUsage: 8,
-    ramUsageGB: 5.2,
-    ramTotalGB: 16.0,
-    memoryPercent: 32,
-    diskUsedGB: 184,
-    diskTotalGB: 512,
-    systemLoad: "Optimal",
-    loadPercent: 18,
-  });
+  // This PC's live stats (GET /api/v1/brain/pc — the same facts the agent's
+  // get_pc_status tool reads). Null until known; "—" where unavailable (web).
+  const [stats, setStats] = useState<{
+    cpuUsage: number | null;
+    ramUsageGB: number | null;
+    ramTotalGB: number | null;
+    memoryPercent: number | null;
+    diskUsedGB: number | null;
+    diskTotalGB: number | null;
+    loadPercent: number | null;
+  }>({ cpuUsage: null, ramUsageGB: null, ramTotalGB: null, memoryPercent: null, diskUsedGB: null, diskTotalGB: null, loadPercent: null });
 
   // Orbital NCG background source (unused videos, history)
   const [orbitalStatus, setOrbitalStatus] = useState<OrbitalStatus | null>(null);
@@ -354,17 +355,39 @@ export function AgentHub() {
     return () => clearInterval(timer);
   }, []);
 
-  // Simulated Hardware Load Ticker
+  // Live PC stats, every few seconds while the page is visible.
+  const refreshStats = async () => {
+    try {
+      const res = await fetch("/api/v1/brain/pc");
+      if (!res.ok) return;
+      const pc = (await res.json()) as {
+        cpu: { loadPercent: number | null };
+        memory: { totalGB: number; usedGB: number; usedPercent: number };
+        disk: { freeGB: number; totalGB: number } | null;
+        uptimeSeconds: number;
+      };
+      setStats({
+        cpuUsage: pc.cpu.loadPercent,
+        loadPercent: pc.cpu.loadPercent,
+        ramUsageGB: pc.memory.usedGB,
+        ramTotalGB: pc.memory.totalGB,
+        memoryPercent: pc.memory.usedPercent,
+        diskUsedGB: pc.disk ? Math.round(pc.disk.totalGB - pc.disk.freeGB) : null,
+        diskTotalGB: pc.disk ? Math.round(pc.disk.totalGB) : null,
+      });
+      setUptimeSeconds(pc.uptimeSeconds);
+    } catch {
+      /* the server is busy or restarting — keep the last numbers */
+    }
+  };
   useEffect(() => {
+    void refreshStats();
     const interval = setInterval(() => {
-      setStats((prev) => ({
-        ...prev,
-        cpuUsage: Math.floor(6 + Math.random() * 8 + (isGenerating ? 42 : 0)),
-        loadPercent: Math.floor(14 + Math.random() * 10 + (isGenerating ? 38 : 0)),
-      }));
-    }, 4000);
+      if (document.visibilityState === "visible") void refreshStats();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [isGenerating]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Agent speech: always a Soundwave voice ─────────────────────────────
   // Replies stream from /api/v1/agent/speak/stream while Microsoft renders
@@ -509,6 +532,9 @@ export function AgentHub() {
     return `${h}:${m}:${s}`;
   };
 
+  // The agent's brain (Gemini, Settings → Brain) — shown next to "Online".
+  const { status: brain, refresh: refreshBrain } = useBrainStatus();
+
   // ── Conversation Dispatcher ─────────────────────────────────────────────
   /** Send a typed or spoken message to the agent and show / speak its reply. */
   const sendMessage = async (text: string, opts: { viaVoice?: boolean } = {}) => {
@@ -553,6 +579,7 @@ export function AgentHub() {
       setChatMessages((prev) => [...prev, fallbackMsg]);
     } finally {
       setAssistantState((prev) => (prev === "SPEAKING" ? prev : idleState()));
+      void refreshBrain();
     }
   };
 
@@ -1153,6 +1180,7 @@ export function AgentHub() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Online
           </span>
+          <BrainPill status={brain} />
         </div>
 
         {/* Center: Time & Date Capsule */}
@@ -1226,7 +1254,7 @@ export function AgentHub() {
                 System Stats
               </span>
               <button
-                onClick={() => setStats((p) => ({ ...p, cpuUsage: Math.floor(6 + Math.random() * 8) }))}
+                onClick={() => void refreshStats()}
                 className="text-gray-400 hover:text-cyan-400 transition-colors"
                 title="Refresh stats"
               >
@@ -1238,12 +1266,12 @@ export function AgentHub() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] text-gray-300">
                 <span>CPU Usage</span>
-                <span className="text-cyan-400 font-bold">{stats.cpuUsage}%</span>
+                <span className="text-cyan-400 font-bold">{stats.cpuUsage != null ? `${stats.cpuUsage}%` : "—"}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#070D18]">
                 <div
                   className="h-full bg-cyan-400 transition-all duration-300"
-                  style={{ width: `${stats.cpuUsage}%` }}
+                  style={{ width: `${stats.cpuUsage ?? 0}%` }}
                 />
               </div>
             </div>
@@ -1252,12 +1280,12 @@ export function AgentHub() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] text-gray-300">
                 <span>RAM Usage</span>
-                <span className="text-cyan-400 font-bold">{stats.ramUsageGB} GB</span>
+                <span className="text-cyan-400 font-bold">{stats.ramUsageGB != null ? `${stats.ramUsageGB} / ${stats.ramTotalGB} GB` : "—"}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#070D18]">
                 <div
                   className="h-full bg-cyan-400 transition-all duration-300"
-                  style={{ width: `${stats.memoryPercent}%` }}
+                  style={{ width: `${stats.memoryPercent ?? 0}%` }}
                 />
               </div>
             </div>
@@ -1266,17 +1294,23 @@ export function AgentHub() {
             <div className="grid grid-cols-3 gap-2 pt-1 text-center">
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
                 <span className="text-[10px] text-gray-400 block">CPU</span>
-                <span className="text-xs font-bold text-white">{stats.cpuUsage}%</span>
+                <span className="text-xs font-bold text-white">{stats.cpuUsage != null ? `${stats.cpuUsage}%` : "—"}</span>
               </div>
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
                 <span className="text-[10px] text-gray-400 block">Memory</span>
-                <span className="text-xs font-bold text-white">{stats.memoryPercent}%</span>
+                <span className="text-xs font-bold text-white">{stats.memoryPercent != null ? `${stats.memoryPercent}%` : "—"}</span>
               </div>
               <div className="rounded-lg border border-[#14233D] bg-[#070D18] p-1.5">
                 <span className="text-[10px] text-gray-400 block">Disk</span>
                 <span className="block text-xs font-bold leading-tight text-white">
-                  {stats.diskUsedGB}/<wbr />
-                  {stats.diskTotalGB} GB
+                  {stats.diskUsedGB != null ? (
+                    <>
+                      {stats.diskUsedGB}/<wbr />
+                      {stats.diskTotalGB} GB
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </span>
               </div>
             </div>
@@ -1543,12 +1577,12 @@ export function AgentHub() {
             <div className="space-y-1 pt-1">
               <div className="flex justify-between text-[10px] text-gray-400">
                 <span>System Load</span>
-                <span>{stats.loadPercent}%</span>
+                <span>{stats.loadPercent != null ? `${stats.loadPercent}%` : "—"}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#070D18]">
                 <div
                   className="h-full bg-gradient-to-r from-cyan-400 to-blue-500"
-                  style={{ width: `${stats.loadPercent}%` }}
+                  style={{ width: `${stats.loadPercent ?? 0}%` }}
                 />
               </div>
             </div>
@@ -2672,5 +2706,31 @@ export function AgentHub() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Which brain the agent thinks with — a click opens Settings → Brain. */
+function BrainPill({ status }: { status: BrainStatus | null }) {
+  if (!status) return null;
+  const problem = status.configured ? status.lastError : null;
+  const look = !status.configured || problem
+    ? "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+    : "border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20";
+  const label = !status.configured ? "Add Gemini key" : problem ? "Gemini: problem" : status.modelLabel;
+  const title = !status.configured
+    ? "The agent needs a Gemini API key to think — add one in Settings → Brain (it's free)"
+    : problem
+      ? `${problem.message} (Settings → Brain)`
+      : `The agent thinks with ${status.modelLabel} — Settings → Brain`;
+  return (
+    <Link
+      to="/settings/brain"
+      title={title}
+      data-testid="brain-pill"
+      className={`hidden sm:flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold font-mono transition-colors ${look}`}
+    >
+      <Sparkles className="h-3 w-3" />
+      {label}
+    </Link>
   );
 }

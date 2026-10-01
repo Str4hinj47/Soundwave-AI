@@ -8,8 +8,10 @@
 // icon and the Ctrl+Shift+Space shortcut are set up, the mic button records →
 // the bundled whisper.cpp transcribes → the agent answers, the voice bar
 // window does the same when the shortcut is pressed while the app is in the
-// background, its turn shows up in the Command Center, and closing the window
-// keeps the app in the tray. Needs playwright-core (CI: npm i --no-save).
+// background, its turn shows up in the Command Center, Settings → Phone opens
+// the phone listener, Settings → Brain saves and tests a Gemini key (a fake
+// Gemini on loopback) and the chat is then answered through it, and closing
+// the window keeps the app in the tray. Needs playwright-core (CI: npm i --no-save).
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -74,12 +76,16 @@ try {
 fs.mkdirSync(shotsDir, { recursive: true });
 
 const { _electron: electron } = await import("playwright-core");
+// The agent's brain talks to a fake Gemini on loopback (no real key in CI).
+const { FAKE_HELLO, FAKE_KEY, startFakeGemini } = await import(new URL("./test/fake-gemini.mjs", import.meta.url).href);
+const fakeGemini = await startFakeGemini();
 
 console.log(`[e2e] launching ${exe}`);
 try {
   app = await electron.launch({
     executablePath: exe,
     args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${micFile}`],
+    env: { ...process.env, GEMINI_API_BASE: fakeGemini.url },
     timeout: 180_000,
   });
 } catch (err) {
@@ -200,7 +206,33 @@ try {
     await new Promise((r) => setTimeout(r, 300));
   }
   ok("Settings → Phone: turning it off closes the phone listener");
+
+  // ── 3c. Settings → Brain: paste a Gemini key, test it, chat with Gemini ───
+  await main.goto(`${appBase}/settings/brain`);
+  await main.waitForSelector('[data-testid="brain-key-input"]', { timeout: 30_000 });
+  await main.fill('[data-testid="brain-key-input"]', FAKE_KEY);
+  await main.click('[data-testid="brain-save"]');
+  await main.waitForSelector('[data-testid="brain-key-hint"]', { timeout: 30_000 });
+  const tested = (await main.textContent('[data-testid="brain-test-result"]').catch(() => "")) ?? "";
+  if (!/answered/.test(tested)) await fail(`Settings → Brain: the key test didn't pass ("${tested.trim()}")`);
+  const hint = (await main.textContent('[data-testid="brain-key-hint"]'))?.trim();
+  await main.screenshot({ path: path.join(shotsDir, "7-settings-brain.png"), timeout: 15_000 }).catch(() => console.log("[e2e] (Settings → Brain screenshot skipped)"));
+  ok(`Settings → Brain: key saved (${hint}) and tested — ${tested.trim()}`);
+
   await main.goto(`${appBase}/agent`);
+  await main.waitForSelector('[data-testid="brain-pill"]', { timeout: 30_000 });
+  const pill = (await main.textContent('[data-testid="brain-pill"]'))?.trim();
+  if (!/Gemini 3\.8 Flash/.test(pill ?? "")) await fail(`Command Center: the brain pill says "${pill}"`);
+  const question = "hello from the end-to-end test";
+  await main.fill('input[placeholder="Type a message..."]', question);
+  await main.press('input[placeholder="Type a message..."]', "Enter");
+  await main.waitForFunction((t) => document.body.innerText.includes(t), FAKE_HELLO, { timeout: 45_000 });
+  const asked = fakeGemini.seen.filter((r) => r.url?.endsWith(":generateContent")).at(-1);
+  const lastTurn = asked?.body?.contents?.at(-1)?.parts?.[0]?.text;
+  if (lastTurn !== question || asked?.key !== FAKE_KEY) await fail(`Gemini got "${lastTurn}" (key ${asked?.key === FAKE_KEY ? "ok" : "wrong"})`);
+  await main.screenshot({ path: path.join(shotsDir, "8-command-center-gemini.png"), timeout: 15_000 }).catch(() => {});
+  ok(`Command Center: "${pill}" pill; a typed message went to Gemini and its answer is in the chat`);
+  annotate("notice", "Desktop E2E: agent brain", `Settings → Brain saved the key (${hint}) and its test passed; the Command Center shows "${pill}" and the chat was answered by Gemini (fake, on loopback).`);
 
   // ── 4. Tray behaviour + notifications bridge ──────────────────────────────
   await app.evaluate(() => {

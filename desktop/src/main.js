@@ -501,6 +501,18 @@ async function main() {
   restrictPermissions();
   registerIpc();
 
+  // The agent's hands on this PC (server/src/lib/brain/pc.ts): it opens web
+  // pages in the default browser and Start menu shortcuts — http(s) only, the
+  // server checks before asking.
+  globalThis.__soundwaveDesktopHost = {
+    openExternal: (url) => {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("only web pages can be opened");
+      return shell.openExternal(parsed.toString());
+    },
+    openPath: (target) => shell.openPath(target),
+  };
+
   // Import the bundled server (ESM) — this starts listening on loopback.
   await import(pathToFileURL(path.join(appRoot, "server", "dist", "index.js")).href);
   serverStarted = true;

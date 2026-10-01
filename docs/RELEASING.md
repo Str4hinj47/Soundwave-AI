@@ -80,6 +80,21 @@ for a permanent key so updates install over each other; without them every
 build is signed with a one-off key. Details and the keytool command:
 [mobile/README.md](../mobile/README.md).
 
+## The agent's brain (Gemini) in the desktop app
+
+No Gemini key ships in the installer: each person pastes their own (free from
+Google AI Studio) in **Settings → Brain** (1.3.0+); it's stored in
+`%APPDATA%\Soundwave AI\data\brain.json`. `DESKTOP_APP=1` (set by
+`desktop/src/server-env.cjs`) enables that settings page and the agent's PC
+tools (open websites/apps, PC status); hosted builds use `GEMINI_API_KEY`.
+
+CI never calls the real Gemini API: the smoke test and the packaged-app E2E
+point the app at a fake Gemini on loopback (`GEMINI_API_BASE`,
+`desktop/test/fake-gemini.mjs`). They save and test a key, chat through it,
+run a real tool on the Windows runner (`get_pc_status`) and check the Start
+menu app lookup. The request format is pinned in `server/tests/brain.test.ts`
+(the same JSON the official `@google/genai` SDK sends).
+
 ## YouTube import (yt-dlp) in the desktop app
 
 YouTube changes regularly break older yt-dlp builds (e.g. "The page needs to

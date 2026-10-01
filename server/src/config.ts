@@ -86,6 +86,17 @@ export const config = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  // The desktop app (DESKTOP_APP=1, set by desktop/src/server-env.cjs): the
+  // server runs on the person's own PC, so the agent may open websites and
+  // apps here, and Settings → Brain can save a Gemini API key.
+  desktopApp: env.DESKTOP_APP === "1",
+  // Settings → Brain outside the desktop app (local development only).
+  brainSettingsAvailable: env.DESKTOP_APP === "1" || env.BRAIN_SETTINGS === "1",
+  // The agent's brain: Google Gemini (lib/brain). A key saved in Settings →
+  // Brain (DATA_DIR/brain.json) wins; these are for hosted/dev setups.
+  geminiApiKey: str("GEMINI_API_KEY", ""),
+  geminiModel: str("GEMINI_MODEL", ""),
+  geminiApiBase: str("GEMINI_API_BASE", "https://generativelanguage.googleapis.com").replace(/\/+$/, ""),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)

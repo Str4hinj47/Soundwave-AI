@@ -1,4 +1,4 @@
-import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck, AudioLines, Smartphone } from "lucide-react";
+import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck, AudioLines, Smartphone, Brain } from "lucide-react";
 import { Link } from "react-router-dom";
 
 /** Soundwave AI — Complete Documentation & Architecture Guide */
@@ -21,12 +21,23 @@ export function Help() {
           <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">Research-Backed Hooks:</strong> Built-in 2026 viral hooks (Did you know, Only 1% know, 3 mistakes, You're doing X wrong, Curiosity loop, Contrarian take).</li>
             <li><strong className="text-white">7 Proven Niches:</strong> Psychology & Dark Mind Tricks, Mind-Bending Facts, Untold History, Money & Wealth, AI & Future Tech, Deep Motivation, and Cosmic Horror.</li>
-            <li><strong className="text-white">1-Click Full Pipeline:</strong> Script generation → narration in your Soundwave voice → word-by-word captions → Orbital NCG gameplay background (imported via the YouTube link importer) → FFmpeg 9:16 render → instant download.</li>
+            <li><strong className="text-white">1-Click Full Pipeline:</strong> Script written by Gemini for your topic (or a built-in viral script without a key) → narration in your Soundwave voice → word-by-word captions → Orbital NCG gameplay background (imported via the YouTube link importer) → FFmpeg 9:16 render → instant download.</li>
             <li><strong className="text-white">Batch Mode:</strong> Single-click generation of all 7 niches simultaneously with automated export tracking.</li>
           </ul>
           <Link to="/agent" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white hover:from-cyan-400 hover:to-violet-500 shadow-md shadow-violet-500/20">
             <Bot className="h-4 w-4" /> Open the Command Center
           </Link>
+        </Section>
+
+        {/* The agent's brain */}
+        <Section icon={<Brain className="h-4 w-4" />} title="The Agent's Brain (Google Gemini)">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
+            <li><strong className="text-white">Add your own Gemini API key once:</strong> <Link to="/settings/brain" className="text-cyan-300 hover:text-cyan-200">Settings → Brain</Link>. It's free from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:text-cyan-200">Google AI Studio</a> — sign in, click "Create API key", paste it, press "Save &amp; test".</li>
+            <li><strong className="text-white">Then just talk to it:</strong> ask questions, brainstorm hooks and titles, or say "make a short about black holes for kids" — Gemini writes the short's script for that topic. "Show me my last video", "open YouTube", "open Spotify" and "how busy is my PC?" work too.</li>
+            <li><strong className="text-white">Honest about its limits:</strong> it only says it did something when it really did. It can't change volume, read your screen or files, or set timers yet — it tells you instead of pretending.</li>
+            <li><strong className="text-white">Free limits:</strong> Google's free tier allows a limited number of requests per day for each model. If they run out, the agent switches to a lighter Gemini model; you can also pick another model in Settings → Brain. Web search (live news, weather, prices) needs a key with billing turned on.</li>
+            <li><strong className="text-white">Privacy:</strong> your messages and the recent conversation go to Google's Gemini API with your key (on the free tier Google may use them to improve its products). The key stays on this PC. Without a key the agent still makes shorts, with built-in scripts.</li>
+          </ul>
         </Section>
 
         {/* How the agent renders */}

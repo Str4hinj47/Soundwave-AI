@@ -7,10 +7,12 @@ import { resolveYtDlpPath } from "../lib/ytdlp.js";
 import { getStore } from "../lib/store.js";
 import { ORBITAL_CHANNEL_URL, getOrbitalCatalog, getOrbitalStatus } from "../lib/orbitalBackground.js";
 import agentShortRouter, { VIRAL_SCRIPTS, generateScript, getActiveShortJobs, startShortJob } from "./agentShort.js";
-import { executeWorkflow, decomposeNaturalLanguage, listMacros } from "../lib/ghostOperator.js";
 import { DEFAULT_AGENT_VOICE, getVoiceHealth, normalizeVoiceId, streamEdgeTTS, synthesizeEdgeTTS } from "../lib/edgeTts.js";
 import { SttError, getSttStatus, transcribe } from "../lib/stt.js";
 import type { ChatReply } from "../lib/chatMessages.js";
+import { activeBrain } from "../lib/brain/settings.js";
+import { brainChat } from "../lib/brain/chat.js";
+import { GeminiError, describeGeminiError } from "../lib/brain/gemini.js";
 
 const router = Router();
 
@@ -142,9 +144,10 @@ const chatSchema = z
       .array(
         z.object({
           sender: z.enum(["user", "assistant", "system"]),
-          text: z.string(),
+          text: z.string().max(20_000),
         })
       )
+      .max(100)
       .optional()
       .default([]),
     /** Voice / resolution for shorts started from chat (the Hub passes its current picks). */
@@ -188,304 +191,177 @@ export interface AgentChatInput {
   voice?: string;
   resolution?: "720p" | "1080p";
   userId?: string;
+  /** Aborted when nobody is waiting for the answer any more. */
+  signal?: AbortSignal;
 }
 
 /**
  * The agent's answer to one message: POST /chat (Command Center, voice bar)
  * and the phone companion (lib/companion) both use it.
+ *
+ * With a Gemini API key (Settings → Brain) Gemini answers and acts through
+ * real tools (lib/brain). Without one — or when Gemini can't answer — the
+ * agent still makes shorts and finds videos, and says how to add a key.
  */
 export async function agentChat(input: AgentChatInput): Promise<ChatReply> {
-  const body = { voice: input.voice, resolution: input.resolution };
   const message = input.message.trim();
-  const history = input.history || [];
-  void history; // accepted for API compatibility; the rule-based agent doesn't use it yet
-  const qLower = message.toLowerCase().trim();
-  const userId = input.userId || "local-user";
-
-  // 1. "Generate a YT short" — checked first so topics like "morning
-  //    routines" or "focus" can't be hijacked by the macro triggers below.
-  //    Runs as a background job: pick an unused Orbital NCG video, paste its
-  //    link into the YouTube link importer, render. Progress streams via the job.
-  const shortRequest = parseShortRequest(message);
-  if (shortRequest) {
-    const { topic } = shortRequest;
-    const active = getActiveShortJobs()[0];
-    if (active) {
-      return {
-        success: true,
-        reply: `I'm still rendering the short about "${active.topic}" and will post it here when it's done. Ask me again for "${topic}" after that.`,
-        action: "soundwave_shorts",
-        status: "PROCESSING",
-        jobId: active.jobId,
-        topic: active.topic,
-        pollUrl: `/api/v1/export/jobs/${active.jobId}`,
-        eventsUrl: `/api/v1/export/jobs/${active.jobId}/events`,
-        tag: "AUDIO",
-      };
-    }
-
-    const exhausted = (st: ReturnType<typeof getOrbitalStatus>) => Boolean(st.catalogSize) && st.available === 0 && st.inProgress === 0;
-    let orbital = getOrbitalStatus();
-    if (exhausted(orbital)) {
-      // The saved channel list may be old — look for new Orbital uploads before saying no.
-      await getOrbitalCatalog({ force: true }).catch(() => undefined);
-      orbital = getOrbitalStatus();
-    }
-    if (exhausted(orbital)) {
-      return {
-        success: false,
-        reply: `I can't make a new short yet: all ${orbital.catalogSize} Orbital NCG videos (${ORBITAL_CHANNEL_URL}) have already been used as backgrounds. Reset the Orbital history in the Agent Hub and I'll start over.`,
-        action: "soundwave_shorts",
-        status: "FAILED",
-        error: "ORBITAL_EXHAUSTED",
-        tag: "AUDIO",
-      };
-    }
-
+  const brain = activeBrain();
+  if (brain) {
     try {
-      const { jobId } = await startShortJob({
-        topic,
-        voice: body.voice || "en-US-GuyNeural",
-        resolution: body.resolution || "720p",
-        userId,
-      });
-      return {
-        success: true,
-        reply: `On it! Generating a YouTube Short about "${topic}". For the background I'm picking an Orbital NCG video I haven't used before (${ORBITAL_CHANNEL_URL}) and pasting its link into the YouTube link importer. I'll post the finished short right here.`,
-        action: "soundwave_shorts",
-        status: "PROCESSING",
-        jobId,
-        topic,
-        pollUrl: `/api/v1/export/jobs/${jobId}`,
-        eventsUrl: `/api/v1/export/jobs/${jobId}/events`,
-        tag: "AUDIO",
-      };
-    } catch (shortErr) {
-      const reason = (shortErr as Error).message || "unknown error";
-      console.error("[agent/chat] could not start short generation:", shortErr);
-      return {
-        success: false,
-        reply: `I couldn't start the short about "${topic}": ${reason}`,
-        action: "soundwave_shorts",
-        status: "FAILED",
-        error: reason,
-        tag: "AUDIO",
-      };
+      return await brainChat({ ...input, message }, brain);
+    } catch (err) {
+      if (input.signal?.aborted) return { success: false, reply: "Cancelled.", tag: "SYS" };
+      const why = err instanceof GeminiError ? describeGeminiError(err, brain.model) : `Gemini didn't answer (${(err as Error).message}).`;
+      console.warn(`[brain] ${brain.model}: ${err instanceof GeminiError ? `${err.kind} — ${err.detail.split("\n")[0]}` : (err as Error).message}`);
+      return withoutBrain({ ...input, message }, why);
     }
   }
+  return withoutBrain({ ...input, message }, null);
+}
 
-  // 2. Ghost Operator Macros
-  if (qLower.includes("focus") && (qLower.includes("mode") || qLower.includes("pomodoro") || qLower.includes("deep"))) {
-    const macros = await listMacros(userId);
-    const m = macros.find((x) => x.id === "deep_focus_pomodoro") || macros[1]!;
-    const report = await executeWorkflow(m);
+/** Start a short from chat (no brain): one at a time, with an unused Orbital NCG background. */
+async function startShortFromChat(topic: string, input: AgentChatInput): Promise<ChatReply> {
+  const active = getActiveShortJobs()[0];
+  if (active) {
     return {
       success: true,
-      reply: `Activating Deep Focus Mode: windows minimized, alerts silenced, and 25-minute Pomodoro timer engaged.`,
-      action: "ghost_macro",
-      actionOutput: report.summary,
-      executionReport: report,
-      tag: "RPA",
+      reply: `I'm still rendering the short about "${active.topic}" and will post it here when it's done. Ask me again for "${topic}" after that.`,
+      action: "soundwave_shorts",
+      status: "PROCESSING",
+      jobId: active.jobId,
+      topic: active.topic,
+      pollUrl: `/api/v1/export/jobs/${active.jobId}`,
+      eventsUrl: `/api/v1/export/jobs/${active.jobId}/events`,
+      tag: "AUDIO",
     };
   }
 
-  if (qLower.includes("morning") || qLower.includes("start my day") || qLower.includes("creator setup") || qLower.includes("morning prep")) {
-    const macros = await listMacros(userId);
-    const m = macros.find((x) => x.id === "creator_morning_prep") || macros[0]!;
-    const report = await executeWorkflow(m);
+  const exhausted = (st: ReturnType<typeof getOrbitalStatus>) => Boolean(st.catalogSize) && st.available === 0 && st.inProgress === 0;
+  let orbital = getOrbitalStatus();
+  if (exhausted(orbital)) {
+    // The saved channel list may be old — look for new Orbital uploads before saying no.
+    await getOrbitalCatalog({ force: true }).catch(() => undefined);
+    orbital = getOrbitalStatus();
+  }
+  if (exhausted(orbital)) {
     return {
-      success: true,
-      reply: `Running Creator Workstation Setup: browser launched, volume adjusted to 75%, and hardware vitals checked.`,
-      action: "ghost_macro",
-      actionOutput: report.summary,
-      executionReport: report,
-      tag: "RPA",
+      success: false,
+      reply: `I can't make a new short yet: all ${orbital.catalogSize} Orbital NCG videos (${ORBITAL_CHANNEL_URL}) have already been used as backgrounds. Reset the Orbital history in the Agent Hub and I'll start over.`,
+      action: "soundwave_shorts",
+      status: "FAILED",
+      error: "ORBITAL_EXHAUSTED",
+      tag: "AUDIO",
     };
   }
 
-  if (qLower.includes("autopilot") || (qLower.includes("viral") && qLower.includes("macro"))) {
-    const macros = await listMacros(userId);
-    const m = macros.find((x) => x.id === "viral_production_autopilot") || macros[2]!;
-    const report = await executeWorkflow(m);
+  try {
+    const { jobId } = await startShortJob({
+      topic,
+      voice: input.voice || "en-US-GuyNeural",
+      resolution: input.resolution || "720p",
+      userId: input.userId || "local-user",
+    });
     return {
       success: true,
-      reply: `Engaging Viral Production Autopilot: generated hook, buffered to clipboard, and review alarm set.`,
-      action: "ghost_macro",
-      actionOutput: report.summary,
-      executionReport: report,
-      tag: "RPA",
+      reply: `On it! Generating a YouTube Short about "${topic}". For the background I'm picking an Orbital NCG video I haven't used before (${ORBITAL_CHANNEL_URL}) and pasting its link into the YouTube link importer. I'll post the finished short right here.`,
+      action: "soundwave_shorts",
+      status: "PROCESSING",
+      jobId,
+      topic,
+      pollUrl: `/api/v1/export/jobs/${jobId}`,
+      eventsUrl: `/api/v1/export/jobs/${jobId}/events`,
+      tag: "AUDIO",
     };
-  }
-
-  if (qLower.includes("diagnostic") || qLower.includes("health") || (qLower.includes("workspace") && qLower.includes("check"))) {
-    const macros = await listMacros(userId);
-    const m = macros.find((x) => x.id === "workspace_cleanup_diagnostics") || macros[3]!;
-    const report = await executeWorkflow(m);
+  } catch (shortErr) {
+    const reason = (shortErr as Error).message || "unknown error";
+    console.error("[agent/chat] could not start short generation:", shortErr);
     return {
-      success: true,
-      reply: `Workspace & Hardware Diagnostics complete: CPU healthy, memory optimal, and clipboard verified.`,
-      action: "ghost_macro",
-      actionOutput: report.summary,
-      executionReport: report,
-      tag: "RPA",
+      success: false,
+      reply: `I couldn't start the short about "${topic}": ${reason}`,
+      action: "soundwave_shorts",
+      status: "FAILED",
+      error: reason,
+      tag: "AUDIO",
     };
   }
+}
 
-  // 3. Chained Multi-Step Instructions
-  if (qLower.includes(" and ") || (qLower.includes(",") && (qLower.includes("open") || qLower.includes("mute") || qLower.includes("volume") || qLower.includes("stats")))) {
-    const steps = decomposeNaturalLanguage(message);
-    if (steps.length > 1) {
-      const report = await executeWorkflow({
-        id: `adhoc_${Date.now()}`,
-        name: message.slice(0, 35),
-        description: message,
-        category: "custom",
-        triggerPhrases: [message],
-        createdAt: new Date().toISOString(),
-        steps,
-      });
-      return {
-        success: true,
-        reply: `Executed multi-step automation: ${report.summary}`,
-        action: "ghost_macro",
-        actionOutput: report.stepResults.map((s) => `✓ ${s.description}: ${s.output}`).join("\n"),
-        tag: "RPA",
-      };
-    }
-  }
+const VIDEO_QUESTION = /\b(?:where(?:'s| is| can i)|find|show|play|watch|download|open|see)\b[\s\S]*\b(?:videos?|shorts?|it)\b|\b(?:my|the|last|latest) (?:video|short)\b|\bwhat video\b/i;
 
-  // 4. Computer Control & System Skills
-  if (qLower.startsWith("open ") || qLower.startsWith("launch ")) {
-    const appName = qLower.replace(/^(open|launch)\s+/, "").trim();
-    return {
-      success: true,
-      reply: `Opening application '${appName}'.`,
-      action: "open_app",
-      actionOutput: `Dispatched OS application launch for '${appName}'.`,
-      tag: "SYS",
-    };
-  }
+/**
+ * No brain (no key yet, or Gemini failed): only what needs no thinking —
+ * start a short, show the latest video — and an honest answer otherwise.
+ */
+async function withoutBrain(input: AgentChatInput, brainProblem: string | null): Promise<ChatReply> {
+  const message = input.message;
 
-  if (qLower.includes("stats") || qLower.includes("cpu") || qLower.includes("ram") || qLower.includes("vitals")) {
-    return {
-      success: true,
-      reply: `System Vitals: CPU load normal (18%), RAM 5.2GB / 16.0GB utilized, Audio DSP 48kHz Stereo operational.`,
-      action: "system_monitor",
-      actionOutput: `Host: Linux/Windows x64 | Load: Normal | Temp: Nominal`,
-      tag: "SYS",
-    };
-  }
+  // "Generate a YT short …": pick an unused Orbital NCG video, paste its link
+  // into the YouTube link importer, render. Progress streams via the job.
+  const shortRequest = parseShortRequest(message);
+  if (shortRequest) return startShortFromChat(shortRequest.topic, input);
 
-  if (qLower.includes("weather") || qLower.includes("temperature")) {
-    return {
-      success: true,
-      reply: `Current Weather for Belgrade: 19°C (66°F), Clear Skies, Humidity 45%, Wind 8 km/h. Ideal conditions.`,
-      action: "weather_report",
-      actionOutput: `Weather API: 19°C, Clear, Wind 8 km/h`,
-      tag: "SYS",
-    };
-  }
-
-  if (qLower.includes("mute")) {
-    return {
-      success: true,
-      reply: `Toggled master system volume mute state.`,
-      action: "computer_settings",
-      actionOutput: `Audio device mute toggled.`,
-      tag: "SYS",
-    };
-  }
-
-  if (qLower.includes("screen") || qLower.includes("vision") || qLower.includes("see") || qLower.includes("snapshot")) {
-    return {
-      success: true,
-      reply: `Captured primary display screenshot at 1920x1080. Visual OCR and frame analysis ready.`,
-      action: "screen_processor",
-      actionOutput: `Screen captured and stored in memory buffer.`,
-      tag: "SYS",
-    };
-  }
-
-  // 5. Video Inquiries & Retrieval ("where is my video", "download video", "what video did you make", etc.)
-  const isVideoInquiry =
-    qLower.includes("where is") ||
-    qLower.includes("where's") ||
-    qLower.includes("where can i") ||
-    qLower.includes("find the video") ||
-    qLower.includes("download") ||
-    qLower.includes("my video") ||
-    qLower.includes("the video") ||
-    qLower.includes("show me") ||
-    qLower.includes("what video");
-
-  if (isVideoInquiry && (qLower.includes("video") || qLower.includes("short") || qLower.includes("download") || qLower.includes("it"))) {
+  // "Where is my video?" — the newest finished short, with its player.
+  if (VIDEO_QUESTION.test(message)) {
     const store = await getStore();
-    const userJobs = await store.listJobs(userId);
-    const localJobs = userId !== "agent-local" ? await store.listJobs("agent-local") : [];
-    const allJobs = [...userJobs, ...localJobs];
-    const completed = allJobs.filter((j) => j.status === "COMPLETED");
-
-    if (completed.length > 0) {
-      const latest = completed[0]!;
-      const dlUrl = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
-      const topic = (latest.settings as any)?.topic || "Viral Short";
+    const userId = input.userId || "local-user";
+    const jobs = [...(await store.listJobs(userId)), ...(userId !== "agent-local" ? await store.listJobs("agent-local") : [])];
+    const latest = jobs
+      .filter((j) => j.status === "COMPLETED")
+      .sort((a, b) => Date.parse(b.completedAt ?? b.createdAt) - Date.parse(a.completedAt ?? a.createdAt))[0];
+    if (latest) {
+      const url = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
+      const topic = (latest.settings as { topic?: string } | null)?.topic || "your last short";
       return {
         success: true,
-        reply: `Here is your generated video! I found your finished 60fps 9:16 viral short for "${topic}". You can preview and download it directly using the player and button below.`,
+        reply: `Here's your latest short, about "${topic}". You can watch or download it below.`,
         action: "soundwave_shorts",
-        videoUrl: dlUrl,
-        downloadUrl: dlUrl,
-        tag: "AUDIO",
-      };
-    } else {
-      return {
-        success: true,
-        reply: `I don't see any rendered videos in your local export buffer yet. You can click "🎬 Make Short" or tell me "make a short about psychology", and I will generate and render one for you immediately!`,
-        action: "soundwave_shorts",
+        videoUrl: url,
+        downloadUrl: url,
         tag: "AUDIO",
       };
     }
+    return {
+      success: true,
+      reply: `There's no finished short yet. Press Generate, or tell me "make a short about …", and I'll make one.`,
+      action: "soundwave_shorts",
+      tag: "AUDIO",
+    };
   }
 
-  // 6. Intelligent Conversational Assistant Engine (handles all general questions, tech, scripts, advice, greetings)
-  let aiReply = "";
-
-  if (qLower.includes("hello") || qLower.includes("hi") || qLower.includes("hey") || qLower.includes("who are you")) {
-    aiReply = `Hello! I am Soundwave, your real-time autonomous voice AI and desktop assistant. I can execute 16 computer control actions, run multi-step Ghost Operator macros, generate 60fps viral shorts with TikTok captions, and control your workstation. What would you like to build or run today?`;
-  } else if (qLower.includes("hook") || qLower.includes("viral") || qLower.includes("script") || qLower.includes("short")) {
-    const topic = qLower.replace(/.*(hook|viral|script|short)\s*(about|for|on)?\s*/i, "").trim() || "Psychology";
-    const sample = generateScript(topic);
-    aiReply = `Here is a high-retention viral script for "${topic}":\n\n"${sample}"\n\nSay "make a short about ${topic}" (or click "Generate Short") and I'll render it into a finished 9:16 vertical video with animated subtitles over a fresh Orbital NCG gameplay background I haven't used before.`;
-  } else if (qLower.includes("focus") || qLower.includes("pomodoro") || qLower.includes("work")) {
-    aiReply = `For maximum cognitive flow, I recommend a 25-minute Deep Work sprint. Type "focus mode" or click the Deep Focus macro below, and I will minimize your distracting background windows, mute alerts, and engage your countdown timer.`;
-  } else if (qLower.includes("youtube") || qLower.includes("grow") || qLower.includes("algorithm")) {
-    aiReply = `The 2026 YouTube Shorts algorithm prioritizes three core metrics: 1) Initial 3-second hook retention (>75%), 2) Average percentage viewed (>100% via seamless loops), and 3) Repeat view ratios. Soundwave's built-in viral engine optimizes all three with high-contrast subtitles, curiosity loops, and kinetic background footage.`;
-  } else if (qLower.includes("how does") || qLower.includes("what is") || qLower.includes("explain")) {
-    aiReply = `Great question! In Soundwave's neural architecture, high-frequency audio spectrograms are computed in real-time using Web Audio FFT, while our backend leverages Microsoft Neural Edge TTS at 24kHz with word-boundary JSON timestamps for precise karaoke subtitle synchronization. Everything runs locally with zero mandatory external infrastructure.`;
-  } else {
-    aiReply = `I understand: "${message}". I have processed your input through my neural orchestrator. You can ask me to control your desktop, check system vitals, run automation workflows, or generate viral video content anytime!`;
+  if (brainProblem) {
+    return {
+      success: false,
+      reply: `${brainProblem} Meanwhile I can still make shorts — say "make a short about …" or press Generate.`,
+      error: brainProblem,
+      tag: "SYS",
+    };
   }
-
   return {
     success: true,
-    reply: aiReply,
-    executionReport: null,
-    tag: "VOICE",
+    reply:
+      'I need a Gemini API key before I can chat and answer questions. Add one in Settings → Brain — it\'s free from Google AI Studio and takes a minute. Until then I can still make shorts: say "make a short about …" or press Generate.',
+    needsBrain: true,
+    tag: "SYS",
   };
 }
 
 router.post("/chat", optionalAuth, validate({ body: chatSchema }), async (req, res, next) => {
+  // The window went away (reload, closed) before the answer: stop asking Gemini.
+  const controller = new AbortController();
+  res.on("close", () => {
+    if (!res.writableFinished) controller.abort();
+  });
   try {
     const body = req.body as z.infer<typeof chatSchema>;
-    res.json(
-      await agentChat({
-        message: body.message || body.prompt || "",
-        history: body.history,
-        voice: body.voice,
-        resolution: body.resolution,
-        userId: req.user?.id,
-      }),
-    );
+    const reply = await agentChat({
+      message: body.message || body.prompt || "",
+      history: body.history,
+      voice: body.voice,
+      resolution: body.resolution,
+      userId: req.user?.id,
+      signal: controller.signal,
+    });
+    if (!controller.signal.aborted) res.json(reply);
   } catch (e) {
     next(e);
   }

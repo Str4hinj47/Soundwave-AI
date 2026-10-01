@@ -27,6 +27,8 @@ import {
 } from "../lib/orbitalBackground.js";
 import { youtubeService } from "../lib/youtube.js";
 import { emitJob } from "./export.js";
+import { activeBrain } from "../lib/brain/settings.js";
+import { writeShortScript } from "../lib/brain/script.js";
 
 // ── Script templates for Soundwave Agent — VIRAL 2026 RESEARCH-BASED
 export const VIRAL_SCRIPTS: Record<string, string[]> = {
@@ -181,6 +183,8 @@ export interface ShortBackgroundInfo {
 export interface BuildShortOptions {
   topic: string;
   script?: string;
+  /** What the person asked for beyond the topic (an angle, facts, tone) — for the script writer. */
+  scriptBrief?: string;
   voice?: string;
   resolution?: "720p" | "1080p";
   userId?: string;
@@ -266,10 +270,29 @@ export async function buildShortVideo(params: BuildShortOptions): Promise<BuildS
   let orbitalMarkedUsed = false;
 
   try {
-    // 1. Script Generation (10% -> 22%)
-    await reportProgress(10, "Crafting viral script & opening hook...");
-    const script = params.script?.trim() || generateScript(params.topic);
-    await reportProgress(22, "Script crafted. Preparing neural narrator...");
+    // 1. Script (10% -> 22%): written by Gemini when a key is set (Settings →
+    //    Brain), otherwise — or if Gemini fails — the built-in template.
+    let script = params.script?.trim() || "";
+    let scriptSource: "provided" | "gemini" | "template" = "provided";
+    if (!script && activeBrain()) {
+      await reportProgress(10, "Writing the script with Gemini...");
+      try {
+        const written = await writeShortScript(params.topic, params.scriptBrief);
+        if (written) {
+          script = written.script;
+          scriptSource = "gemini";
+        }
+      } catch (err) {
+        console.warn(`[agentShort] Gemini couldn't write the script (${(err as Error).message}); using the template`);
+      }
+    }
+    if (!script) {
+      await reportProgress(12, "Crafting viral script & opening hook...");
+      script = generateScript(params.topic);
+      scriptSource = "template";
+    }
+    jobSettings = { ...jobSettings, script, scriptSource };
+    await reportProgress(22, "Script ready. Preparing neural narrator...");
 
     // 2. Voiceover Synthesis (28% -> 40%)
     stage = "voice";

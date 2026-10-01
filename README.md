@@ -50,6 +50,34 @@ nightly build each time the app starts (just restart the app if an import
 fails with a YouTube-side error), and it uses the app itself as the
 JavaScript runtime yt-dlp needs — no Node or Deno install required.
 
+## The agent's brain (Google Gemini)
+
+The agent thinks with **Google Gemini**, using your own API key (free from
+[Google AI Studio](https://aistudio.google.com/apikey)): paste it in
+**Settings → Brain** (desktop 1.3.0+) and press *Save & test*. The key is
+stored only on your PC (`%APPDATA%\Soundwave AI\data\brain.json`) and is
+never sent back to the app's pages.
+
+With a key, the agent talks for real (Command Center, voice bar and phone),
+writes each short's script for its topic, and acts through real tools only —
+it never claims something it didn't do:
+
+| Tool | What it really does |
+| --- | --- |
+| `make_youtube_short` | starts a short (unused Orbital NCG background, Gemini-written script) |
+| `get_short_progress`, `list_my_videos`, `show_video` | reads the real jobs; `show_video` puts the player in the chat |
+| `get_pc_status` | live CPU load, memory, disk, uptime of this PC |
+| `open_website` | opens an http(s) page in the default browser |
+| `open_app` | opens an app from the Windows Start menu (`Get-StartApps`) |
+| Google Search | live answers — only with a key that has billing (not on the free tier) |
+
+Default model: **Gemini 3.8 Flash** (thinking level *low*, for snappy spoken
+replies). If its free requests run out or it's overloaded, the agent retries
+once with **Gemini 3.5 Flash-Lite** (its own free quota) — never after an
+action already ran. Without a key the agent still makes shorts (with the
+built-in scripts) and tells you how to add one. Servers can set
+`GEMINI_API_KEY` / `GEMINI_MODEL` instead. Code: `server/src/lib/brain/`.
+
 ## Get the phone app (Android)
 
 CI builds **`SoundwaveCompanion-*.apk`** (the `soundwave-companion-apk`
@@ -327,6 +355,7 @@ OAuth identity; new OAuth users are created email-verified with no password.
 | Edge TTS (Microsoft) | unreachable | the agent shows why it can't speak (no robotic stand-in voice); a short fails with a clear message instead of being narrated by another voice |
 | Speech engine (whisper.cpp) | not in `vendor/whisper/` / `WHISPER_*` unset | `/agent/transcribe` answers 503 with the reason; the mic shows it; typing works |
 | Voice cloning | `VOICECLONE_URL` unset or sidecar down | `/tts/clone*` answers with a clear error; the Soundwave voices are unaffected |
+| Gemini (agent brain) | no key in Settings → Brain / `GEMINI_API_KEY` | the agent still makes shorts (built-in scripts) and finds videos; other chat answers explain how to add a key — nothing is made up |
 
 ### Voice cloning (OmniVoice)
 

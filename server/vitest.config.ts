@@ -15,6 +15,12 @@ export default defineConfig({
       VOICECLONE_TOKEN: "",
       JWT_ACCESS_SECRET: "test-access-secret-for-vitest",
       JWT_REFRESH_SECRET: "test-refresh-secret-for-vitest",
+      // No real Gemini calls from tests (tests/brain.test.ts runs a fake one).
+      GEMINI_API_KEY: "",
+      GEMINI_MODEL: "",
+      GEMINI_API_BASE: "http://127.0.0.1:9",
+      DESKTOP_APP: "",
+      BRAIN_SETTINGS: "",
     },
     // Each test file gets an isolated store file.
     fileParallelism: false,

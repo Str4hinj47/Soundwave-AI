@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
+  Brain,
   CheckCircle2,
   CreditCard,
   Database,
@@ -43,9 +44,11 @@ import {
 import { getDesktop, hotkeyLabel, type DesktopSettings, type DesktopState } from "../lib/desktop";
 import { notifyUser } from "../lib/notify";
 import { PhoneTab } from "./settings/PhoneTab";
+import { BrainTab } from "./settings/BrainTab";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
+  { id: "brain", label: "Brain", icon: <Brain className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "preferences", label: "Preferences", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "voice", label: "Voice & Desktop", icon: <Mic className="h-4 w-4" /> },
@@ -56,7 +59,9 @@ export function Settings() {
   const location = useLocation();
   const navigate = useNavigate();
   const { refreshQuota } = useAuth();
-  const active = location.pathname.includes("/billing")
+  const active = location.pathname.includes("/brain")
+    ? "brain"
+    : location.pathname.includes("/billing")
     ? "billing"
     : location.pathname.includes("/preferences")
       ? "preferences"
@@ -73,7 +78,7 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-3xl font-bold text-white">Settings</h1>
-      <p className="mt-1 text-sm text-gray-400">Manage your account, billing, and preferences.</p>
+      <p className="mt-1 text-sm text-gray-400">Manage your account, the agent's brain, billing, and preferences.</p>
 
       <div className="mt-6 flex gap-1 overflow-x-auto rounded-card border border-gray-800 bg-gray-900/60 p-1" role="tablist">
         {TABS.map((t) => (
@@ -95,6 +100,7 @@ export function Settings() {
 
       <div className="mt-6 space-y-5">
         {active === "profile" && <ProfileTab />}
+        {active === "brain" && <BrainTab />}
         {active === "billing" && <BillingTab />}
         {active === "preferences" && <PreferencesTab />}
         {active === "voice" && <VoiceDesktopTab />}
