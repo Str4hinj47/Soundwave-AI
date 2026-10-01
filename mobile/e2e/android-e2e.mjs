@@ -98,7 +98,16 @@ async function say(page, text, re, timeout = 45_000) {
 
 const userText = (request) => (request?.body?.contents?.at(-1)?.parts ?? []).map((p) => p.text ?? "").join("");
 
+/** What the app shows right now, in one line (for the annotations — CI screenshots aren't always at hand). */
+const screenText = async (page) =>
+  page
+    ? clean(await page.evaluate(() => document.body.innerText).catch((e) => `(page unavailable: ${e.message})`))
+        .replace(/\s+/g, " ")
+        .slice(0, 400)
+    : "(no page)";
+
 let device;
+let page;
 try {
   if (!APK || !fs.existsSync(APK)) throw new Error(`COMPANION_APK not found: ${APK}`);
   console.log(adb("install", "-r", "-g", APK).trim());
@@ -114,13 +123,23 @@ try {
   console.log(`pairing link: ${link.replace(/c=[^&]+/, "c=…")}`);
 
   // Pair the way the system camera would: open the soundwave:// link.
-  adb("shell", `am start -W -a android.intent.action.VIEW -d '${link}' ${PKG}`);
+  const openLink = () => adb("shell", `am start -W -a android.intent.action.VIEW -d '${link}' ${PKG}`);
+  openLink();
   [device] = await android.devices({ omitDriverInstall: true });
   if (!device) throw new Error("no Android device visible to Playwright");
-  let page = await attach(device);
+  page = await attach(device);
   const ua = await page.evaluate(() => navigator.userAgent);
   const webviewVersion = /Chrome\/([\d.]+)/.exec(ua)?.[1] ?? "unknown";
-  await page.waitForSelector('[data-testid="chat"]', { timeout: 90_000 });
+  try {
+    await page.waitForSelector('[data-testid="chat"]', { timeout: 60_000 });
+  } catch {
+    // Not paired after a minute: record what the phone shows, then hand it the link once more.
+    annotate("warning", "Phone app E2E", `not paired 60 s after opening the link — the screen says: ${await screenText(page)}`);
+    screenshot("0-not-paired-yet");
+    openLink();
+    await page.waitForSelector('[data-testid="chat"]', { timeout: 60_000 });
+    annotate("warning", "Phone app E2E", "paired after the link was opened a second time");
+  }
   await bodyHas(page, /Connected to/, 60_000);
   const paired = (await pc("/api/v1/companion")).devices;
   ok(`paired from the soundwave:// link and connected (WebView ${webviewVersion}); the PC lists it as "${paired[0]?.name}" (${paired[0]?.model ?? "?"})`);
@@ -228,6 +247,7 @@ try {
   screenshot("7-after-restart");
 } catch (err) {
   fail(`stopped: ${err.message}`);
+  annotate("error", "Phone app E2E", `the screen at that moment: ${await screenText(page)}`);
   screenshot("zz-failure");
 } finally {
   try {
