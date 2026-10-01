@@ -176,6 +176,9 @@ try {
   annotate("notice", "Desktop E2E: voice bar", `Heard "${barHeard}". Voice bar now shows: ${barText.slice(0, 200)}`);
 
   // ── 3b. Settings → Phone: the pairing QR in the real window ──────────────
+  // (The voice bar test sent the main window to the background: hidden windows
+  // don't paint, so bring it back before looking at it.)
+  await app.evaluate(() => globalThis.__soundwaveShell.mainWindow().show());
   const appBase = new URL(main.url()).origin;
   await main.goto(`${appBase}/settings/phone`);
   const phoneToggle = 'button[role="switch"][aria-label="Let my phone connect"]';
@@ -184,7 +187,7 @@ try {
   await main.waitForSelector('[data-testid="pairing-qr"] svg, [data-testid="no-network"]', { timeout: 30_000 });
   const phone = await main.evaluate(async () => (await fetch("/api/v1/companion")).json());
   if (!phone.listening) await fail(`Settings → Phone: phone access is on but the listener didn't open (${phone.error})`);
-  await main.screenshot({ path: path.join(shotsDir, "6-settings-phone.png") });
+  await main.screenshot({ path: path.join(shotsDir, "6-settings-phone.png"), timeout: 15_000 }).catch(() => console.log("[e2e] (Settings → Phone screenshot skipped)"));
   ok(`Settings → Phone: listening on port ${phone.port}, pairing code ${phone.pairing?.code ?? "(this PC has no network address)"}`);
   annotate(
     "notice",

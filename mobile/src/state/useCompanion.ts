@@ -66,7 +66,8 @@ export function useCompanion(): Companion {
       const [r, c, s] = await Promise.all([storage.loadPairing(), storage.loadConversation(), storage.loadSettings()]);
       setSettings(s);
       if (r && c) setConversation(c);
-      setRecord(r);
+      // A soundwave:// link may have paired already while this loaded: keep that.
+      setRecord((prev) => (prev === undefined ? r : prev));
     })();
   }, []);
 
