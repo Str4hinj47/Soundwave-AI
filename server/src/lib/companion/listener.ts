@@ -201,7 +201,7 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
     const voice = normalizeVoiceId(args.voice || getConversation().voice);
     let reply: ChatReply;
     try {
-      reply = await agentChat({ message, history, voice, resolution: args.resolution === "1080p" ? "1080p" : "720p", userId: "local-user" });
+      reply = await agentChat({ message, history, voice, resolution: args.resolution === "1080p" ? "1080p" : "720p", userId: "local-user", via: "phone" });
     } catch (err) {
       console.error("[companion] agent failed:", err);
       reply = { success: false, reply: `I couldn't process "${message}" just now: ${(err as Error).message}`, tag: "SYS" };

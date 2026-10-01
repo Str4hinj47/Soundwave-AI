@@ -74,7 +74,11 @@ turn it off again.
 
 The phone app itself is built by `.github/workflows/android-companion.yml`
 (artifact `soundwave-companion-apk`) and tested on an Android 15 emulator
-against the real server. Signing: add the repository secrets
+against the real server, set up like the desktop app (`DESKTOP_APP=1`) with a
+stand-in Gemini (`desktop/test/fake-gemini.mjs --port 4100`): without a key
+the agent tells the phone to add one; after the key is saved through
+Settings → Brain's API, Gemini answers the phone and runs a PC tool for it.
+Signing: add the repository secrets
 `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` (/ `ANDROID_KEY_ALIAS`)
 for a permanent key so updates install over each other; without them every
 build is signed with a one-off key. Details and the keytool command:

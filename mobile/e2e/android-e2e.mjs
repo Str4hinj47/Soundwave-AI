@@ -1,16 +1,19 @@
 // End-to-end test of the phone app on a real Android emulator (CI).
 // The PC side is the real Soundwave server running on the CI machine with the
-// phone companion on; the emulator reaches it at 10.0.2.2. Playwright attaches
-// to the app's WebView (debug build) and drives it like a person would.
+// phone companion on; the emulator reaches it at 10.0.2.2. Its "Gemini" is the
+// stand-in from desktop/test/fake-gemini.mjs (GEMINI_API_BASE). Playwright
+// attaches to the app's WebView (debug build) and drives it like a person would.
 //
-//   COMPANION_APK=…/app-debug.apk  PC_URL=http://127.0.0.1:4000  node mobile/e2e/android-e2e.mjs
+//   COMPANION_APK=…/app-debug.apk  PC_URL=http://127.0.0.1:4000  FAKE_GEMINI_URL=http://127.0.0.1:4100  node mobile/e2e/android-e2e.mjs
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { _android as android } from "playwright-core";
+import { FAKE_HELLO, FAKE_KEY } from "../../desktop/test/fake-gemini.mjs";
 
 const PKG = "ai.soundwave.companion";
 const PC = process.env.PC_URL || "http://127.0.0.1:4000";
+const GEMINI = process.env.FAKE_GEMINI_URL || "http://127.0.0.1:4100";
 const APK = process.env.COMPANION_APK;
 const SHOTS = path.resolve(process.env.SHOTS_DIR || "mobile/e2e-shots");
 const ADB = process.env.ANDROID_HOME ? path.join(process.env.ANDROID_HOME, "platform-tools", "adb") : "adb";
@@ -74,6 +77,27 @@ async function attach(device, { notPid = null } = {}) {
 const bodyHas = (page, re, timeout = 45_000) =>
   page.waitForFunction((src) => new RegExp(src, "i").test(document.body.innerText), re.source, { timeout, polling: 300 });
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const firstLine = (s) => (s.split("\n").find((l) => l.length > 20) ?? s).slice(0, 110);
+
+/** Type a message on the phone, send it, and wait for the agent's answer (matching `re`). */
+async function say(page, text, re, timeout = 45_000) {
+  const before = await page.$$eval('[data-testid="msg-agent"]', (els) => els.length);
+  await page.fill('[data-testid="composer-input"]', text);
+  await page.click('[data-testid="send-button"]');
+  await page.waitForFunction(
+    ({ n, src }) => {
+      const els = [...document.querySelectorAll('[data-testid="msg-agent"]')];
+      return els.length > n && new RegExp(src, "i").test(els.at(-1).innerText);
+    },
+    { n: before, src: re.source },
+    { timeout, polling: 300 },
+  );
+  return page.$$eval('[data-testid="msg-agent"]', (els) => els.at(-1)?.innerText ?? "");
+}
+
+const userText = (request) => (request?.body?.contents?.at(-1)?.parts ?? []).map((p) => p.text ?? "").join("");
+
 let device;
 try {
   if (!APK || !fs.existsSync(APK)) throw new Error(`COMPANION_APK not found: ${APK}`);
@@ -108,15 +132,37 @@ try {
   if (!env.secure || !env.subtle) fail(`WebView isn't a secure context (${JSON.stringify(env)})`);
   else ok(`app page ${env.origin} is a secure context with Web Crypto`);
 
-  // Phone → agent.
-  await page.fill('[data-testid="composer-input"]', "hello from the Android emulator");
-  await page.click('[data-testid="send-button"]');
-  await page.waitForFunction(() => document.querySelectorAll('[data-testid="msg-agent"]').length > 0, null, { timeout: 45_000 });
-  const reply = await page.$$eval('[data-testid="msg-agent"]', (els) => els.at(-1)?.innerText ?? "");
-  ok(`sent a message over the encrypted channel; the agent answered: "${reply.split("\n").find((l) => l.length > 20)?.slice(0, 90)}…"`);
+  // Phone → agent, before the PC has a Gemini key: the agent says where to add one.
+  const noKey = await say(page, "hello from the Android emulator", /Gemini API key/);
+  ok(`sent a message over the encrypted channel; no Gemini key on the PC yet, so the agent says: "${firstLine(noKey)}…"`);
   const onPc = (await pc("/api/v1/companion/conversation")).messages.find((m) => m.text === "hello from the Android emulator");
   if (onPc?.via === "phone") ok("the message is in the PC's conversation, marked as sent from the phone");
   else fail("the phone's message isn't in the PC's conversation");
+
+  // The PC gets a key (what Settings → Brain → Save does). Nothing changes on the phone.
+  const brain = await pc("/api/v1/brain", { apiKey: FAKE_KEY }, "PUT");
+  if (!brain.configured) throw new Error(`Settings → Brain didn't take the key: ${JSON.stringify(brain).slice(0, 200)}`);
+  ok(`Settings → Brain on the PC: key saved (${brain.keyHint}), model ${brain.model}`);
+
+  // Now Gemini answers the phone…
+  const hello = await say(page, "hi again, from my phone", new RegExp(escapeRe(FAKE_HELLO)));
+  ok(`Gemini answered the phone: "${firstLine(hello)}"`);
+  // …and the agent's tools work from it: a PC status check (function call → runs on the PC → answer).
+  const pcReport = await say(page, "how is my pc doing?", /Your PC runs .+ CPU cores/);
+  ok(`a tool round trip from the phone (get_pc_status ran on the PC): "${firstLine(pcReport)}"`);
+  await sleep(800);
+  screenshot("2-gemini");
+
+  // What Gemini got: the phone's words with the key, the note that they came
+  // from the phone, and the PC status result under the call's id.
+  const calls = (await (await fetch(`${GEMINI}/_fake/requests`)).json()).filter((r) => /:generateContent$/.test(r.url ?? ""));
+  const asked = calls.find((r) => userText(r) === "how is my pc doing?");
+  const result = calls.map((r) => r.body?.contents?.at(-1)?.parts?.find((p) => p.functionResponse)?.functionResponse).find((f) => f?.name === "get_pc_status");
+  const instruction = asked?.body?.systemInstruction?.parts?.[0]?.text ?? "";
+  if (!asked || asked.key !== FAKE_KEY) fail(`Gemini didn't get the phone's message with the key (${calls.length} calls: ${calls.map(userText).join(" | ").slice(0, 300)})`);
+  else if (!/sent from the Soundwave phone app/.test(instruction)) fail("Gemini wasn't told the message came from the phone");
+  else if (result?.id !== "pc-status-1" || typeof result?.response?.os !== "string") fail(`the PC status didn't go back to Gemini under the call's id (${JSON.stringify(result).slice(0, 200)})`);
+  else ok(`Gemini got the phone's messages with the key and the note that they came from the phone, and the PC status (${result.response.os}) under the call's id — ${calls.length} Gemini calls`);
 
   // PC → phone (the Command Center pushes a message; the phone's long-poll brings it).
   const pushedAt = Date.now();
@@ -124,7 +170,7 @@ try {
   await bodyHas(page, /Typed in the Command Center during CI/, 30_000);
   ok(`a message typed on the PC reached the phone in ${Date.now() - pushedAt} ms (long-poll)`);
   await sleep(800);
-  screenshot("2-conversation");
+  screenshot("3-conversation");
 
   // The keyboard must not cover the message box.
   const before = await page.evaluate(() => window.innerHeight);
@@ -136,7 +182,7 @@ try {
     return { innerHeight: window.innerHeight, bottom: r.bottom, top: r.top };
   });
   if (ime === "true") {
-    screenshot("3-keyboard");
+    screenshot("4-keyboard");
     if (layout.innerHeight < before && layout.bottom <= layout.innerHeight && layout.top >= 0) {
       ok(`keyboard open: the page shrank from ${before}px to ${layout.innerHeight}px and the message box stays visible`);
     } else {
@@ -152,7 +198,7 @@ try {
   await page.click('[data-testid="settings-button"]');
   await bodyHas(page, /Read replies aloud/);
   await sleep(900);
-  screenshot("4-settings");
+  screenshot("5-settings");
   adb("shell", "input keyevent 4"); // Android back closes the sheet
   await page.waitForFunction(() => !/Read replies aloud/.test(document.body.innerText), null, { timeout: 10_000 });
   ok("Android back button closes the settings sheet");
@@ -161,7 +207,7 @@ try {
   await pc("/api/v1/companion/enabled", { enabled: false });
   await page.waitForSelector('[data-testid="offline-banner"]', { timeout: 60_000 });
   await sleep(600);
-  screenshot("5-offline");
+  screenshot("6-offline");
   ok('shows "Can\'t reach" when the PC stops listening');
   await pc("/api/v1/companion/enabled", { enabled: true });
   await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Try now/.test(b.textContent ?? ""))?.click());
@@ -179,7 +225,7 @@ try {
   await bodyHas(page, /Connected to/, 60_000);
   ok("after a restart the app is still paired and shows the conversation");
   await sleep(1000);
-  screenshot("6-after-restart");
+  screenshot("7-after-restart");
 } catch (err) {
   fail(`stopped: ${err.message}`);
   screenshot("zz-failure");

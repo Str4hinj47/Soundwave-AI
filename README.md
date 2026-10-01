@@ -91,6 +91,10 @@ emulator against the real PC server. To use it:
    allow Soundwave AI on private networks — allow it).
 4. In the app: **Scan QR code**. Done — the phone remembers the PC.
 
+The phone uses the PC's brain: once a Gemini key is saved in **Settings →
+Brain** on the PC, the agent answers the phone with Gemini too — nothing to
+set up on the phone. Web pages and apps it opens appear on the PC.
+
 It only works while Soundwave AI is running on the PC, and the phone must be
 on the same network (or on a VPN such as Tailscale with the PC — the pairing
 code includes VPN addresses). See [mobile/README.md](mobile/README.md) for how

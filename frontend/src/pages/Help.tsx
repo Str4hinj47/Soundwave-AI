@@ -66,6 +66,7 @@ export function Help() {
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">The Soundwave phone app (Android)</strong> is a remote for the agent on this PC: type or talk, start shorts, watch them when they're done. It's the same conversation as the Command Center — messages from the phone are marked <em>YOU (PHONE)</em>.</li>
             <li><strong className="text-white">Pair once:</strong> <Link to="/settings/phone" className="text-cyan-300 hover:text-cyan-200">Settings → Phone</Link> → turn on "Let my phone connect", then tap <em>Scan QR code</em> in the app. No camera? Choose <em>Enter code</em> and type the address and code shown under the QR code.</li>
+            <li><strong className="text-white">Same brain:</strong> the phone is answered by the agent on this PC, with your Gemini key from <Link to="/settings/brain" className="text-cyan-300 hover:text-cyan-200">Settings → Brain</Link> — nothing to set up on the phone. Web pages and apps it opens appear on this PC.</li>
             <li><strong className="text-white">Works while Soundwave AI runs here</strong> (the tray counts) and the phone is on the same Wi-Fi. If Windows asks whether Soundwave AI may use your network, allow it for private networks.</li>
             <li><strong className="text-white">Private:</strong> the phone talks straight to this PC, end-to-end encrypted with a key set up from the QR code — nothing goes through the internet. Remove a phone any time in Settings → Phone.</li>
           </ul>

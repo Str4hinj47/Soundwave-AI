@@ -193,6 +193,8 @@ export interface AgentChatInput {
   userId?: string;
   /** Aborted when nobody is waiting for the answer any more. */
   signal?: AbortSignal;
+  /** Sent from the phone app (lib/companion). */
+  via?: "phone";
 }
 
 /**
@@ -310,13 +312,15 @@ async function withoutBrain(input: AgentChatInput, brainProblem: string | null):
       .sort((a, b) => Date.parse(b.completedAt ?? b.createdAt) - Date.parse(a.completedAt ?? a.createdAt))[0];
     if (latest) {
       const url = latest.outputUrl || `/api/v1/export/jobs/${latest.id}/download`;
-      const topic = (latest.settings as { topic?: string } | null)?.topic || "your last short";
+      const named = (latest.settings as { topic?: string } | null)?.topic;
+      const topic = named || "your last short";
       return {
         success: true,
         reply: `Here's your latest short, about "${topic}". You can watch or download it below.`,
         action: "soundwave_shorts",
         videoUrl: url,
         downloadUrl: url,
+        ...(named ? { topic: named } : {}),
         tag: "AUDIO",
       };
     }

@@ -317,6 +317,36 @@ describe("Chat answered by Gemini", () => {
     expect(res.body.reply).toBe("On it — I'm making a short about “the moon”. It'll show up here when it's rendered.");
   });
 
+  it("retries a busy Gemini only within the phone's 45-second wait", async () => {
+    const { brainChat, TURN_BUDGET_MS } = await import("../src/lib/brain/chat.js");
+    const brain = { provider: "gemini" as const, apiKey: KEY, source: "settings" as const, model: "gemini-3.8-flash", thinking: "low" as const, webSearch: false };
+    let clock = Date.now();
+    const realNow = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      // Busy after 20 s: the one retry only gets what's left of the turn.
+      const timeouts: number[] = [];
+      const busyOnce = vi.fn(async (args: { timeoutMs?: number }) => {
+        timeouts.push(args.timeoutMs!);
+        if (timeouts.length > 1) return { candidates: [{ content: { role: "model", parts: [{ text: "Back again." }] }, finishReason: "STOP" }] };
+        clock += 20_000;
+        throw new gemini.GeminiError("overloaded", "The model is overloaded. Please try again later.");
+      });
+      const reply = await brainChat({ message: "hi", via: "phone" }, brain, { generate: busyOnce as never, now: () => new Date(clock), tools: [] });
+      expect(reply.reply).toBe("Back again.");
+      expect(timeouts).toEqual([30_000, TURN_BUDGET_MS - 20_000 - 700]);
+
+      // Connection dropped after 38 s: a retry couldn't finish in time, so none — the agent explains instead.
+      const dropped = vi.fn(async () => {
+        clock += 38_000;
+        throw new gemini.GeminiError("network", "ECONNRESET");
+      });
+      await expect(brainChat({ message: "hi", via: "phone" }, brain, { generate: dropped as never, now: () => new Date(clock), tools: [] })).rejects.toMatchObject({ kind: "network" });
+      expect(dropped).toHaveBeenCalledTimes(1);
+    } finally {
+      realNow.mockRestore();
+    }
+  });
+
   it("explains a bad key", async () => {
     fake.queue.push(googleError(400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key.", [{ reason: "API_KEY_INVALID" }]));
     const res = await chat("hey");
@@ -497,6 +527,16 @@ describe("brain helpers", () => {
     expect(deep.generationConfig).toEqual({ maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: "HIGH" } });
     expect(deep.tools).toEqual([{ googleSearch: {} }]);
     expect(deep.toolConfig).toBeUndefined(); // only needed next to our own functions
+  });
+
+  it("tells Gemini when a message came from the phone", () => {
+    const desktop = prompt.agentInstruction({ tools: ["make_youtube_short", "open_website", "open_app"], webSearch: false, fromPhone: true });
+    expect(desktop).toMatch(/sent from the Soundwave phone app/);
+    expect(desktop).toMatch(/appear on the PC, not on the phone — say "on your PC"/);
+    const noPcTools = prompt.agentInstruction({ tools: ["make_youtube_short"], webSearch: false, fromPhone: true });
+    expect(noPcTools).toMatch(/sent from the Soundwave phone app/);
+    expect(noPcTools).not.toMatch(/on your PC/);
+    expect(prompt.agentInstruction({ tools: ["make_youtube_short", "open_website"], webSearch: false })).not.toMatch(/phone app, so the user/);
   });
 
   it("makes replies plain text", () => {

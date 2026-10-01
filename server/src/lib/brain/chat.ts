@@ -31,6 +31,8 @@ export interface BrainChatInput {
   resolution?: "720p" | "1080p";
   userId?: string;
   signal?: AbortSignal;
+  /** Sent from the phone app (Gemini is told; its tools still act on the PC). */
+  via?: "phone";
 }
 
 export interface BrainDeps {
@@ -47,8 +49,11 @@ const MAX_STEPS = 6;
 export const HISTORY_MESSAGES = 24;
 const MAX_MESSAGE_CHARS = 4000;
 /** The whole turn, tools included — the phone app waits up to 45 s for the answer. */
-const TURN_BUDGET_MS = 42_000;
+export const TURN_BUDGET_MS = 42_000;
 const CALL_TIMEOUT_MS = 30_000;
+/** No new Gemini call (or retry) with less time than this left in the turn. */
+const MIN_CALL_MS = 5_000;
+const RETRY_DELAY_MS = 700;
 
 // ── Conversation → Gemini contents ──────────────────────────────────────────
 
@@ -120,13 +125,16 @@ function fallbackText(effects: ToolEffects, finish: string): string {
   return "Sorry — Gemini didn't give me an answer that time. Try asking again.";
 }
 
-async function generateWithRetry(deps: BrainDeps, args: Parameters<typeof generateContent>[0]): Promise<GenerateResponse> {
+/** One call, retried once when Google is busy or the connection hiccuped — if the retry still fits in the turn. */
+async function generateWithRetry(deps: BrainDeps, args: Parameters<typeof generateContent>[0], deadline: number): Promise<GenerateResponse> {
   try {
     return await deps.generate(args);
   } catch (err) {
     if (err instanceof GeminiError && (err.kind === "overloaded" || err.kind === "network")) {
-      await new Promise((r) => setTimeout(r, 700));
-      return deps.generate(args);
+      const left = deadline - Date.now() - RETRY_DELAY_MS;
+      if (left < MIN_CALL_MS) throw err;
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      return deps.generate({ ...args, timeoutMs: Math.min(args.timeoutMs ?? CALL_TIMEOUT_MS, left) });
     }
     throw err;
   }
@@ -147,6 +155,8 @@ export async function brainChat(input: BrainChatInput, brain: ActiveBrain, deps:
   const declarations = tools.map((t) => t.declaration);
   const initial = contentsFor(input.history, input.message);
   const started = Date.now();
+  const deadline = started + TURN_BUDGET_MS;
+  const fromPhone = input.via === "phone";
 
   let contents: GeminiContent[] = structuredClone(initial);
   let model = brain.model;
@@ -161,19 +171,23 @@ export async function brainChat(input: BrainChatInput, brain: ActiveBrain, deps:
   let answered = false;
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const remaining = TURN_BUDGET_MS - (Date.now() - started);
-    if (remaining < 5_000) break;
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_CALL_MS) break;
     const request = buildRequest(contents, {
       model,
       thinking: brain.thinking,
       declarations,
       search,
-      instruction: agentInstruction({ tools: declarations.map((d) => d.name), webSearch: search, now: deps.now() }),
+      instruction: agentInstruction({ tools: declarations.map((d) => d.name), webSearch: search, now: deps.now(), fromPhone }),
     });
 
     let resp: GenerateResponse;
     try {
-      resp = await generateWithRetry(deps, { apiKey: brain.apiKey, model, request, signal: input.signal, timeoutMs: Math.min(CALL_TIMEOUT_MS, remaining) });
+      resp = await generateWithRetry(
+        deps,
+        { apiKey: brain.apiKey, model, request, signal: input.signal, timeoutMs: Math.min(CALL_TIMEOUT_MS, remaining) },
+        deadline,
+      );
     } catch (err) {
       if (!(err instanceof GeminiError)) throw err;
       if (search && searchRefused(err)) {

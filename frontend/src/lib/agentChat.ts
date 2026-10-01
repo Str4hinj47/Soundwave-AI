@@ -177,6 +177,8 @@ export function replyToMessage(data: ChatReply, query: string): ChatMessage {
     time: chatTime(),
     at: Date.now(),
     tag: data.tag || (data.action === "ghost_macro" ? "RPA" : "VOICE"),
+    // A finished short shown in the chat: its name (the phone's player shows it).
+    ...(videoLink && data.topic ? { topic: data.topic } : {}),
     ...(started ? { jobId: data.jobId, jobState: "started" as const, topic: data.topic || query } : {}),
   };
 }

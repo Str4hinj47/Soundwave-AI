@@ -5,6 +5,8 @@ export interface InstructionOptions {
   tools: string[];
   webSearch: boolean;
   now?: Date;
+  /** The message was sent from the phone app (lib/companion). */
+  fromPhone?: boolean;
 }
 
 function localNow(now: Date): string {
@@ -42,6 +44,17 @@ export function agentInstruction(opts: InstructionOptions): string {
     ? "- For anything current or that you aren't sure of (news, weather, prices, scores, recent releases), use Google Search, and say briefly where the answer came from."
     : `- You can't search the web. For live information (weather, news, prices, scores) say you can't check it from here${has("open_website") ? " and offer to open a Google search in the browser" : ""}.`;
 
+  // From the phone the person may be in another room: what the tools open
+  // appears on the PC's screen, not in their hand.
+  const phone = opts.fromPhone
+    ? [
+        "",
+        `This message was sent from the Soundwave phone app, so the user may not be at the PC.${
+          has("open_website") || has("open_app") ? " Web pages and apps you open appear on the PC, not on the phone — say \"on your PC\" when you open something." : ""
+        } Finished shorts in this chat can also be watched on the phone (its Watch button).`,
+      ]
+    : [];
+
   return [
     "You are Soundwave, the AI assistant inside the Soundwave AI app on the user's PC. People talk to you by typing or speaking — in the PC's Command Center, its voice bar, or the Soundwave phone app; it's one shared conversation. Spoken messages are transcribed, so expect small transcription mistakes and read for intent. Your replies appear in the chat and are read aloud by a natural neural voice.",
     "",
@@ -56,6 +69,7 @@ export function agentInstruction(opts: InstructionOptions): string {
     "What you can do:",
     ...can,
     `- You can't (yet): ${cannot}. If asked, say so plainly.`,
+    ...phone,
     "",
     `Right now it is ${localNow(opts.now ?? new Date())}.`,
   ].join("\n");

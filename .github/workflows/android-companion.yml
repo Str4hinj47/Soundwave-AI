@@ -1,9 +1,11 @@
 name: Android Companion
 
 # Builds the Soundwave phone app (mobile/) into an APK, then runs it on an
-# Android emulator against the real PC server (the phone companion on) and
-# drives it end to end. The APK is uploaded as the `soundwave-companion-apk`
-# artifact (a test build — nothing is published).
+# Android emulator against the real PC server (the phone companion on, set up
+# like the desktop app) and drives it end to end — including chat answered by
+# Gemini (a stand-in on the CI machine: desktop/test/fake-gemini.mjs). The APK
+# is uploaded as the `soundwave-companion-apk` artifact (a test build —
+# nothing is published).
 #
 # Signing: with the repository secrets ANDROID_KEYSTORE_BASE64 (+ _PASSWORD,
 # optional ANDROID_KEY_ALIAS) every build is signed with that permanent key,
@@ -27,6 +29,7 @@ on:
       - "server/src/lib/chatMessages.ts"
       - "server/src/routes/companion.ts"
       - "server/src/routes/agent.ts"
+      - "desktop/test/fake-gemini.mjs"
       - ".github/workflows/android-companion.yml"
     tags: ["companion-v*"]
   workflow_dispatch:
@@ -175,6 +178,10 @@ jobs:
         working-directory: server
         env:
           COMPANION: "1"
+          # Like the desktop app: Settings → Brain and the agent's PC tools.
+          DESKTOP_APP: "1"
+          # "Gemini" is a stand-in on this machine; the test saves its key in Settings → Brain.
+          GEMINI_API_BASE: http://127.0.0.1:4100
           # The emulator reaches this machine at 10.0.2.2 — put it in the pairing code.
           COMPANION_HOSTS: 10.0.2.2
           BIND_HOST: 0.0.0.0
@@ -186,8 +193,10 @@ jobs:
         # Install/build with dev dependencies (NODE_ENV=production would make
         # npm skip them, and tsc fail); only the server itself runs in production mode.
         run: |
+          nohup node ../desktop/test/fake-gemini.mjs --port 4100 > "$RUNNER_TEMP/fake-gemini.log" 2>&1 &
           npm ci
           npm run build
+          curl -sf -o /dev/null http://127.0.0.1:4100/_fake/requests || { echo "the fake Gemini didn't start"; cat "$RUNNER_TEMP/fake-gemini.log"; exit 1; }
           NODE_ENV=production nohup node dist/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:4000/api/health >/dev/null && break; sleep 1; done
           curl -sf -o "$RUNNER_TEMP/companion.json" http://127.0.0.1:4000/api/v1/companion
@@ -201,6 +210,7 @@ jobs:
         env:
           COMPANION_APK: ${{ runner.temp }}/apk/app-debug.apk
           PC_URL: http://127.0.0.1:4000
+          FAKE_GEMINI_URL: http://127.0.0.1:4100
           SHOTS_DIR: mobile/e2e-shots
         with:
           api-level: 35
@@ -214,7 +224,9 @@ jobs:
 
       - name: PC server log
         if: always()
-        run: tail -n 80 "$RUNNER_TEMP/server.log" || true
+        run: |
+          tail -n 80 "$RUNNER_TEMP/server.log" || true
+          tail -n 5 "$RUNNER_TEMP/fake-gemini.log" || true
 
       - name: Upload emulator screenshots
         if: always()
