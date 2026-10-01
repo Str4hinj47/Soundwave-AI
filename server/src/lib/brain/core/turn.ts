@@ -257,7 +257,7 @@ const MAX_MESSAGE_CHARS = 4000;
 export function contentsFor(history: HistoryMessage[] | undefined, message: string): GeminiContent[] {
   const contents: GeminiContent[] = [];
   const add = (role: GeminiContent["role"], text: string) => {
-    const last = contents.at(-1);
+    const last = contents[contents.length - 1];
     if (last && last.role === role) last.parts[0]!.text = `${last.parts[0]!.text}\n\n${text}`;
     else contents.push({ role, parts: [{ text }] });
   };
@@ -270,7 +270,7 @@ export function contentsFor(history: HistoryMessage[] | undefined, message: stri
   while (contents[0]?.role === "model") contents.shift();
   // An earlier message that never got an answer stays separate from the new one
   // (merging "make a short about cats" into a new question could re-run it).
-  if (contents.at(-1)?.role === "user") contents.push({ role: "model", parts: [{ text: "(no reply)" }] });
+  if (contents[contents.length - 1]?.role === "user") contents.push({ role: "model", parts: [{ text: "(no reply)" }] });
   contents.push({ role: "user", parts: [{ text: message.trim().slice(0, MAX_MESSAGE_CHARS) }] });
   return contents;
 }

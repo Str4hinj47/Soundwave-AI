@@ -33,6 +33,9 @@ const listener = await import("../src/lib/companion/listener.js");
 const conversation = await import("../src/lib/conversation.js");
 const phone = await import("../../mobile/src/lib/protocol.js");
 const { CompanionClient, pairWithPc } = await import("../../mobile/src/lib/client.js");
+const offline = await import("../../mobile/src/lib/offline.js");
+const memory = await import("../src/lib/memory.js");
+const morning = await import("../src/lib/morning.js");
 
 // ── A fake Gemini API ───────────────────────────────────────────────────────
 
@@ -107,10 +110,11 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const f of ["companion.json", "agent-conversation.json"]) fs.rmSync(path.join(DATA, f), { force: true });
+  for (const f of ["companion.json", "agent-conversation.json", "morning.json"]) fs.rmSync(path.join(DATA, f), { force: true });
   service.resetCompanionStateForTests();
   conversation.resetConversationForTests();
   settings.resetBrainSettingsForTests();
+  memory.resetMemoryForTests();
   fake.seen.length = 0;
   fake.queue.length = 0;
   mocks.startShortJob.mockClear();
@@ -268,5 +272,110 @@ describe("the phone app, with Gemini as the agent's brain", () => {
     const res = await request(app).post("/api/v1/agent/chat").send({ message: "typed in the Command Center" });
     expect(res.body.reply).toBe("Hi from the PC chat.");
     expect(instructionOf(generateCalls()[0]!)).not.toMatch(/phone app, so the user/);
+  });
+});
+
+describe("when the PC is off, the phone chats on its own", () => {
+  it("gets the brain kit and the memory while it's connected — and loses the key when sharing is turned off", async () => {
+    await saveKeyOnPc();
+    memory.addNote("The user's channel is about space facts");
+    const client = await pairedClient();
+    expect(client.pc!.brain).toMatchObject({ phoneChat: true, modelLabel: "Gemini 3.8 Flash" });
+
+    const kit = await client.fetchKit();
+    expect(kit).toMatchObject({ enabled: true, apiKey: KEY, model: "gemini-3.8-flash", fallbackModel: "gemini-3.5-flash-lite", thinking: "low", apiBase: fake.url });
+
+    const snapshots: Array<{ notes: Array<{ text: string }> }> = [];
+    client.on("memory", (m) => snapshots.push(m));
+    await client.sync();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]!.notes.map((n) => n.text)).toEqual(["The user's channel is about space facts"]);
+    await client.sync();
+    expect(snapshots).toHaveLength(1); // unchanged memory isn't sent again
+
+    const off = await request(app).post("/api/v1/companion/share-brain").set("Host", "127.0.0.1").send({ enabled: false });
+    expect(off.body.shareBrain).toBe(false);
+    const revs: string[] = [];
+    client.on("kitRev", (r) => revs.push(r));
+    await client.sync();
+    expect(revs).toEqual(["sharing_off"]);
+    expect(await client.fetchKit()).toEqual({ enabled: false, reason: "sharing_off", rev: "sharing_off" });
+  });
+
+  it("answers on the phone with the PC off, and it all goes back to the PC's conversation and memory", async () => {
+    await saveKeyOnPc();
+    memory.addNote("The user's channel is about space facts");
+    const client = await pairedClient();
+    const kit = await client.fetchKit();
+    if (!kit.enabled) throw new Error("no kit");
+    let snapshot: Parameters<typeof offline.effectiveMemory>[0] = null;
+    client.on("memory", (m) => (snapshot = m));
+    await client.sync();
+    const port = listener.listenerState().port!;
+
+    // The PC goes away.
+    await listener.stopListener();
+    await expect(client.send("are you there?")).rejects.toMatchObject({ code: "OFFLINE" });
+
+    // The phone answers by itself (Gemini directly, with the PC's memory).
+    fake.queue.push(call("remember", { note: "The user wants a short about volcanoes tomorrow." }, "r1"), text("Noted! Volcanoes tomorrow — I'll remember."));
+    const ops: Parameters<typeof offline.effectiveMemory>[1] = [];
+    const now = Date.now();
+    const reply = await offline.offlineReply({
+      kit,
+      memory: offline.effectiveMemory(snapshot, []),
+      history: conversation.getConversation().messages.map((m) => ({ sender: m.sender, text: m.text })),
+      message: "remind me tomorrow: volcanoes short",
+      record: (op) => ops.push(op),
+    });
+    expect(reply.text).toBe("Noted! Volcanoes tomorrow — I'll remember.");
+    const asked = generateCalls()[0]!;
+    expect(asked.key).toBe(KEY);
+    expect(instructionOf(asked)).toMatch(/your PC is off or out of reach|PC is off or out of reach/);
+    expect(instructionOf(asked)).toMatch(/The user's channel is about space facts/);
+
+    const outbox = {
+      messages: [
+        { id: `${now}-ph0001`, sender: "user" as const, text: "remind me tomorrow: volcanoes short", time: "", at: now, via: "phone" as const },
+        { id: `${now + 1}-ph0002`, sender: "assistant" as const, text: reply.text, time: "", at: now + 1, tag: "VOICE" as const, answeredBy: "phone" as const },
+      ],
+      memoryOps: ops,
+    };
+
+    // The PC is back: the phone hands over what was said, before syncing.
+    service.setEnabledFlag(true);
+    await listener.startListener({ host: "127.0.0.1", port });
+    client.setOutbox(() => outbox);
+    const flushed: unknown[] = [];
+    client.on("flushed", (b) => flushed.push(b));
+    expect(await client.connect()).toBe(true);
+    const { merged } = await client.merge(outbox);
+    expect(merged).toBe(2);
+    expect(flushed).toHaveLength(1);
+
+    const shared = conversation.getConversation().messages;
+    expect(shared.find((m) => m.id === `${now}-ph0001`)).toMatchObject({ via: "phone", text: "remind me tomorrow: volcanoes short" });
+    expect(shared.find((m) => m.id === `${now + 1}-ph0002`)).toMatchObject({ answeredBy: "phone", text: "Noted! Volcanoes tomorrow — I'll remember." });
+    expect(memory.memoryNotes().map((n) => [n.text, n.from])).toContainEqual(["The user wants a short about volcanoes tomorrow.", "phone"]);
+
+    // The PC's agent knows it next time.
+    fake.queue.push(text("Yes — volcanoes today, as you asked from your phone."));
+    await request(app).post("/api/v1/agent/chat").send({ message: "what was I going to make today?", history: shared.map((m) => ({ sender: m.sender, text: m.text })) });
+    const pcAsked = generateCalls().at(-1)!;
+    expect(JSON.stringify(pcAsked.body.contents)).toMatch(/remind me tomorrow: volcanoes short/);
+    expect(instructionOf(pcAsked)).toMatch(/The user wants a short about volcanoes tomorrow\./);
+  });
+
+  it("runs Morning Setup on the PC when the phone asks while it's on", async () => {
+    await saveKeyOnPc();
+    morning.saveMorningSettings({ items: [] }); // nothing to open in tests
+    const client = await pairedClient();
+    fake.queue.push(text("Good morning! Here's your day…"));
+    const reply = await client.morning();
+    expect(reply).toMatchObject({ sender: "assistant", text: "Good morning! Here's your day…", tag: "SYS" });
+    const shared = conversation.getConversation().messages;
+    expect(shared.at(-2)).toMatchObject({ sender: "user", text: "🌅 Morning Setup", via: "phone" });
+    expect(generateCalls()[0]!.body.contents[0].parts[0].text).toMatch(/^Now: \w+day/);
+    expect(memory.lastMorningAt()).toBeGreaterThan(Date.now() - 5000);
   });
 });

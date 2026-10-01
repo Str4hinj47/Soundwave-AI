@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Laptop, Lock, Play, Unlink } from "lucide-react";
+import { Brain, Check, Laptop, Lock, Play, Unlink } from "lucide-react";
 import { VOICE_META } from "../../../frontend/src/lib/voices";
 import type { Companion } from "../state/useCompanion";
 import type { SpeakMode } from "../lib/storage";
@@ -12,6 +12,31 @@ const SPEAK_MODES: Array<{ id: SpeakMode; label: string }> = [
   { id: "always", label: "Always" },
   { id: "never", label: "Never" },
 ];
+
+function phoneChatLine(companion: Companion): { title: string; detail: string; ok: boolean } {
+  const chat = companion.phoneChat;
+  if (chat.ready) {
+    const notes = companion.memory?.notes.length ?? 0;
+    const synced = companion.memory ? new Date(companion.memory.takenAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : null;
+    return {
+      ok: true,
+      title: `Ready — ${chat.modelLabel}`,
+      detail: `When the PC is off, Gemini answers right here with your conversation and the agent's memory${synced ? ` (${notes} note${notes === 1 ? "" : "s"}, from ${synced})` : ""}.${
+        companion.pendingForPc ? ` ${companion.pendingForPc} thing${companion.pendingForPc === 1 ? "" : "s"} will sync to the PC when it's back.` : ""
+      }`,
+    };
+  }
+  switch (chat.reason) {
+    case "sharing_off":
+      return { ok: false, title: "Off on the PC", detail: "Turn on “Chat from the phone when this PC is off” in Soundwave AI → Settings → Phone." };
+    case "no_key":
+      return { ok: false, title: "Needs a Gemini key", detail: "Add your free Gemini key in Soundwave AI → Settings → Brain on the PC." };
+    case "old_pc":
+      return { ok: false, title: "Update the PC app", detail: "Soundwave AI 1.4 or newer on the PC lets the phone chat while the PC is off." };
+    default:
+      return { ok: false, title: "Not set up yet", detail: "Connect to your PC once and it's set up automatically." };
+  }
+}
 
 export function SettingsSheet({ open, onClose, companion }: { open: boolean; onClose: () => void; companion: Companion }) {
   const { record, pc, state, settings, updateSettings } = companion;
@@ -42,6 +67,24 @@ export function SettingsSheet({ open, onClose, companion }: { open: boolean; onC
         <p className="mt-3 flex items-center gap-1.5 text-[12px] text-gray-500">
           <Lock className="h-3.5 w-3.5 text-emerald-400" /> End-to-end encrypted · paired {new Date(record.pairedAt).toLocaleDateString()}
         </p>
+      </section>
+
+      <section className="mt-6" data-testid="phone-chat-status">
+        <h3 className="px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-gray-500">Chat without the PC</h3>
+        {(() => {
+          const line = phoneChatLine(companion);
+          return (
+            <div className="mt-2 flex items-start gap-3 rounded-3xl border border-line bg-navy/60 p-4">
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", line.ok ? "bg-violet-500/15 text-violet-300" : "bg-white/[0.06] text-gray-400")}>
+                <Brain className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className={cn("text-[15px] font-semibold", line.ok ? "text-violet-100" : "text-gray-200")}>{line.title}</p>
+                <p className="mt-0.5 text-[13px] leading-snug text-gray-400">{line.detail}</p>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       <section className="mt-6">
@@ -119,7 +162,7 @@ export function SettingsSheet({ open, onClose, companion }: { open: boolean; onC
         )}
       </section>
 
-      <p className="mt-6 text-center text-[12px] text-gray-600">Soundwave companion {APP_VERSION} · works while Soundwave AI runs on your PC</p>
+      <p className="mt-6 text-center text-[12px] text-gray-600">Soundwave companion {APP_VERSION} · the full agent while Soundwave AI runs on your PC, chat when it's off</p>
     </Sheet>
   );
 }

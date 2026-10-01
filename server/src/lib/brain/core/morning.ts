@@ -95,7 +95,8 @@ export function weatherWords(code: unknown): string {
 /** "Europe/Belgrade" → "Belgrade" (the default weather city). */
 export function cityFromTimeZone(tz: string | undefined | null): string | null {
   if (!tz || !tz.includes("/") || /^(Etc|UTC|GMT)\b/i.test(tz)) return null;
-  const last = tz.split("/").at(-1)!.replace(/_/g, " ").trim();
+  const segments = tz.split("/");
+  const last = (segments[segments.length - 1] ?? "").replace(/_/g, " ").trim();
   return last && !/^GMT|^UTC/i.test(last) ? last : null;
 }
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2, Mic, Monitor, Play, Volume2, Youtube } from "lucide-react";
+import { Loader2, Mic, Monitor, Play, Smartphone, Volume2, Youtube } from "lucide-react";
 import type { ChatMessage, JobSnapshot } from "../lib/client";
 import { cn } from "./ui";
 
@@ -94,6 +94,11 @@ export function MessageBubble({
       <div className={cn("mt-1 flex items-center gap-1.5 px-1.5 text-[11px] text-gray-500", mine && "flex-row-reverse")}>
         <span>{messageTime(m)}</span>
         {m.viaVoice && <Mic className="h-3 w-3" aria-label="Said out loud" />}
+        {m.answeredBy === "phone" && (
+          <span className="flex items-center gap-0.5 text-violet-300/80" data-testid="answered-on-phone">
+            <Smartphone className="h-3 w-3" /> on phone
+          </span>
+        )}
         {!mine && (
           <button type="button" onClick={() => onSpeak(m)} aria-label="Read aloud" className="-m-2 p-2 text-gray-500 active:text-cyan-300">
             <Volume2 className="h-3.5 w-3.5" />

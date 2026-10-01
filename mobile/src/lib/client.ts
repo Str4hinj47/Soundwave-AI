@@ -5,6 +5,7 @@
 // (src/state/useCompanion.ts) and the server's tests drive it directly.
 
 import type { ChatMessage } from "../../../frontend/src/lib/agentChat";
+import type { KitResult, MemoryOp, MemorySnapshot } from "./offline";
 import {
   aad,
   baseUrlFor,
@@ -48,6 +49,15 @@ export interface PcInfo {
   voiceInput: { available: boolean; reason: string | null };
   /** The agent's voice picked on the PC. */
   voice: string | null;
+  /** Chatting while the PC is off (Soundwave AI 1.4+): allowed, and which kit is current. */
+  brain?: { phoneChat: boolean; modelLabel?: string; reason?: "sharing_off" | "no_key"; kitRev: string };
+  memoryRev?: string | null;
+}
+
+/** Said on the phone while the PC was off — sent to the PC when it's back. */
+export interface Outbox {
+  messages: ChatMessage[];
+  memoryOps: MemoryOp[];
 }
 
 export interface Conversation {
@@ -248,6 +258,12 @@ export interface ClientEvents {
   pc: (info: PcInfo) => void;
   /** The pairing record changed (the PC was found at a new address). */
   record: (r: PairingRecord) => void;
+  /** The PC's memory changed (notes, summary, shorts). */
+  memory: (m: MemorySnapshot) => void;
+  /** The PC's brain kit changed (key, model, sharing turned on/off) — fetch it with fetchKit(). */
+  kitRev: (rev: string) => void;
+  /** Offline messages reached the PC. */
+  flushed: (sent: Outbox) => void;
 }
 
 type Listeners = { [K in keyof ClientEvents]: Set<ClientEvents[K]> };
@@ -267,13 +283,33 @@ export class CompanionClient {
   private loopAbort: AbortController | null = null;
   private wake: (() => void) | null = null;
   private failures = 0;
-  private listeners: Listeners = { state: new Set(), conversation: new Set(), jobs: new Set(), pc: new Set(), record: new Set() };
+  private listeners: Listeners = {
+    state: new Set(),
+    conversation: new Set(),
+    jobs: new Set(),
+    pc: new Set(),
+    record: new Set(),
+    memory: new Set(),
+    kitRev: new Set(),
+    flushed: new Set(),
+  };
+  /** The memory snapshot the phone has (sync sends a new one when it changed). */
+  memoryRev: string | null = null;
+  kitRev: string | null = null;
+  private outbox: () => Outbox | null = () => null;
 
-  constructor(record: PairingRecord, opts: { fetch?: FetchLike; conversation?: Conversation | null } = {}) {
+  constructor(record: PairingRecord, opts: { fetch?: FetchLike; conversation?: Conversation | null; memoryRev?: string | null; kitRev?: string | null } = {}) {
     this.record = record;
     this.fetchFn = opts.fetch ?? fetch.bind(globalThis);
     this.keys = deriveDeviceKeys(fromBase64(record.deviceKey), record.deviceId);
     this.conversation = opts.conversation ?? null;
+    this.memoryRev = opts.memoryRev ?? null;
+    this.kitRev = opts.kitRev ?? null;
+  }
+
+  /** Where offline messages wait; they're sent before the first sync after reconnecting. */
+  setOutbox(provider: () => Outbox | null): void {
+    this.outbox = provider;
   }
 
   on<K extends keyof ClientEvents>(event: K, fn: ClientEvents[K]): () => void {
@@ -316,7 +352,7 @@ export class CompanionClient {
     this.rememberHost(found.baseUrl);
     try {
       const { result } = await this.rpc<PcInfo & { time: number }>("hello", {}, { signal });
-      this.pc = { pcName: result.pcName, voiceInput: result.voiceInput, voice: result.voice };
+      this.pc = { pcName: result.pcName, voiceInput: result.voiceInput, voice: result.voice, ...(result.brain ? { brain: result.brain } : {}), memoryRev: result.memoryRev ?? null };
       if (result.pcName && result.pcName !== this.record.pcName) {
         this.record = { ...this.record, pcName: result.pcName };
         this.emit("record", this.record);
@@ -416,11 +452,28 @@ export class CompanionClient {
     }
   }
 
-  private applySync(r: { epoch: string; rev: number; messages?: ChatMessage[]; jobs?: JobSnapshot[]; voice?: string | null }): void {
+  private applySync(r: {
+    epoch: string;
+    rev: number;
+    messages?: ChatMessage[];
+    jobs?: JobSnapshot[];
+    voice?: string | null;
+    memory?: MemorySnapshot | null;
+    memoryRev?: string | null;
+    kitRev?: string;
+  }): void {
     if (r.messages) {
-      this.conversation = { epoch: r.epoch, rev: r.rev, messages: r.messages };
+      // Anything still waiting in the outbox stays visible until the PC has it.
+      const waiting = (this.outbox()?.messages ?? []).filter((m) => !r.messages!.some((x) => x.id === m.id));
+      const messages = waiting.length ? [...r.messages, ...waiting].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)) : r.messages;
+      this.conversation = { epoch: r.epoch, rev: r.rev, messages };
       this.emit("conversation", this.conversation);
     }
+    if (r.memory && r.memory.rev !== this.memoryRev) {
+      this.memoryRev = r.memory.rev;
+      this.emit("memory", r.memory);
+    }
+    if (typeof r.kitRev === "string" && r.kitRev !== this.kitRev) this.emit("kitRev", r.kitRev);
     this.jobs = r.jobs ?? [];
     this.emit("jobs", this.jobs);
     if (this.pc && r.voice !== undefined && r.voice !== this.pc.voice) {
@@ -432,12 +485,56 @@ export class CompanionClient {
   /** Fetch news now (`wait`: hold until something changes, ≤ 20 s). */
   async sync(wait = false, signal?: AbortSignal): Promise<void> {
     const c = this.conversation;
-    const { result } = await this.rpc<{ epoch: string; rev: number; messages?: ChatMessage[]; jobs?: JobSnapshot[]; voice?: string | null }>(
-      "sync",
-      { epoch: c?.epoch ?? "", rev: c?.rev ?? -1, wait },
-      { timeoutMs: wait ? SYNC_TIMEOUT_MS : RPC_TIMEOUT_MS, signal },
-    );
+    const { result } = await this.rpc<{
+      epoch: string;
+      rev: number;
+      messages?: ChatMessage[];
+      jobs?: JobSnapshot[];
+      voice?: string | null;
+      memory?: MemorySnapshot | null;
+      memoryRev?: string | null;
+      kitRev?: string;
+    }>("sync", { epoch: c?.epoch ?? "", rev: c?.rev ?? -1, wait, memoryRev: this.memoryRev ?? "" }, { timeoutMs: wait ? SYNC_TIMEOUT_MS : RPC_TIMEOUT_MS, signal });
     this.applySync(result);
+  }
+
+  /** The Gemini key and settings for chatting while the PC is off (or why not). */
+  async fetchKit(signal?: AbortSignal): Promise<KitResult> {
+    const { result } = await this.rpc<KitResult>("brain.kit", {}, { signal });
+    this.kitRev = result.rev;
+    return result;
+  }
+
+  /** Sends what was said while the PC was off; the PC answers with the whole conversation. */
+  async merge(outbox: Outbox, signal?: AbortSignal): Promise<{ merged: number }> {
+    const { result } = await this.rpc<{ epoch: string; rev: number; messages: ChatMessage[]; merged: number; memory?: MemorySnapshot | null; memoryRev?: string | null }>(
+      "merge",
+      { messages: outbox.messages, memoryOps: outbox.memoryOps },
+      { timeoutMs: 30_000, signal },
+    );
+    this.emit("flushed", outbox);
+    this.applySync({ ...result, jobs: this.jobs });
+    return { merged: result.merged };
+  }
+
+  /** "🌅 Morning Setup" through the PC (it opens the morning items there). */
+  async morning(): Promise<ChatMessage> {
+    const { result } = await this.rpc<{ epoch: string; rev: number; messages: ChatMessage[]; reply: ChatMessage }>("morning", {}, { timeoutMs: 75_000 });
+    this.applySync({ ...result, jobs: this.jobs });
+    this.poke();
+    return result.reply;
+  }
+
+  /** Before the first sync after (re)connecting: hand over what was said offline. */
+  private async flushOutbox(signal?: AbortSignal): Promise<void> {
+    const box = this.outbox();
+    if (!box || (!box.messages.length && !box.memoryOps.length)) return;
+    try {
+      await this.merge(box, signal);
+    } catch (err) {
+      // An older Soundwave AI on the PC can't take them: keep them, keep syncing.
+      if ((err as CompanionError).code !== "UNKNOWN_OP") throw err;
+    }
   }
 
   /** Say something to the agent. Returns the agent's reply message. */
@@ -548,6 +645,7 @@ export class CompanionClient {
       }
       this.loopAbort = new AbortController();
       try {
+        await this.flushOutbox(this.loopAbort.signal);
         const waiting = this.jobs.length === 0;
         await this.sync(waiting, this.loopAbort.signal);
         if (!waiting) await this.sleep(2000);

@@ -1,13 +1,27 @@
 // ── What the app remembers (Capacitor Preferences = app-private storage) ────
 
 import { Preferences } from "@capacitor/preferences";
-import { decodeRecord, encodeRecord, type Conversation, type PairingRecord } from "./client";
+import { decodeRecord, encodeRecord, type Conversation, type Outbox, type PairingRecord } from "./client";
+import type { MemorySnapshot, PhoneKit } from "./offline";
 
 const KEYS = {
   pairing: "soundwave.pairing",
   conversation: "soundwave.conversation",
   settings: "soundwave.settings",
+  // Chatting while the PC is off: the PC's Gemini key + settings, its memory, and what's waiting to go back.
+  kit: "soundwave.kit",
+  memory: "soundwave.memory",
+  outbox: "soundwave.outbox",
 };
+
+function parse<T>(raw: string | null, ok: (v: unknown) => boolean): T | null {
+  try {
+    const v = JSON.parse(raw ?? "null") as unknown;
+    return v !== null && ok(v) ? (v as T) : null;
+  } catch {
+    return null;
+  }
+}
 
 export type SpeakMode = "voice" | "always" | "never";
 
@@ -69,8 +83,26 @@ export const storage = {
   saveSettings(s: AppSettings): Promise<void> {
     return set(KEYS.settings, JSON.stringify(s));
   },
-  /** "Unpair": forget the PC and everything from it. */
+  async loadKit(): Promise<PhoneKit | null> {
+    return parse<PhoneKit>(await get(KEYS.kit), (v) => (v as PhoneKit).enabled === true && typeof (v as PhoneKit).apiKey === "string");
+  },
+  saveKit(kit: PhoneKit | null): Promise<void> {
+    return set(KEYS.kit, kit ? JSON.stringify(kit) : null);
+  },
+  async loadMemory(): Promise<MemorySnapshot | null> {
+    return parse<MemorySnapshot>(await get(KEYS.memory), (v) => Array.isArray((v as MemorySnapshot).notes) && typeof (v as MemorySnapshot).rev === "string");
+  },
+  saveMemory(m: MemorySnapshot | null): Promise<void> {
+    return set(KEYS.memory, m ? JSON.stringify(m) : null);
+  },
+  async loadOutbox(): Promise<Outbox> {
+    return parse<Outbox>(await get(KEYS.outbox), (v) => Array.isArray((v as Outbox).messages) && Array.isArray((v as Outbox).memoryOps)) ?? { messages: [], memoryOps: [] };
+  },
+  saveOutbox(o: Outbox): Promise<void> {
+    return set(KEYS.outbox, o.messages.length || o.memoryOps.length ? JSON.stringify(o) : null);
+  },
+  /** "Unpair" (or the PC forgot this phone): forget the PC and everything from it, the key included. */
   async clearAll(): Promise<void> {
-    await Promise.all([set(KEYS.pairing, null), set(KEYS.conversation, null)]);
+    await Promise.all([KEYS.pairing, KEYS.conversation, KEYS.kit, KEYS.memory, KEYS.outbox].map((k) => set(k, null)));
   },
 };
