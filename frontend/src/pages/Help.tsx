@@ -1,4 +1,4 @@
-import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck, AudioLines, Smartphone, Brain } from "lucide-react";
+import { Clapperboard, Mic, MessageCircleQuestion, Bot, Cpu, ShieldCheck, AudioLines, Smartphone, Brain, Sunrise, Youtube } from "lucide-react";
 import { Link } from "react-router-dom";
 
 /** Soundwave AI — Complete Documentation & Architecture Guide */
@@ -9,6 +9,9 @@ export function Help() {
         <h1 className="text-3xl font-bold text-white">Help & Documentation</h1>
         <p className="mt-1 text-sm text-gray-400">
           Everything you need to master Soundwave AI, the Autonomous Viral Shorts Agent, and commercial distribution.
+        </p>
+        <p className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
+          Easiest: just ask the agent. “How do I link my YouTube channel?”, “What does Morning Setup do?”, “Why can't my phone connect?” — it explains every feature step by step, with the real button names.
         </p>
       </div>
 
@@ -40,6 +43,26 @@ export function Help() {
           </ul>
         </Section>
 
+        {/* Memory + Morning Setup */}
+        <Section icon={<Sunrise className="h-4 w-4" />} title="Memory and Morning Setup">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
+            <li><strong className="text-white">It remembers:</strong> notes it saves (“remember that my channel is about space”), a summary of earlier conversations (Gemini updates it as the chat grows and when you press Clear) and the shorts you made. See, add or delete notes in the Command Center → gear → <em>Memory</em>.</li>
+            <li><strong className="text-white">Morning Setup:</strong> press <em>🌅 Morning Setup</em> (Command Center or phone) or say “good morning, run my morning setup”. It opens your morning websites and apps on this PC (YouTube Studio by default) and gives a spoken briefing: weather, what happened with your shorts, your YouTube numbers, what you were working on and three new short ideas.</li>
+            <li><strong className="text-white">Customize it</strong> in <Link to="/settings/morning" className="text-cyan-300 hover:text-cyan-200">Settings → Morning Setup</Link>: the weather city, what to open, whether to open it when you start from the phone, and the ideas.</li>
+          </ul>
+        </Section>
+
+        {/* YouTube */}
+        <Section icon={<Youtube className="h-4 w-4" />} title="Link Your YouTube Channel">
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-gray-300">
+            <li>In console.cloud.google.com (with the account that owns the channel) create a project and enable <strong className="text-white">YouTube Data API v3</strong>.</li>
+            <li>Google Auth platform → Get started (External), then Audience → Test users → add your Gmail (or <em>Publish app</em> so you don't have to reconnect every 7 days).</li>
+            <li>Clients → Create client → <strong className="text-white">Desktop app</strong> → copy the Client ID and secret.</li>
+            <li>Command Center → gear → <em>YouTube API &amp; Shorts</em> → paste both → <em>Connect YouTube account</em> → sign in with Google in your browser. Done.</li>
+          </ol>
+          <p className="mt-3 text-xs text-gray-400">YouTube keeps uploads from new Google Cloud projects private until the project passes YouTube's API audit. Ask the agent for the details.</p>
+        </Section>
+
         {/* How the agent renders */}
         <Section icon={<Clapperboard className="h-4 w-4" />} title="How the Agent Renders a Short">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
@@ -67,7 +90,8 @@ export function Help() {
             <li><strong className="text-white">The Soundwave phone app (Android)</strong> is a remote for the agent on this PC: type or talk, start shorts, watch them when they're done. It's the same conversation as the Command Center — messages from the phone are marked <em>YOU (PHONE)</em>.</li>
             <li><strong className="text-white">Pair once:</strong> <Link to="/settings/phone" className="text-cyan-300 hover:text-cyan-200">Settings → Phone</Link> → turn on "Let my phone connect", then tap <em>Scan QR code</em> in the app. No camera? Choose <em>Enter code</em> and type the address and code shown under the QR code.</li>
             <li><strong className="text-white">Same brain:</strong> the phone is answered by the agent on this PC, with your Gemini key from <Link to="/settings/brain" className="text-cyan-300 hover:text-cyan-200">Settings → Brain</Link> — nothing to set up on the phone. Web pages and apps it opens appear on this PC.</li>
-            <li><strong className="text-white">Works while Soundwave AI runs here</strong> (the tray counts) and the phone is on the same Wi-Fi. If Windows asks whether Soundwave AI may use your network, allow it for private networks.</li>
+            <li><strong className="text-white">The full agent while Soundwave AI runs here</strong> (the tray counts) and the phone is on the same Wi-Fi. If Windows asks whether Soundwave AI may use your network, allow it for private networks.</li>
+            <li><strong className="text-white">PC off? It keeps chatting:</strong> with “Chat from the phone when this PC is off” on (<Link to="/settings/phone" className="text-cyan-300 hover:text-cyan-200">Settings → Phone</Link>), the phone talks to Gemini directly, with your conversation and the agent's memory — and everything goes back to this PC when it's reachable. Shorts, videos and PC actions wait for the PC.</li>
             <li><strong className="text-white">Private:</strong> the phone talks straight to this PC, end-to-end encrypted with a key set up from the QR code — nothing goes through the internet. Remove a phone any time in Settings → Phone.</li>
           </ul>
         </Section>

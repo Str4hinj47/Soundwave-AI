@@ -26,6 +26,8 @@ interface CompanionDevice {
 interface CompanionStatus {
   available: boolean;
   enabled: boolean;
+  /** Paired phones may chat with Gemini themselves while the PC is off. */
+  shareBrain?: boolean;
   listening: boolean;
   port: number | null;
   error: string | null;
@@ -203,8 +205,9 @@ export function PhoneTab() {
     <>
       <Card title="Phone companion" icon={<Smartphone className="h-4 w-4" />}>
         <p className="mb-4 text-sm text-gray-400">
-          Chat with Soundwave from your Android phone — type or talk, start shorts, watch them when they're done. The Soundwave app talks straight to this
-          PC over your Wi-Fi, end-to-end encrypted, and works while Soundwave AI is running here (even tucked away in the tray).
+          Chat with Soundwave from your Android phone — type or talk, start shorts, watch them when they're done, run your Morning Setup. The Soundwave app talks
+          straight to this PC over your Wi-Fi, end-to-end encrypted, while Soundwave AI is running here (even tucked away in the tray) — and can keep chatting
+          on its own when the PC is off.
         </p>
         <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-800 bg-gray-900/40 px-4 py-3">
           <div className="min-w-0">
@@ -225,6 +228,29 @@ export function PhoneTab() {
             </p>
           </div>
           <Toggle checked={status.enabled} onChange={(v) => void setEnabled(v)} label="Let my phone connect" disabled={busy} />
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-4 rounded-lg border border-gray-800 bg-gray-900/40 px-4 py-3" data-testid="share-brain">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white">Chat from the phone when this PC is off</p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {status.shareBrain !== false
+                ? "On — your paired phones get a copy of your Gemini key (Settings → Brain) and the agent's memory, end-to-end encrypted, so they can keep chatting with Gemini directly while this PC is off. What's said there comes back here when they reconnect."
+                : "Off — phones only chat while this PC runs. They delete their copy of the key the next time they connect."}
+            </p>
+          </div>
+          <Toggle
+            checked={status.shareBrain !== false}
+            onChange={(v) => {
+              setBusy(true);
+              call("POST", "/share-brain", { enabled: v })
+                .then(setStatus)
+                .catch((err: Error) => toast.error("Phone", err.message))
+                .finally(() => setBusy(false));
+            }}
+            label="Chat from the phone when this PC is off"
+            disabled={busy}
+          />
         </div>
 
         {status.enabled && status.listening && (

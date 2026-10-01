@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Smartphone,
+  Sunrise,
   Trash2,
   TriangleAlert,
   User,
@@ -45,6 +46,7 @@ import { getDesktop, hotkeyLabel, type DesktopSettings, type DesktopState } from
 import { notifyUser } from "../lib/notify";
 import { PhoneTab } from "./settings/PhoneTab";
 import { BrainTab } from "./settings/BrainTab";
+import { MorningTab } from "./settings/MorningTab";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
@@ -53,6 +55,7 @@ const TABS = [
   { id: "preferences", label: "Preferences", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "voice", label: "Voice & Desktop", icon: <Mic className="h-4 w-4" /> },
   { id: "phone", label: "Phone", icon: <Smartphone className="h-4 w-4" /> },
+  { id: "morning", label: "Morning Setup", icon: <Sunrise className="h-4 w-4" /> },
 ];
 
 export function Settings() {
@@ -69,7 +72,9 @@ export function Settings() {
         ? "voice"
         : location.pathname.includes("/phone")
           ? "phone"
-          : "profile";
+          : location.pathname.includes("/morning")
+            ? "morning"
+            : "profile";
 
   useEffect(() => {
     void refreshQuota();
@@ -105,6 +110,7 @@ export function Settings() {
         {active === "preferences" && <PreferencesTab />}
         {active === "voice" && <VoiceDesktopTab />}
         {active === "phone" && <PhoneTab />}
+        {active === "morning" && <MorningTab />}
       </div>
     </div>
   );

@@ -25,6 +25,8 @@ import {
   ExternalLink, 
   Loader2,
   Smartphone,
+  Brain,
+  Link2,
 } from "lucide-react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
@@ -58,6 +60,8 @@ import { HOLD_MS, useVoiceCapture } from "../hooks/useVoiceCapture";
 import { VOICE_PREFS_EVENT, VoiceInputError, fetchVoiceInputStatus, isVoicePrefKey, loadVoicePrefs, saveVoicePrefs, type VoiceInputStatus } from "../lib/voiceInput";
 import { DEFAULT_HOTKEY, getDesktop, hotkeyLabel } from "../lib/desktop";
 import { JOB_STARTED_EVENT, VOICE_COMMAND_EVENT } from "../components/agent/BackgroundServices";
+import { memoryApi, noteAge, type MemoryState } from "../lib/memory";
+import { morningApi } from "../lib/morning";
 import { notifyJobOutcome } from "../lib/notify";
 import { clearSharedConversation, type ChatSyncedDetail } from "../lib/conversationSync";
 import { useBrainStatus, type BrainStatus } from "../lib/brain";
@@ -199,7 +203,7 @@ export function AgentHub() {
 
   // Modals & Tools
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"general" | "youtube" | "orb">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "memory" | "youtube" | "orb">("general");
   const [generatorModalOpen, setGeneratorModalOpen] = useState(false);
   const [macrosModalOpen, setMacrosModalOpen] = useState(false);
 
@@ -231,6 +235,9 @@ export function AgentHub() {
     autoPublish: boolean;
     defaultPrivacy: "public" | "unlisted" | "private";
     defaultTags: string[];
+    hasClientId?: boolean;
+    hasClientSecret?: boolean;
+    hasRefreshToken?: boolean;
   }>({
     connected: false,
     configured: false,
@@ -254,13 +261,12 @@ export function AgentHub() {
   const [macrosList, setMacrosList] = useState<MacroWorkflow[]>([]);
   const [isRunningMacro, setIsRunningMacro] = useState(false);
 
-  // Memory manager state
-  const [memories, setMemories] = useState<string[]>([
-    "User prefers TikTok subtitle style with Montserrat 800 and #00F0FF cyan glow.",
-    "User generates viral shorts primarily for Psychology and Mind-Bending Facts niches.",
-    "Preferred export resolution is 9:16 vertical 720p 60fps.",
-  ]);
+  // The agent's memory (gear → Memory): notes + the summary of earlier conversations.
+  const [memoryState, setMemoryState] = useState<MemoryState | null>(null);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [newMemoryText, setNewMemoryText] = useState("");
+  const [isRunningMorning, setIsRunningMorning] = useState(false);
+  const [isConnectingYt, setIsConnectingYt] = useState(false);
   // "Speak replies aloud" — stored, so the desktop voice bar follows it too.
   const [voiceFeedback, setVoiceFeedbackState] = useState(() => loadVoicePrefs().speakReplies);
   const setVoiceFeedback = (on: boolean) => {
@@ -784,6 +790,79 @@ export function AgentHub() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Morning Setup (real: opens your morning items, briefs you) ──────────
+  const runMorningSetup = async () => {
+    if (isRunningMorning) return;
+    setIsRunningMorning(true);
+    setCommandsCount((c) => c + 1);
+    setChatMessages((prev) => [...prev, { id: newMessageId(), sender: "user", text: "🌅 Morning Setup", time: chatTime(), at: Date.now() }]);
+    setAssistantState("THINKING");
+    try {
+      const data = await morningApi.run();
+      const aiMsg = replyToMessage(data, "Morning Setup");
+      setChatMessages((prev) => [...prev, aiMsg]);
+      speakText(aiMsg.text);
+    } catch (e) {
+      const message = (e as Error).message;
+      setChatMessages((prev) => [...prev, { id: newMessageId(), sender: "assistant", text: `I couldn't run the Morning Setup: ${message}`, time: chatTime(), at: Date.now(), tag: "SYS" }]);
+    } finally {
+      setIsRunningMorning(false);
+      setAssistantState((prev) => (prev === "SPEAKING" ? prev : idleState()));
+      void refreshBrain();
+    }
+  };
+
+  // ── The agent's memory (gear → Memory) ─────────────────────────────────
+  const refreshMemory = async () => {
+    try {
+      setMemoryState(await memoryApi.get());
+      setMemoryError(null);
+    } catch (e) {
+      setMemoryError((e as Error).message);
+    }
+  };
+  useEffect(() => {
+    if (settingsOpen && settingsTab === "memory") void refreshMemory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen, settingsTab]);
+  const memoryAction = async (run: () => Promise<MemoryState>, done?: string) => {
+    try {
+      setMemoryState(await run());
+      setMemoryError(null);
+      if (done) toast.success("Memory", done);
+    } catch (e) {
+      toast.error("Memory", (e as Error).message);
+    }
+  };
+
+  // ── "Connect YouTube account": Google sign-in in the browser ───────────
+  const handleConnectYt = async () => {
+    try {
+      setIsConnectingYt(true);
+      if (ytClientId.trim() || ytClientSecret.trim()) await handleSaveYtConfig();
+      const res = await fetch("/api/v1/youtube/connect", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || "Couldn't start the Google sign-in.");
+      window.open(data.url, "_blank", "noopener,noreferrer");
+      toast.info("Finish in your browser", "Sign in with Google, allow both permissions, then come back here.");
+      // Wait for the browser to come back (up to 5 minutes).
+      const until = Date.now() + 5 * 60_000;
+      while (Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const st = await fetch("/api/v1/youtube/status").then((r) => r.json()).catch(() => null);
+        if (st?.connected && st?.hasRefreshToken) {
+          setYtStatus(st);
+          toast.success("YouTube Connected", st.channelTitle ? `Linked to ${st.channelTitle}` : "Linked");
+          return;
+        }
+      }
+    } catch (e) {
+      toast.error("YouTube", (e as Error).message);
+    } finally {
+      setIsConnectingYt(false);
+    }
+  };
 
   // ── Ghost Operator Macro Runner ─────────────────────────────────────────
   const runMacro = async (macroId: string) => {
@@ -1833,13 +1912,16 @@ export function AgentHub() {
                   <span className="flex items-center gap-1 uppercase text-[9px] font-bold tracking-wider text-cyan-400">
                     {msg.via === "phone" && <Smartphone className="h-2.5 w-2.5" aria-label="From your phone" />}
                     {msg.viaVoice && <Mic className="h-2.5 w-2.5" aria-label="Spoken" />}
+                    {msg.answeredBy === "phone" && <Smartphone className="h-2.5 w-2.5" aria-label="Answered on your phone" />}
                     {msg.via === "phone"
                       ? msg.viaVoice
                         ? "YOU (PHONE, VOICE)"
                         : "YOU (PHONE)"
                       : msg.viaVoice
                         ? "YOU (VOICE)"
-                        : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
+                        : msg.answeredBy === "phone"
+                          ? "AGENT (ON PHONE, PC OFF)"
+                          : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {msg.sender === "assistant" && (
@@ -1878,16 +1960,13 @@ export function AgentHub() {
             {/* Quick Chips */}
             <div className="flex items-center gap-1.5 overflow-x-auto text-[10px] text-gray-400 pb-1">
               <button
-                onClick={() => runMacro("creator_morning_prep")}
-                className="shrink-0 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-0.5 hover:text-cyan-300 transition-colors"
+                onClick={() => void runMorningSetup()}
+                disabled={isRunningMorning}
+                data-testid="morning-chip"
+                title="Opens your morning websites and apps and gives you today's briefing (Settings → Morning Setup)"
+                className="shrink-0 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-0.5 hover:text-cyan-300 transition-colors disabled:opacity-60"
               >
-                🌅 Morning Setup
-              </button>
-              <button
-                onClick={() => runMacro("deep_focus_pomodoro")}
-                className="shrink-0 rounded-md border border-[#172A4A] bg-[#070D18] px-2 py-0.5 hover:text-purple-300 transition-colors"
-              >
-                🎯 Deep Focus
+                {isRunningMorning ? "🌅 Setting up…" : "🌅 Morning Setup"}
               </button>
               <button
                 onClick={() => setGeneratorModalOpen(true)}
@@ -2194,7 +2273,7 @@ export function AgentHub() {
         >
           <div className="space-y-3 font-mono text-xs">
             <p className="text-gray-400 text-[11px]">
-              Execute chained workstation automations, Pomodoro focus mode, and browser routines.
+              Saved multi-step automations. These are demos — they show the steps but don't control the PC yet. The real ones: ask the agent (shorts, websites, apps, PC status) or press 🌅 Morning Setup in the chat.
             </p>
 
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -2264,6 +2343,19 @@ export function AgentHub() {
               >
                 <SettingsIcon className="h-3.5 w-3.5" />
                 General & Voice
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab("memory")}
+                data-testid="memory-tab"
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  settingsTab === "memory"
+                    ? "bg-violet-500/20 text-violet-300 border border-violet-500/40 shadow-sm"
+                    : "text-gray-400 hover:text-white bg-[#0A1224] border border-[#14233D]"
+                }`}
+              >
+                <Brain className="h-3.5 w-3.5 text-violet-400" />
+                Memory
               </button>
               <button
                 type="button"
@@ -2377,37 +2469,109 @@ export function AgentHub() {
                   </Link>
                 </div>
 
-                {/* Learned Memory */}
+              </div>
+            )}
+
+            {/* TAB: Memory — what the agent remembers (real; shared with the phone) */}
+            {settingsTab === "memory" && (
+              <div className="space-y-3.5 animate-fadeIn" data-testid="memory-panel">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Soundwave remembers notes it saved (say “remember that…”) and a summary of earlier conversations, so it knows what you did together — on this PC and on your phone. Gemini writes the summary when the chat grows and when you press Clear.
+                </p>
+                {memoryError && <p className="text-[11px] text-amber-300">{memoryError}</p>}
+
                 <div className="space-y-1.5">
-                  <label className="text-gray-300 font-semibold">Learned Memory & Preferences</label>
-                  <div className="max-h-24 overflow-y-auto space-y-1 border border-[#172A4A] rounded-lg p-2 bg-[#070D18]">
-                    {memories.map((m, i) => (
-                      <div key={i} className="text-[11px] text-gray-300 flex items-start gap-1.5">
-                        <span className="text-cyan-400">·</span>
-                        <span>{m}</span>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <label className="text-gray-300 font-semibold">Notes ({memoryState?.notes.length ?? 0}/{memoryState?.maxNotes ?? 60})</label>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1 border border-[#172A4A] rounded-lg p-2 bg-[#070D18]">
+                    {!memoryState || memoryState.notes.length === 0 ? (
+                      <p className="text-[11px] text-gray-500 p-1">No notes yet. Tell the agent “remember that my channel is about…”, or add one below.</p>
+                    ) : (
+                      memoryState.notes.map((n) => (
+                        <div key={n.id} className="group flex items-start justify-between gap-2 rounded px-1 py-0.5 hover:bg-white/[0.03]" data-testid="memory-note">
+                          <span className="text-[11px] text-gray-200">
+                            <span className="text-violet-400">·</span> {n.text}
+                            <span className="ml-1.5 text-[10px] text-gray-500">
+                              {noteAge(n.at)}
+                              {n.from === "phone" ? " · from phone" : ""}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void memoryAction(() => memoryApi.remove(n.id))}
+                            className="shrink-0 text-gray-500 hover:text-red-400"
+                            title="Forget this note"
+                            aria-label="Forget this note"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Add memory..."
+                      placeholder="Add a note, e.g. My channel is about space facts for teens"
                       value={newMemoryText}
+                      maxLength={memoryState?.maxNoteChars ?? 300}
                       onChange={(e) => setNewMemoryText(e.target.value)}
-                      className="flex-1 rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newMemoryText.trim()) {
+                          const t = newMemoryText.trim();
+                          setNewMemoryText("");
+                          void memoryAction(() => memoryApi.add(t), "Saved to memory.");
+                        }
+                      }}
+                      data-testid="memory-input"
+                      className="flex-1 rounded-lg border border-[#172A4A] bg-[#070D18] px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-400 focus:outline-none"
                     />
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        if (newMemoryText.trim()) {
-                          setMemories((p) => [...p, newMemoryText.trim()]);
-                          setNewMemoryText("");
-                          toast.success("Saved", "Preference recorded in memory.");
-                        }
+                        const t = newMemoryText.trim();
+                        if (!t) return;
+                        setNewMemoryText("");
+                        void memoryAction(() => memoryApi.add(t), "Saved to memory.");
                       }}
                     >
                       Add
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-gray-300 font-semibold">Summary of earlier conversations</label>
+                  <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 text-[11px] text-gray-300 whitespace-pre-wrap" data-testid="memory-summary">
+                    {memoryState?.summary ? (
+                      <>
+                        {memoryState.summary.text}
+                        <span className="mt-1 block text-[10px] text-gray-500">Updated {noteAge(memoryState.summary.updatedAt)}</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-500">Nothing yet — it's written once the conversation gets long, or when you press Clear (needs a Gemini key).</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#172A4A]/60">
+                  <span className="text-[10px] text-gray-500">Stored on this PC; your paired phone gets a copy for chatting while the PC is off.</span>
+                  <div className="flex gap-2">
+                    {memoryState?.summary && (
+                      <Button variant="outline" size="sm" onClick={() => void memoryAction(() => memoryApi.forgetSummary(), "Summary forgotten.")}>
+                        Forget summary
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (window.confirm("Forget every note and the conversation summary? The conversation itself stays.")) void memoryAction(() => memoryApi.clear(), "Memory cleared.");
+                      }}
+                    >
+                      Forget everything
                     </Button>
                   </div>
                 </div>
@@ -2433,34 +2597,62 @@ export function AgentHub() {
                   </div>
 
                   <p className="text-[10px] text-gray-400">
-                    Connect your Google Cloud OAuth2 credentials to automatically publish viral Shorts directly to your YouTube channel.
+                    Link your channel so Soundwave can post shorts for you. Google needs your own free OAuth client (type <b className="text-gray-200">Desktop app</b>) — about 10 minutes, once.
                   </p>
+
+                  <ol className="list-decimal space-y-0.5 pl-4 text-[10px] text-gray-400" data-testid="yt-steps">
+                    <li>console.cloud.google.com → create a project (use the account that owns the channel).</li>
+                    <li>APIs &amp; Services → Library → <b className="text-gray-300">YouTube Data API v3</b> → Enable.</li>
+                    <li>Google Auth platform → Get started: name, your email, Audience <b className="text-gray-300">External</b> → Create.</li>
+                    <li>Audience → Test users → add your Gmail (or <b className="text-gray-300">Publish app</b> to skip re-linking every 7 days).</li>
+                    <li>Clients → Create client → <b className="text-gray-300">Desktop app</b> → copy the Client ID and secret.</li>
+                    <li>Paste them below and press <b className="text-gray-300">Connect YouTube account</b>.</li>
+                  </ol>
 
                   <div className="space-y-2 pt-1">
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-0.5">Google OAuth Client ID</label>
                       <input
                         type="text"
-                        placeholder="e.g. 123456789-abc.apps.googleusercontent.com"
+                        placeholder={ytStatus.hasClientId ? "Saved — paste a new one to replace it" : "e.g. 123456789-abc.apps.googleusercontent.com"}
                         value={ytClientId}
                         onChange={(e) => setYtClientId(e.target.value)}
                         className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-gray-400 block mb-0.5">Client Secret</label>
-                        <input
-                          type="password"
-                          placeholder="GOCSPX-..."
-                          value={ytClientSecret}
-                          onChange={(e) => setYtClientSecret(e.target.value)}
-                          className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
-                        />
-                      </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-0.5">Client Secret</label>
+                      <input
+                        type="password"
+                        placeholder={ytStatus.hasClientSecret ? "Saved — paste a new one to replace it" : "GOCSPX-..."}
+                        value={ytClientSecret}
+                        onChange={(e) => setYtClientSecret(e.target.value)}
+                        className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
+                      />
+                    </div>
 
-                      <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleConnectYt()}
+                        disabled={isConnectingYt}
+                        data-testid="yt-connect"
+                        className="flex items-center gap-1.5 rounded bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 text-[11px] font-bold transition-all cursor-pointer shadow-sm shadow-red-600/30 disabled:opacity-60"
+                      >
+                        {isConnectingYt ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                        {isConnectingYt ? "Waiting for Google…" : ytStatus.connected ? "Reconnect YouTube account" : "Connect YouTube account"}
+                      </button>
+                      <span className="text-[10px] text-gray-500">Opens Google's sign-in in your browser; the link is saved automatically.</span>
+                    </div>
+
+                    <p className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200/80">
+                      YouTube keeps uploads from new Google Cloud projects <b>Private</b> until the project passes YouTube's API audit (the agent can explain). You can always download the MP4 and post it in YouTube Studio.
+                    </p>
+
+                    <details className="text-[10px] text-gray-400">
+                      <summary className="cursor-pointer select-none hover:text-gray-200">Advanced: paste a refresh token instead (OAuth Playground)</summary>
+                      <div className="mt-1.5">
                         <label className="text-[10px] text-gray-400 block mb-0.5">OAuth Refresh Token</label>
                         <input
                           type="password"
@@ -2469,8 +2661,9 @@ export function AgentHub() {
                           onChange={(e) => setYtRefreshToken(e.target.value)}
                           className="w-full rounded border border-[#172A4A] bg-[#0A1224] px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:border-red-500 focus:outline-none"
                         />
+                        <p className="mt-1 text-gray-500">Needs a “Web application” client with https://developers.google.com/oauthplayground as redirect URI and the scopes youtube.upload + youtube.readonly.</p>
                       </div>
-                    </div>
+                    </details>
 
                     <div className="flex items-center justify-between pt-1">
                       <label className="text-gray-300 text-[11px] flex items-center gap-2 cursor-pointer">
@@ -2498,15 +2691,18 @@ export function AgentHub() {
                     </div>
 
                     <div className="flex justify-between items-center pt-2 border-t border-[#172A4A]/60">
-                      <a
-                        href="/api/v1/youtube/oauth-guide"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 underline"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          void sendMessage("How do I link my YouTube channel to Soundwave? Walk me through it step by step.");
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 underline cursor-pointer"
+                        data-testid="yt-ask-agent"
                       >
-                        <ExternalLink className="h-2.5 w-2.5" />
-                        OAuth 2.0 Setup Guide
-                      </a>
+                        <Sparkles className="h-2.5 w-2.5" />
+                        Ask Soundwave to walk me through it
+                      </button>
 
                       <div className="flex gap-2">
                         <button
@@ -2521,7 +2717,7 @@ export function AgentHub() {
                           type="button"
                           onClick={handleSaveYtConfig}
                           disabled={isSavingYt}
-                          className="rounded bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 text-[11px] font-bold transition-all cursor-pointer shadow-sm shadow-red-600/30 disabled:opacity-50"
+                          className="rounded border border-red-500/40 bg-red-600/20 hover:bg-red-600/30 text-red-200 px-3.5 py-1.5 text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
                         >
                           {isSavingYt ? "Saving..." : "Save API Keys"}
                         </button>
