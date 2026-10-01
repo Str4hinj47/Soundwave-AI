@@ -50,11 +50,25 @@ async function pc(route, body, method = body === undefined ? "GET" : "POST") {
   return json;
 }
 
-async function attach(device) {
-  const webview = await device.webView({ pkg: PKG }, { timeout: 90_000 });
-  const page = await webview.page();
-  page.setDefaultTimeout(45_000);
-  return page;
+let webviewPid = null;
+/**
+ * The app's WebView page. After a restart, Playwright can still hand out the
+ * killed process's WebView for a moment (its page is already closed) — so
+ * wait for one from a new process.
+ */
+async function attach(device, { notPid = null } = {}) {
+  const deadline = Date.now() + 90_000;
+  for (;;) {
+    const webview = await device.webView({ pkg: PKG }, { timeout: Math.max(1_000, deadline - Date.now()) });
+    if (notPid === null || webview.pid() !== notPid) {
+      webviewPid = webview.pid();
+      const page = await webview.page();
+      page.setDefaultTimeout(45_000);
+      return page;
+    }
+    if (Date.now() > deadline) throw new Error(`the restarted app's WebView never appeared (still pid ${notPid})`);
+    await sleep(500);
+  }
 }
 
 const bodyHas = (page, re, timeout = 45_000) =>
@@ -155,10 +169,11 @@ try {
   ok("reconnected when phone access came back on");
 
   // Restart the app: still paired, conversation still there.
+  const oldPid = webviewPid;
   adb("shell", `am force-stop ${PKG}`);
   await sleep(1000);
   adb("shell", `monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`);
-  page = await attach(device);
+  page = await attach(device, { notPid: oldPid });
   await page.waitForSelector('[data-testid="chat"]', { timeout: 90_000 });
   await bodyHas(page, /Typed in the Command Center during CI/, 30_000);
   await bodyHas(page, /Connected to/, 60_000);

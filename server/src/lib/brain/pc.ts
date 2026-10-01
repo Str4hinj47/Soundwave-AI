@@ -48,8 +48,10 @@ function cpuTimes(): { idle: number; total: number } {
 function osName(): string {
   if (process.platform === "win32") {
     const build = Number(os.release().split(".")[2] ?? 0);
+    const version = os.version(); // "Windows 10 Pro" (also on 11), "Windows Server 2025 Datacenter"
+    if (/server/i.test(version)) return `${version} (build ${build || os.release()})`;
     const generation = build >= 22000 ? "11" : "10";
-    const edition = /Windows \d+\s*(.*)$/i.exec(os.version())?.[1]?.trim();
+    const edition = /Windows \d+\s*(.*)$/i.exec(version)?.[1]?.trim();
     return `Windows ${generation}${edition ? ` ${edition}` : ""} (build ${build || os.release()})`;
   }
   if (process.platform === "darwin") return `macOS (Darwin ${os.release()})`;
