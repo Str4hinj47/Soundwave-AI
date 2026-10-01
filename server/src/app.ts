@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { config } from "./config.js";
 import { generalLimiter, securityHeaders } from "./lib/security.js";
+import { connectPage, finishYouTubeConnect, isYouTubeCallback } from "./lib/youtubeOAuth.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import authRoutes from "./routes/auth.js";
 import voiceRoutes from "./routes/voices.js";
@@ -45,6 +46,17 @@ export function createApp() {
   );
 
   app.use(securityHeaders);
+
+  // "Connect YouTube account": Google comes back to http://127.0.0.1:<port>/?code=…&state=…
+  app.get("/", (req, res, next) => {
+    if (!isYouTubeCallback(req.query as Record<string, unknown>)) return next();
+    finishYouTubeConnect(req.query as Record<string, unknown>)
+      .then((result) => {
+        res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
+        res.status(result.ok ? 200 : 400).type("html").send(connectPage(result));
+      })
+      .catch(next);
+  });
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use("/api/v1", generalLimiter);

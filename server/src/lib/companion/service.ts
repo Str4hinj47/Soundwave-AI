@@ -3,7 +3,9 @@
 // (loopback only). The LAN listener the phone talks to is lib/companion/listener.ts.
 //
 // companion.json (in DATA_DIR, owner-only permissions):
-//   { enabled, pcId, port, devices: [{ id, name, key (base64 device key), … }] }
+//   { enabled, shareBrain, pcId, port, devices: [{ id, name, key (base64 device key), … }] }
+//   shareBrain: paired phones get the Gemini key + the memory, so they can chat
+//   while the PC is off ("Chat from the phone when this PC is off", default on).
 
 import fs from "node:fs";
 import os from "node:os";
@@ -28,6 +30,7 @@ export interface CompanionDevice {
 interface CompanionState {
   version: 1;
   enabled: boolean;
+  shareBrain: boolean;
   pcId: string;
   port: number | null;
   devices: CompanionDevice[];
@@ -71,6 +74,7 @@ export function loadState(): CompanionState {
   state = {
     version: 1,
     enabled: raw.enabled === true,
+    shareBrain: raw.shareBrain !== false,
     pcId: typeof raw.pcId === "string" && /^pc_[0-9a-f]{16}$/.test(raw.pcId) ? raw.pcId : randomId("pc_"),
     port: typeof raw.port === "number" && raw.port > 0 && raw.port < 65536 ? raw.port : null,
     devices: Array.isArray(raw.devices)
@@ -179,6 +183,12 @@ export function setEnabledFlag(enabled: boolean): void {
   saveState();
 }
 
+export function setShareBrainFlag(share: boolean): void {
+  const s = loadState();
+  s.shareBrain = share;
+  saveState();
+}
+
 export function setPort(port: number): void {
   const s = loadState();
   if (s.port === port) return;
@@ -250,6 +260,8 @@ export function pairingLink(session: PairingSession, port: number, addresses: Lo
 export interface CompanionStatus {
   available: boolean;
   enabled: boolean;
+  /** Phones may chat with Gemini themselves while the PC is off (they get the key and the memory). */
+  shareBrain: boolean;
   listening: boolean;
   port: number | null;
   error: string | null;
@@ -269,6 +281,7 @@ export function buildStatus(listener: { listening: boolean; port: number | null;
   return {
     available: config.companionAvailable,
     enabled: s.enabled,
+    shareBrain: s.shareBrain,
     listening: listener.listening,
     port: listener.port,
     error: listener.error,

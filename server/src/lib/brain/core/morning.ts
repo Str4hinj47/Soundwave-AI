@@ -253,11 +253,14 @@ function capitalize(s: string): string {
 /** "Friday 2 October 2026, 08:14" in the given (or this device's) time zone. */
 export function morningNow(now: Date, timeZone?: string): string {
   const opts: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false };
+  let parts: Intl.DateTimeFormatPart[];
   try {
-    return now.toLocaleString("en-GB", { ...opts, ...(timeZone ? { timeZone } : {}) }).replace(/ at /, ", ");
+    parts = new Intl.DateTimeFormat("en-GB", { ...opts, ...(timeZone ? { timeZone } : {}) }).formatToParts(now);
   } catch {
-    return now.toLocaleString("en-GB", opts).replace(/ at /, ", ");
+    parts = new Intl.DateTimeFormat("en-GB", opts).formatToParts(now);
   }
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}`;
 }
 
 /** The memory digest for the briefing: the summary and the latest notes. */

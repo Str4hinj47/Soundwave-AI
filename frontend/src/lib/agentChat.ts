@@ -42,6 +42,8 @@ export interface ChatMessage {
   at?: number;
   /** Sent from the phone companion. */
   via?: "phone";
+  /** Answered by the phone itself (Gemini, while the PC was off). */
+  answeredBy?: "phone";
 }
 
 export const CHAT_STORAGE_KEY = "soundwave_agent_chat_history";

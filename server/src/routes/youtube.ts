@@ -6,6 +6,8 @@ import { validate } from "../middleware/validate.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { youtubeService, type YouTubeConfig } from "../lib/youtube.js";
 import { config } from "../config.js";
+import { ConnectError, startYouTubeConnect, YOUTUBE_SCOPES } from "../lib/youtubeOAuth.js";
+import { notFromApp } from "../middleware/localApp.js";
 
 const router = Router();
 
@@ -150,19 +152,34 @@ router.post("/upload", optionalAuth, validate({ body: uploadSchema }), async (re
   }
 });
 
-// GET /api/v1/youtube/oauth-guide
+// POST /api/v1/youtube/connect — the Google sign-in address for "Connect YouTube account"
+// (the app opens it in the browser; Google comes back to this server, see app.ts).
+router.post("/connect", (req, res) => {
+  const problem = notFromApp(req);
+  if (problem) return res.status(403).json({ error: { code: "FORBIDDEN", message: problem } });
+  try {
+    const port = req.socket.localPort ?? config.port;
+    res.json(startYouTubeConnect(port));
+  } catch (err) {
+    if (err instanceof ConnectError) return res.status(409).json({ error: { code: err.code, message: err.message } });
+    throw err;
+  }
+});
+
+// GET /api/v1/youtube/oauth-guide — the short version of the guide (the agent explains it in detail).
 router.get("/oauth-guide", (_req, res) => {
   res.json({
     steps: [
-      "1. Open Google Cloud Console (console.cloud.google.com).",
-      "2. Create a new project and enable 'YouTube Data API v3'.",
-      "3. Go to 'APIs & Services' > 'OAuth consent screen', set User Type to External, and add your email.",
-      "4. Go to 'Credentials' > 'Create Credentials' > 'OAuth client ID' (Application Type: Web Application or Desktop app).",
-      "5. Copy Client ID and Client Secret, and generate a Refresh Token with scope: https://www.googleapis.com/auth/youtube.upload",
-      "6. Paste your credentials into Soundwave AI and turn on Auto-Publish!",
+      "1. Open console.cloud.google.com with the Google account that owns your channel and create a project.",
+      "2. APIs & Services → Library → YouTube Data API v3 → Enable.",
+      "3. Google Auth platform → Get started: app name, your email, Audience: External, agree → Create.",
+      "4. Google Auth platform → Audience → Test users → add your Gmail (or press Publish app to avoid re-connecting every 7 days).",
+      "5. Google Auth platform → Clients → Create client → Desktop app → copy the Client ID and Client secret.",
+      "6. In Soundwave: Command Center → gear → YouTube API & Shorts → paste both → Save API Keys → Connect YouTube account.",
     ],
-    scope: "https://www.googleapis.com/auth/youtube.upload",
-    requiredScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+    note: "New Google Cloud projects upload as Private until YouTube's API audit approves them.",
+    scope: YOUTUBE_SCOPES.join(" "),
+    requiredScopes: YOUTUBE_SCOPES,
   });
 });
 

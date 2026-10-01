@@ -47,6 +47,7 @@ export class YouTubeService {
     };
 
     try {
+      fs.mkdirSync(path.dirname(this.configFile), { recursive: true });
       fs.writeFileSync(this.configFile, JSON.stringify(initial, null, 2), "utf-8");
     } catch {}
 
@@ -74,6 +75,7 @@ export class YouTubeService {
         delete merged.channelId;
       }
     }
+    fs.mkdirSync(path.dirname(this.configFile), { recursive: true });
     fs.writeFileSync(this.configFile, JSON.stringify(merged, null, 2), "utf-8");
     return merged;
   }

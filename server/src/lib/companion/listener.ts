@@ -10,6 +10,7 @@
 
 import http from "node:http";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import type { AddressInfo, Socket } from "node:net";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { config } from "../../config.js";
@@ -18,8 +19,15 @@ import { resolveJobVideoFile } from "../../routes/export.js";
 import { SttError, getSttStatus, transcribe } from "../stt.js";
 import { normalizeVoiceId, synthesizeEdgeTTS } from "../edgeTts.js";
 import { chatTime, newMessageId, openJobs, replyToMessage, type ChatMessage, type ChatReply } from "../chatMessages.js";
-import { appendToConversation, findJob, getConversation, recentHistory, waitForChange, type JobSnapshot } from "../conversation.js";
+import { appendToConversation, findJob, getConversation, mergeIntoConversation, recentHistory, waitForChange, type JobSnapshot } from "../conversation.js";
 import { HISTORY_MESSAGES } from "../brain/chat.js";
+import { modelLabel } from "../brain/gemini.js";
+import { activeBrain, FALLBACK_MODEL, type ThinkingLevel } from "../brain/settings.js";
+import { OPEN_METEO_FORECAST, OPEN_METEO_GEOCODING } from "../brain/core/morning.js";
+import { MAX_NOTE_CHARS, type MemoryOp } from "../brain/core/memory.js";
+import { applyPhoneMemoryOps, memoryAvailable, memorySnapshot } from "../memory.js";
+import { loadMorningSettings, morningCity, runMorningSetup } from "../morning.js";
+import { sanitizeMessages } from "../chatMessages.js";
 import { getStore } from "../store.js";
 import { EnvelopeError, aad, deriveDeviceKeys, frame, open, seal, unframe } from "./crypto.js";
 import {
@@ -109,6 +117,8 @@ interface OpContext {
   device: CompanionDevice;
   payload: Buffer;
   signal: AbortSignal;
+  /** The address the phone reached this PC at (Host header, no port). */
+  host: string | null;
 }
 
 interface OpResult {
@@ -141,6 +151,76 @@ async function videoFileFor(jobId: string): Promise<{ path: string; size: number
   return { path: file.path, size, mime: file.ext === ".webm" ? "video/webm" : "video/mp4" };
 }
 
+// ── The brain kit: what a phone needs to chat while the PC is off ───────────
+
+export interface BrainKit {
+  enabled: true;
+  apiKey: string;
+  model: string;
+  modelLabel: string;
+  fallbackModel: string;
+  thinking: ThinkingLevel;
+  /** Gemini's address, only when it isn't Google's (tests). */
+  apiBase?: string;
+  /** Morning Setup on the phone: the weather city (and the service, only when it isn't Open-Meteo's). */
+  weather: { city: string | null; geocodingUrl?: string; forecastUrl?: string };
+  ideas: boolean;
+  rev: string;
+}
+
+export type KitResult = BrainKit | { enabled: false; reason: "sharing_off" | "no_key"; rev: string };
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/** A service on this PC's loopback (a test stand-in) is reached through the PC's address from the phone. */
+function forPhone(url: string, host: string | null): string {
+  try {
+    const u = new URL(url);
+    if (host && LOOPBACK.has(u.hostname)) u.hostname = host;
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return url;
+  }
+}
+
+export function brainKit(host: string | null = null): KitResult {
+  if (!loadState().shareBrain) return { enabled: false, reason: "sharing_off", rev: "sharing_off" };
+  const brain = activeBrain();
+  if (!brain) return { enabled: false, reason: "no_key", rev: "no_key" };
+  const settings = loadMorningSettings();
+  const base = config.companionGeminiBase || (config.geminiApiBase !== "https://generativelanguage.googleapis.com" ? forPhone(config.geminiApiBase, host) : "");
+  const body = {
+    apiKey: brain.apiKey,
+    model: brain.model,
+    modelLabel: modelLabel(brain.model),
+    fallbackModel: FALLBACK_MODEL,
+    thinking: brain.thinking,
+    ...(base ? { apiBase: base } : {}),
+    weather: {
+      city: morningCity(settings).city,
+      ...(config.openMeteoGeocodingUrl !== OPEN_METEO_GEOCODING ? { geocodingUrl: forPhone(config.openMeteoGeocodingUrl, host) } : {}),
+      ...(config.openMeteoForecastUrl !== OPEN_METEO_FORECAST ? { forecastUrl: forPhone(config.openMeteoForecastUrl, host) } : {}),
+    },
+    ideas: settings.ideas,
+  };
+  return { enabled: true, ...body, rev: createHash("sha1").update(JSON.stringify(body)).digest("hex").slice(0, 16) };
+}
+
+/** Notes added / forgotten on the phone while the PC was off. */
+function memoryOpsFrom(input: unknown): MemoryOp[] {
+  if (!Array.isArray(input)) return [];
+  const ops: MemoryOp[] = [];
+  for (const raw of input.slice(0, 100)) {
+    const op = raw as Record<string, unknown>;
+    if (op?.op === "forget" && typeof op.id === "string") ops.push({ op: "forget", id: op.id.slice(0, 40) });
+    else if (op?.op === "add" && op.note && typeof op.note === "object") {
+      const note = op.note as Record<string, unknown>;
+      if (typeof note.id === "string" && typeof note.text === "string") ops.push({ op: "add", note: { id: note.id.slice(0, 40), text: note.text.slice(0, MAX_NOTE_CHARS * 2), at: Number(note.at) || Date.now(), from: "phone" } });
+    }
+  }
+  return ops;
+}
+
 const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
   // Still paired? What can this PC do?
   async hello(_args, { device }) {
@@ -154,8 +234,47 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
         voiceInput: { available: stt.available, reason: stt.reason },
         voice: getConversation().voice ?? null,
         time: Date.now(),
+        // Chat while the PC is off: is it allowed, and which kit/memory is current.
+        brain: (() => {
+          const kit = brainKit();
+          return kit.enabled ? { phoneChat: true, modelLabel: kit.modelLabel, kitRev: kit.rev } : { phoneChat: false, reason: kit.reason, kitRev: kit.rev };
+        })(),
+        memoryRev: memoryAvailable() ? (await memorySnapshot()).rev : null,
       },
     };
+  },
+
+  // The Gemini key and settings for chatting while the PC is off (or why not).
+  async "brain.kit"(_args, { host }) {
+    return { result: brainKit(host) };
+  },
+
+  // Offline messages and memory changes from the phone, back into the PC's conversation and memory.
+  async merge(args) {
+    const incoming = sanitizeMessages(args.messages)
+      .slice(-100)
+      .flatMap((m): ChatMessage[] => (m.sender === "user" ? [{ ...m, via: "phone" }] : m.sender === "assistant" ? [{ ...m, answeredBy: "phone" }] : []));
+    const ops = memoryOpsFrom(args.memoryOps);
+    if (ops.length && memoryAvailable()) applyPhoneMemoryOps(ops);
+    const snap = incoming.length ? mergeIntoConversation(incoming) : getConversation();
+    const memory = memoryAvailable() ? await memorySnapshot() : null;
+    return { result: { epoch: snap.epoch, rev: snap.rev, messages: snap.messages, merged: incoming.length, memoryOps: ops.length, memoryRev: memory?.rev ?? null, memory } };
+  },
+
+  // "🌅 Morning Setup" on the phone: runs on the PC (opens the morning items here if allowed).
+  async morning() {
+    const now = Date.now();
+    appendToConversation({ id: newMessageId(now), sender: "user", text: "🌅 Morning Setup", time: chatTime(new Date(now)), at: now, via: "phone" });
+    let reply: ChatReply;
+    try {
+      reply = await runMorningSetup({ via: "phone" });
+    } catch (err) {
+      console.error("[companion] morning setup failed:", err);
+      reply = { success: false, reply: `I couldn't run the Morning Setup just now: ${(err as Error).message}`, tag: "SYS" };
+    }
+    const aiMsg = replyToMessage(reply, "Morning Setup", Math.max(Date.now(), now + 1));
+    const snap = appendToConversation(aiMsg);
+    return { result: { epoch: snap.epoch, rev: snap.rev, messages: snap.messages, reply: aiMsg } };
   },
 
   // The conversation (+ progress of shorts it's waiting on). With `wait`, holds
@@ -171,6 +290,7 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
       jobs = await openJobSnapshots(snap.messages);
     }
     const upToDate = snap.epoch === epoch && snap.rev === rev;
+    const memory = memoryAvailable() ? await memorySnapshot() : null;
     return {
       result: {
         epoch: snap.epoch,
@@ -178,6 +298,9 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
         ...(upToDate ? {} : { messages: snap.messages }),
         jobs,
         voice: snap.voice ?? null,
+        kitRev: brainKit().rev,
+        memoryRev: memory?.rev ?? null,
+        ...(memory && memory.rev !== str(args.memoryRev, 40) ? { memory } : {}),
       },
     };
   },
@@ -342,7 +465,8 @@ async function handleRpc(req: Request, res: Response): Promise<void> {
   try {
     if (!op) throw new OpError("UNKNOWN_OP", `Unknown request "${String(header.op)}" — update the Soundwave app.`);
     const signal = abortOnClose(res);
-    const { result, payload: outPayload } = await op((header.args ?? {}) as Args, { device, payload, signal });
+    const host = (req.headers.host ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "") || null;
+    const { result, payload: outPayload } = await op((header.args ?? {}) as Args, { device, payload, signal, host });
     if (signal.aborted) return;
     out = frame({ n, ok: true, t: Date.now(), result: result ?? null }, outPayload);
   } catch (err) {

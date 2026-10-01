@@ -1,6 +1,7 @@
 // ── Phone companion: what the desktop app itself uses ───────────────────────
 //   GET    /api/v1/companion              status for Settings → Phone
 //   POST   /api/v1/companion/enabled      { enabled } — open/close the LAN listener
+//   POST   /api/v1/companion/share-brain  { enabled } — phones may chat while the PC is off
 //   POST   /api/v1/companion/pairing      show a new one-time pairing code (QR)
 //   DELETE /api/v1/companion/pairing      stop pairing
 //   DELETE /api/v1/companion/devices/:id  forget a phone
@@ -21,7 +22,7 @@ import { localAppGuard } from "../middleware/localApp.js";
 import { validate } from "../middleware/validate.js";
 import { getConversation, mergeUntrusted, resetConversation, setConversationVoice, waitForChange } from "../lib/conversation.js";
 import { sanitizeMessages } from "../lib/chatMessages.js";
-import { cancelPairing, removeDevice, startPairing } from "../lib/companion/service.js";
+import { cancelPairing, removeDevice, setShareBrainFlag, startPairing } from "../lib/companion/service.js";
 import { companionStatus, listenerState, setCompanionEnabled, startListener } from "../lib/companion/listener.js";
 
 const router = Router();
@@ -40,6 +41,11 @@ router.post("/enabled", validate({ body: z.object({ enabled: z.boolean() }) }), 
   } catch (e) {
     next(e);
   }
+});
+
+router.post("/share-brain", validate({ body: z.object({ enabled: z.boolean() }) }), (req, res) => {
+  setShareBrainFlag((req.body as { enabled: boolean }).enabled);
+  res.json(companionStatus());
 });
 
 router.post("/pairing", async (_req, res, next) => {

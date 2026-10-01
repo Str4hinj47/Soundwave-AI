@@ -37,6 +37,8 @@ export interface ChatMessage {
   at?: number;
   /** Sent from the phone companion. */
   via?: "phone";
+  /** Answered by the phone itself (Gemini, while the PC was off). */
+  answeredBy?: "phone";
 }
 
 export function chatTime(date = new Date()): string {
@@ -103,6 +105,7 @@ export const chatMessageSchema = z
     viaVoice: z.boolean().optional(),
     at: z.number().finite().optional(),
     via: z.literal("phone").optional(),
+    answeredBy: z.literal("phone").optional(),
   })
   .strip();
 

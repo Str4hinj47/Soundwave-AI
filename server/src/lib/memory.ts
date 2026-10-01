@@ -292,10 +292,14 @@ export function scheduleSummary(delayMs = 5000): void {
 }
 
 /** At startup (desktop): keep the summary up to date as the conversation changes. */
-export function initMemory(): void {
-  if (!memoryAvailable()) return;
-  onConversationChange(() => scheduleSummary());
-  onConversationReset((old) => void summarizeCleared(old));
+export function initMemory(): () => void {
+  if (!memoryAvailable()) return () => undefined;
+  const offChange = onConversationChange(() => scheduleSummary());
+  const offReset = onConversationReset((old) => void summarizeCleared(old));
+  return () => {
+    offChange();
+    offReset();
+  };
 }
 
 /** Tests: forget the cached copy and pending work. */
