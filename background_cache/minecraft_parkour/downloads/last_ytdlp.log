@@ -1,0 +1,121 @@
+[warp] + mkdir -p .github/warp
+[warp] + start_warp
+[warp] + docker rm -f warproxy
+[warp] + mount=()
+[warp] + local mount
+[warp] + '[' -f .github/warp/wgcf-account.toml ']'
+[warp] + mount=(-v "$PWD/.github/warp:/config")
+[warp] + echo 'mounting persisted WARP account'
+[warp] mounting persisted WARP account
+[warp] + docker run -d --name warproxy -p 1080:1080 -p 127.0.0.1:3128:3128 -e HTTP_PORT=3128 --cap-add NET_ADMIN --device /dev/net/tun -v /home/runner/work/Soundwave-AI/Soundwave-AI/.github/warp:/config ghcr.io/kingcc/warproxy:latest
+[warp] Unable to find image 'ghcr.io/kingcc/warproxy:latest' locally
+[warp] latest: Pulling from kingcc/warproxy
+[warp] 34bcef1e5f98: Pulling fs layer
+[warp] c0f8eff906b8: Pulling fs layer
+[warp] a284d4c5ddeb: Pulling fs layer
+[warp] 3d4a5b0c51bb: Pulling fs layer
+[warp] 5cc376fd3d90: Pulling fs layer
+[warp] ab31007733df: Pulling fs layer
+[warp] 892c2d9d6aa3: Pulling fs layer
+[warp] d029fb8a838f: Pulling fs layer
+[warp] 4f4fb700ef54: Pulling fs layer
+[warp] 5cc376fd3d90: Waiting
+[warp] ab31007733df: Waiting
+[warp] 892c2d9d6aa3: Waiting
+[warp] d029fb8a838f: Waiting
+[warp] 4f4fb700ef54: Waiting
+[warp] 3d4a5b0c51bb: Waiting
+[warp] a284d4c5ddeb: Verifying Checksum
+[warp] a284d4c5ddeb: Download complete
+[warp] c0f8eff906b8: Verifying Checksum
+[warp] c0f8eff906b8: Download complete
+[warp] 3d4a5b0c51bb: Verifying Checksum
+[warp] 3d4a5b0c51bb: Download complete
+[warp] 34bcef1e5f98: Verifying Checksum
+[warp] 34bcef1e5f98: Download complete
+[warp] ab31007733df: Verifying Checksum
+[warp] ab31007733df: Download complete
+[warp] 5cc376fd3d90: Download complete
+[warp] 4f4fb700ef54: Verifying Checksum
+[warp] 4f4fb700ef54: Download complete
+[warp] 892c2d9d6aa3: Verifying Checksum
+[warp] 892c2d9d6aa3: Download complete
+[warp] 34bcef1e5f98: Pull complete
+[warp] d029fb8a838f: Verifying Checksum
+[warp] d029fb8a838f: Download complete
+[warp] c0f8eff906b8: Pull complete
+[warp] a284d4c5ddeb: Pull complete
+[warp] 3d4a5b0c51bb: Pull complete
+[warp] 5cc376fd3d90: Pull complete
+[warp] ab31007733df: Pull complete
+[warp] 892c2d9d6aa3: Pull complete
+[warp] d029fb8a838f: Pull complete
+[warp] 4f4fb700ef54: Pull complete
+[warp] Digest: sha256:1c00e4aad95976ffac6de9a424e7e5c27f92f2a1141fbfeb931ac8ebb75db2e2
+[warp] Status: Downloaded newer image for ghcr.io/kingcc/warproxy:latest
+[warp] bbb4df9e9b220dd02dd71da14023b88a361c73aa52f8dd95c2a5225fa9bc87a1
+[warp] + wait_ready 50
+[warp] + local tries=50
+[warp] ++ seq 1 50
+[warp] + for i in $(seq 1 "$tries")
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + sleep 3
+[warp] + for i in $(seq 1 "$tries")
+[warp] + check_ready
+[warp] + curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
+[warp] + grep -q '^warp=on' /tmp/warp_trace.txt
+[warp] + echo 'WARP proxy ready (try 2):'
+[warp] WARP proxy ready (try 2):
+[warp] + grep -E '^(ip|loc|warp)=' /tmp/warp_trace.txt
+[warp] ip=2a09:bac5:c82d:32a0::50b:8a
+[warp] loc=US
+[warp] warp=on
+[warp] + return 0
+[warp] + echo ready=1
+[warp] + docker cp warproxy:/config/. .github/warp/
+[warp] + true
+[warp] + ls -la .github/warp/
+[warp] total 20
+[warp] drwxr-xr-x 2    911    911 4096 Sep 25 23:45 .
+[warp] drwxr-xr-x 4 runner runner 4096 Sep 25 23:45 ..
+[warp] -rw-r--r-- 1    911    911  209 Sep 25 23:45 wgcf-account.toml
+[warp] -rw-r--r-- 1    911    911  353 Sep 25 23:45 wgcf-profile.conf
+[warp] -rw-r--r-- 1    911    911  390 Sep 25 23:45 wireproxy.conf
+[warp] + exit 0
+[warp-trace] fl=1291f138
+[warp-trace] h=www.cloudflare.com
+[warp-trace] ip=2a09:bac5:c82d:32a0::50b:8a
+[warp-trace] ts=1790379922.000
+[warp-trace] visit_scheme=https
+[warp-trace] uag=curl/8.5.0
+[warp-trace] colo=IAD
+[warp-trace] sliver=050-tier1
+[warp-trace] http=http/2
+[warp-trace] loc=US
+[warp-trace] tls=TLSv1.3
+[warp-trace] sni=plaintext
+[warp-trace] warp=on
+[warp-trace] gateway=off
+[warp-trace] rbi=off
+[warp-trace] kex=X25519
+warp_ready=1
+no cookies in use
+=== ATTEMPT engine yt-download ===
+engine cli failed rc=124
+ 52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  52.9%  3.0MB/s  ETA 4:21     [###############---------------]  52.9%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  3.0MB/s  ETA 4:21     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.0%  --  ETA --:--     [###############---------------]  53.1%  --  ETA --:--     [###############---------------]  53.1%  --  ETA --:--     [###############---------------]  53.1%  --  ETA --:--   android         key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+android         key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+android_19      key=False: HTTP 400 | None | formats=0 direct_url=False | 
+android_19      key=True: HTTP 400 | None | formats=0 direct_url=False | 
+ios             key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+ios             key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+mweb            key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+mweb            key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+tv              key=False: HTTP 400 | None | formats=0 direct_url=False | 
+tv              key=True: HTTP 400 | None | formats=0 direct_url=False | 
+tv_embedded     key=False: HTTP 400 | None | formats=0 direct_url=False | 
+tv_embedded     key=True: HTTP 400 | None | formats=0 direct_url=False | 
+web_embedded    key=False: HTTP 400 | None | formats=0 direct_url=False | 
+web_embedded    key=True: HTTP 400 | None | formats=0 direct_url=False | 
+web             key=False: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot
+web             key=True: HTTP 200 | LOGIN_REQUIRED | formats=0 direct_url=False | Sign in to confirm you’re not a bot

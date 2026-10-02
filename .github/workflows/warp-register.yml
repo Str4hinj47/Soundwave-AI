@@ -1,0 +1,76 @@
+name: Register WARP account
+# One of the parallel jobs registers a Cloudflare WARP account (429s are
+# per-IP, so parallel runners raise the odds) and commits the config to
+# .github/warp/. The fetch workflow mounts that dir and skips registration.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/warp-register.trigger"
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Register (skip if account already persisted)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          exec > >(tee -a /tmp/warpreg.log) 2>&1
+          set -x
+          echo "attempt=${{ matrix.attempt }} host=$(hostname)"
+          if [ -f .github/warp/wgcf-account.toml ]; then
+            echo "ACCOUNT_ALREADY_PERSISTED"
+            exit 0
+          fi
+          mkdir -p .github/warp
+          # Path 1: warproxy's built-in wgcf registration.
+          docker pull ghcr.io/kingcc/warproxy:latest
+          docker rm -f warproxy 2>/dev/null || true
+          docker run -d --name warproxy -p 1080:1080 \
+            --cap-add NET_ADMIN --device /dev/net/tun \
+            ghcr.io/kingcc/warproxy:latest
+          ok=""
+          for i in $(seq 1 30); do
+            if curl -sf --max-time 4 --proxy socks5h://127.0.0.1:1080 \
+              https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep -q '^warp=on'; then
+              ok=1
+              break
+            fi
+            sleep 3
+          done
+          if [ -n "$ok" ]; then
+            echo "REGISTER_OK_VIA_DOCKER"
+            docker cp warproxy:/config/. .github/warp/
+          else
+            docker logs warproxy 2>&1 | tail -25
+            # Path 2: direct API registration, IPv6 first (IPv4 datacenter
+            # ranges are rate-limited; the script prints the API response).
+            echo "=== falling back to scripts/warp_register.py ==="
+            python -m pip install -q pynacl
+            python3 scripts/warp_register.py || { echo "REGISTER_FAILED_ALL_PATHS"; exit 1; }
+          fi
+          ls -la .github/warp/
+          git config user.name "warp-register"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f .github/warp/
+          git commit -m "warp: persist registered WARP account (attempt ${{ matrix.attempt }})"
+          git pull --rebase origin main || true
+          if git push origin main; then
+            echo "PUSHED"
+          else
+            echo "push lost a race — checking if another job already persisted it"
+            gh api "repos/${GITHUB_REPOSITORY}/contents/.github/warp/wgcf-account.toml?ref=main" --jq .sha \
+              && echo "ACCOUNT_PERSISTED_BY_OTHER_JOB" || exit 1
+          fi
