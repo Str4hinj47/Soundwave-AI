@@ -19,20 +19,24 @@ import { contentsFor, runTurn, sourcesLine, wasBlocked, type Generate, type Hist
 import { agentInstruction, plainReply } from "../../../server/src/lib/brain/core/prompt";
 import { guideTool } from "../../../server/src/lib/brain/core/guide";
 import {
+  DEFAULT_BRIEFING,
+  applyBriefingOps,
   applyMemoryOps,
   cleanNoteText,
   looksSecret,
   memoryTools,
   newNoteId,
+  type BriefingPlan,
   type MemoryForPrompt,
   type MemoryNote,
   type MemoryOp,
   type MemorySnapshot,
   type MemoryStore,
 } from "../../../server/src/lib/brain/core/memory";
-import { fetchWeather, memoryDigest, morningNow, morningRequest, templateBriefing, type MorningFacts } from "../../../server/src/lib/brain/core/morning";
+import { fetchWeather, localDay, memoryDigest, morningNow, morningRequest, templateBriefing, type MorningFacts } from "../../../server/src/lib/brain/core/morning";
+import { researchTopics, type FetchText } from "../../../server/src/lib/brain/core/research";
 
-export type { MemoryOp, MemorySnapshot, MemoryNote };
+export type { BriefingPlan, FetchText, MemoryOp, MemorySnapshot, MemoryNote };
 
 /** What the PC shares so the phone can chat on its own (op "brain.kit"). */
 export interface PhoneKit {
@@ -45,6 +49,8 @@ export interface PhoneKit {
   apiBase?: string;
   weather: { city: string | null; geocodingUrl?: string; forecastUrl?: string };
   ideas: boolean;
+  /** The agent's Soundwave voice on the PC. */
+  voice?: string | null;
   rev: string;
 }
 
@@ -57,9 +63,13 @@ function bind(kit: PhoneKit): Generate {
 
 /** The PC's memory snapshot with the phone's own (not yet sent) changes applied. */
 export function effectiveMemory(snapshot: MemorySnapshot | null, ops: MemoryOp[]): MemoryForPrompt | null {
-  if (!snapshot) return ops.length ? { notes: applyMemoryOps([], ops), summary: null, shorts: null, youtube: null, lastMorningAt: null, takenAt: Date.now() } : null;
+  if (!snapshot) {
+    return ops.length
+      ? { notes: applyMemoryOps([], ops), briefing: applyBriefingOps(DEFAULT_BRIEFING, ops), summary: null, shorts: null, youtube: null, lastMorningAt: null, takenAt: Date.now() }
+      : null;
+  }
   const { rev: _rev, ...rest } = snapshot;
-  return { ...rest, notes: applyMemoryOps(snapshot.notes, ops) };
+  return { ...rest, notes: applyMemoryOps(snapshot.notes, ops), briefing: applyBriefingOps(snapshot.briefing ?? DEFAULT_BRIEFING, ops) };
 }
 
 export interface OfflineReply {
@@ -80,6 +90,7 @@ export async function offlineReply(o: {
   now?: Date;
 }): Promise<OfflineReply> {
   let notes: MemoryNote[] = [...(o.memory?.notes ?? [])];
+  let briefing: BriefingPlan = o.memory?.briefing ?? DEFAULT_BRIEFING;
   const store: MemoryStore = {
     notes: () => notes,
     add(text) {
@@ -97,6 +108,12 @@ export async function offlineReply(o: {
       notes = notes.filter((n) => n.id !== note.id);
       o.record({ op: "forget", id: note.id });
     },
+    briefing: () => briefing,
+    setBriefing(plan) {
+      briefing = plan;
+      o.record({ op: "briefing", plan });
+      return plan;
+    },
   };
   const tools = [guideTool<{ memory: MemoryStore }>(), ...memoryTools<{ memory: MemoryStore }>()];
   try {
@@ -110,7 +127,7 @@ export async function offlineReply(o: {
       tools,
       ctx: { memory: store },
       instruction: ({ tools: names, webSearch }) =>
-        agentInstruction({ tools: names, webSearch, now: o.now ?? new Date(), surface: "phone-offline", memory: o.memory ? { ...o.memory, notes } : null }),
+        agentInstruction({ tools: names, webSearch, now: o.now ?? new Date(), surface: "phone-offline", memory: o.memory ? { ...o.memory, notes, briefing } : null }),
       generate: bind(o.kit),
       signal: o.signal,
     });
@@ -123,13 +140,18 @@ export async function offlineReply(o: {
   }
 }
 
-/** Morning Setup on the phone (PC off): the briefing only — nothing is opened on the PC. */
+/**
+ * Morning Setup / the daily briefing on the phone (PC off): researches the
+ * briefing topics with Gemini (Google Search, else the feeds via `fetchText`)
+ * and writes the briefing — nothing is opened on the PC.
+ */
 export async function offlineMorning(o: {
   kit: PhoneKit;
   memory: MemoryForPrompt | null;
   now?: Date;
   signal?: AbortSignal;
-}): Promise<OfflineReply & { weatherNote?: string }> {
+  fetchText?: FetchText;
+}): Promise<OfflineReply & { weatherNote?: string; briefingDate: string; research: string }> {
   const now = o.now ?? new Date();
   const mem = o.memory;
   const last = mem?.lastMorningAt ?? null;
@@ -139,15 +161,21 @@ export async function offlineMorning(o: {
 
   let weather: MorningFacts["weather"] = null;
   let weatherNote: string | undefined;
-  if (o.kit.weather.city) {
-    try {
-      weather = await fetchWeather(o.kit.weather.city, { geocodingUrl: o.kit.weather.geocodingUrl, forecastUrl: o.kit.weather.forecastUrl, signal: o.signal });
-    } catch (err) {
-      weatherNote = `the weather for “${o.kit.weather.city}” isn't available: ${(err as Error).message}`;
-    }
-  } else {
-    weatherNote = "no city set — add one in Settings → Morning Setup on the PC";
-  }
+  const weatherJob = o.kit.weather.city
+    ? fetchWeather(o.kit.weather.city, { geocodingUrl: o.kit.weather.geocodingUrl, forecastUrl: o.kit.weather.forecastUrl, signal: o.signal }).then(
+        (w) => void (weather = w),
+        (err) => void (weatherNote = `the weather for “${o.kit.weather.city}” isn't available: ${(err as Error).message}`),
+      )
+    : Promise.resolve(void (weatherNote = "no city set — add one in Settings → Morning Setup on the PC"));
+  const topicsJob = researchTopics(mem?.briefing?.topics ?? [], {
+    apiKey: o.kit.apiKey,
+    model: o.kit.model,
+    generate: bind(o.kit),
+    now,
+    fetchText: o.fetchText,
+    signal: o.signal,
+  });
+  const [, topics] = await Promise.all([weatherJob, topicsJob]);
 
   const facts: MorningFacts = {
     now: morningNow(now),
@@ -170,15 +198,20 @@ export async function offlineMorning(o: {
     memory: memoryDigest(mem),
     madeTopics: recent.map((s) => s.topic),
     ideas: o.kit.ideas,
+    topics,
   };
+  const briefingDate = localDay(now);
+  const research = topics
+    .map((t) => `${t.topic}: ${t.via === "search" ? "Google Search" : t.via === "feeds" ? "GitHub, Hacker News, Google News" : `not researched${t.note ? ` (${t.note})` : ""}`}`)
+    .join("\n");
   try {
     const resp = await bind(o.kit)({ apiKey: o.kit.apiKey, model: o.kit.model, request: morningRequest(facts, o.kit.model), signal: o.signal, timeoutMs: 30_000 });
     const text = plainReply(visibleText(resp.candidates?.[0]?.content?.parts));
-    if (text) return { text, model: o.kit.model, ...(weatherNote ? { weatherNote } : {}) };
+    if (text) return { text, model: o.kit.model, briefingDate, research, ...(weatherNote ? { weatherNote } : {}) };
   } catch {
     /* the template below */
   }
-  return { text: templateBriefing(facts), model: null, ...(weatherNote ? { weatherNote } : {}) };
+  return { text: templateBriefing(facts), model: null, briefingDate, research, ...(weatherNote ? { weatherNote } : {}) };
 }
 
 function base64(bytes: Uint8Array): string {

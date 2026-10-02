@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2, Mic, Monitor, Play, Smartphone, Volume2, Youtube } from "lucide-react";
+import { Loader2, Mic, Monitor, Play, Smartphone, Sunrise, Volume2, Youtube } from "lucide-react";
 import type { ChatMessage, JobSnapshot } from "../lib/client";
 import { cn } from "./ui";
 
@@ -46,7 +46,12 @@ export function MessageBubble({
   const jobId = watchableJob(m);
   return (
     <div className={cn("flex animate-rise-in flex-col", mine ? "items-end" : "items-start")} data-testid={mine ? "msg-user" : "msg-agent"}>
-      {first && !mine && <span className="mb-1 ml-1 text-[12px] font-semibold text-cyan-300/90">Soundwave</span>}
+      {first && !mine && !m.briefingDate && <span className="mb-1 ml-1 text-[12px] font-semibold text-cyan-300/90">Soundwave</span>}
+      {m.briefingDate && (
+        <span className="mb-1 ml-1 flex items-center gap-1 text-[12px] font-semibold text-amber-300/90" data-testid="briefing-label">
+          <Sunrise className="h-3.5 w-3.5" /> Morning briefing · {new Date(`${m.briefingDate}T12:00:00`).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}
+        </span>
+      )}
       {first && onPc && (
         <span className="mb-1 mr-1 flex items-center gap-1 text-[12px] font-medium text-gray-500">
           <Monitor className="h-3 w-3" /> On your PC

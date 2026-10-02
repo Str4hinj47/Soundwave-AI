@@ -27,6 +27,7 @@ import { OPEN_METEO_FORECAST, OPEN_METEO_GEOCODING } from "../brain/core/morning
 import { MAX_NOTE_CHARS, type MemoryOp } from "../brain/core/memory.js";
 import { applyPhoneMemoryOps, memoryAvailable, memorySnapshot } from "../memory.js";
 import { loadMorningSettings, morningCity, runMorningSetup } from "../morning.js";
+import { briefingStatus, markBriefingHeard, prepareTodaysBriefing } from "../briefing.js";
 import { sanitizeMessages } from "../chatMessages.js";
 import { getStore } from "../store.js";
 import { EnvelopeError, aad, deriveDeviceKeys, frame, open, seal, unframe } from "./crypto.js";
@@ -165,6 +166,8 @@ export interface BrainKit {
   /** Morning Setup on the phone: the weather city (and the service, only when it isn't Open-Meteo's). */
   weather: { city: string | null; geocodingUrl?: string; forecastUrl?: string };
   ideas: boolean;
+  /** The agent's Soundwave voice (the phone speaks with it when the PC is off). */
+  voice: string | null;
   rev: string;
 }
 
@@ -202,6 +205,7 @@ export function brainKit(host: string | null = null): KitResult {
       ...(config.openMeteoForecastUrl !== OPEN_METEO_FORECAST ? { forecastUrl: forPhone(config.openMeteoForecastUrl, host) } : {}),
     },
     ideas: settings.ideas,
+    voice: getConversation().voice ?? null,
   };
   return { enabled: true, ...body, rev: createHash("sha1").update(JSON.stringify(body)).digest("hex").slice(0, 16) };
 }
@@ -257,6 +261,9 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
     const ops = memoryOpsFrom(args.memoryOps);
     if (ops.length && memoryAvailable()) applyPhoneMemoryOps(ops);
     const snap = incoming.length ? mergeIntoConversation(incoming) : getConversation();
+    // A briefing the phone made (and spoke) while the PC was off, or the PC's one it spoke offline: heard.
+    for (const m of incoming) if (m.sender === "assistant" && m.briefingDate) markBriefingHeard(m.briefingDate, "phone");
+    if (Array.isArray(args.heard)) for (const d of args.heard.slice(0, 14)) if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) markBriefingHeard(d, "phone");
     const memory = memoryAvailable() ? await memorySnapshot() : null;
     return { result: { epoch: snap.epoch, rev: snap.rev, messages: snap.messages, merged: incoming.length, memoryOps: ops.length, memoryRev: memory?.rev ?? null, memory } };
   },
@@ -274,7 +281,27 @@ const OPS: Record<string, (args: Args, ctx: OpContext) => Promise<OpResult>> = {
     }
     const aiMsg = replyToMessage(reply, "Morning Setup", Math.max(Date.now(), now + 1));
     const snap = appendToConversation(aiMsg);
+    if (aiMsg.briefingDate) markBriefingHeard(aiMsg.briefingDate, "phone");
     return { result: { epoch: snap.epoch, rev: snap.rev, messages: snap.messages, reply: aiMsg } };
+  },
+
+  // Opened in the morning: today's briefing (written when it was due) — or written now when asked.
+  async "briefing.today"(args) {
+    let status = briefingStatus();
+    if (args.prepare === true && status.inWindow && !status.message) {
+      await prepareTodaysBriefing("phone");
+      status = briefingStatus();
+    }
+    const snap = getConversation();
+    return { result: { ...status, epoch: snap.epoch, rev: snap.rev, messages: snap.messages } };
+  },
+
+  // The phone spoke today's briefing: the Command Center won't speak it again.
+  async "briefing.heard"(args) {
+    const day = str(args.day, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new OpError("BAD_ARGS", "Which day?");
+    markBriefingHeard(day, "phone");
+    return { result: { ok: true } };
   },
 
   // The conversation (+ progress of shorts it's waiting on). With `wait`, holds

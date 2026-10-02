@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, RefreshCw, Settings2, Smartphone, Sparkles, Sunrise, VolumeX, WifiOff } from "lucide-react";
+import { ChevronDown, Loader2, RefreshCw, Settings2, Smartphone, Sparkles, Square, Sunrise, VolumeX, WifiOff } from "lucide-react";
 import type { ChatMessage, ConnectionState } from "../lib/client";
-import type { Companion, PhoneChat } from "../state/useCompanion";
+import type { BriefingPhase, Companion, PhoneChat } from "../state/useCompanion";
 import { useVoiceInput } from "../state/useVoiceInput";
 import { toast } from "../lib/toast";
 import { Composer } from "./Composer";
@@ -40,6 +40,33 @@ function phoneChatHint(chat: PhoneChat): string {
     default:
       return "";
   }
+}
+
+/** The morning briefing being prepared or spoken (it starts by itself when the app opens). */
+function BriefingBar({ phase, onStop }: { phase: BriefingPhase; onStop: () => void }) {
+  if (phase.kind === "idle") return null;
+  const preparing = phase.kind === "preparing";
+  return (
+    <div className="mx-3 mb-1 mt-2 flex items-center gap-3 rounded-3xl border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3" role="status" data-testid="briefing-bar" data-phase={phase.kind}>
+      {preparing ? <Loader2 className="h-5 w-5 shrink-0 animate-spin text-amber-300" /> : <Sunrise className="h-5 w-5 shrink-0 text-amber-300" />}
+      <div className="min-w-0 flex-1">
+        <p className="text-[14.5px] font-semibold text-amber-50">{preparing ? "Getting your morning briefing ready…" : "Your morning briefing"}</p>
+        <p className="truncate text-[12.5px] text-amber-100/70">
+          {preparing
+            ? `${phase.by === "phone" ? "Your PC is off — researching on the phone" : "Researching"}${phase.topics.length ? `: ${phase.topics.join(" · ")}` : ""}`
+            : "Tap Stop to stop it"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onStop}
+        className="flex items-center gap-1.5 rounded-full bg-amber-300/15 px-3 py-2 text-[13px] font-semibold text-amber-100 active:bg-amber-300/25"
+        data-testid="briefing-stop"
+      >
+        <Square className="h-3.5 w-3.5 fill-current" /> {preparing ? "Skip" : "Stop"}
+      </button>
+    </div>
+  );
 }
 
 /** The PC is off but the phone answers by itself — calm, not an error. */
@@ -186,7 +213,14 @@ export function Chat({ companion, onOpenSettings }: { companion: Companion; onOp
           </p>
         </div>
         {speaking && (
-          <IconButton label="Stop reading" onClick={companion.stopSpeaking} className="text-cyan-300">
+          <IconButton
+            label="Stop reading"
+            onClick={() => {
+              companion.stopBriefing();
+              companion.stopSpeaking();
+            }}
+            className="text-cyan-300"
+          >
             <VolumeX className="h-5 w-5" />
           </IconButton>
         )}
@@ -268,6 +302,8 @@ export function Chat({ companion, onOpenSettings }: { companion: Companion; onOp
           </button>
         )}
       </div>
+
+      <BriefingBar phase={companion.briefing} onStop={companion.stopBriefing} />
 
       {canChat && (
         <div className="flex gap-2 overflow-x-auto border-t border-line bg-navy/95 px-3 pt-2" data-testid="quick-actions">

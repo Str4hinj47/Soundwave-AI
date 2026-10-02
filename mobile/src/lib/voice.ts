@@ -76,6 +76,56 @@ export function playReply(bytes: Uint8Array, mime: string): Promise<void> {
   });
 }
 
+/** Long text → pieces of at most `max` characters, cut at sentence (then word) ends. */
+export function splitSpeech(text: string, max = 1800): string[] {
+  const chunks: string[] = [];
+  let rest = text.replace(/\s+/g, " ").trim();
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    let cut = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+    if (cut < max * 0.5) cut = window.lastIndexOf(" ");
+    if (cut < max * 0.3) cut = max - 1;
+    chunks.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+/**
+ * Speaks long text (the morning briefing) piece by piece: the next piece is
+ * synthesized while the current one plays. Stops when `stopped()` says so
+ * (stopSpeaking() also ends the current piece).
+ */
+export async function speakLong(
+  text: string,
+  synth: (piece: string) => Promise<{ audio: Uint8Array; mime: string }>,
+  stopped: () => boolean,
+): Promise<void> {
+  const pieces = splitSpeech(text);
+  if (!pieces.length) return;
+  let next = synth(pieces[0]!);
+  for (let i = 0; i < pieces.length; i++) {
+    const current = await next;
+    if (i + 1 < pieces.length) {
+      next = synth(pieces[i + 1]!);
+      next.catch(() => undefined); // surfaces on the next await
+    }
+    if (stopped()) return;
+    await playReply(current.audio, current.mime);
+    if (stopped()) return;
+  }
+}
+
+/** What of a briefing is worth saying (all of it — just no links). */
+export function speakableBriefing(text: string): string {
+  return text
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** What of a message is worth saying out loud (no links, no background credits). */
 export function speakable(m: { text: string; jobState?: string; topic?: string; youtubeUrl?: string }): string {
   if (m.jobState === "done") return `Your short about ${m.topic || "that"} is ready${m.youtubeUrl ? ", and it's up on YouTube" : ""}.`;

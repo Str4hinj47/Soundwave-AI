@@ -120,5 +120,6 @@ export async function brainChat(input: BrainChatInput, brain: ActiveBrain, deps:
     Object.assign(reply, { action: "soundwave_shorts", videoUrl: video.url, downloadUrl: video.url, ...(short ? {} : { topic: video.topic }) });
   }
   if (log.length) reply.actionOutput = log.join("\n");
+  if (ctx.effects.briefingDate) reply.briefingDate = ctx.effects.briefingDate;
   return reply;
 }

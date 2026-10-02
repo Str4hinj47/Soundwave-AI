@@ -94,6 +94,53 @@ export function speak(text: string, voice?: string, handlers: SpeakHandlers = {}
   return true;
 }
 
+/** Long text → pieces of at most `max` characters, cut at sentence (then word) ends. */
+export function splitForSpeech(text: string, max = 1100): string[] {
+  const out: string[] = [];
+  let rest = text
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[*_#`>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    let cut = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+    if (cut < max * 0.5) cut = window.lastIndexOf(" ");
+    if (cut < max * 0.3) cut = max - 1;
+    out.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
+/**
+ * Speak long text — the morning briefing — in full: piece after piece, each
+ * streamed like a normal reply. stopSpeaking() ends it.
+ */
+export function speakLong(text: string, voice?: string, handlers: SpeakHandlers = {}): boolean {
+  const pieces = splitForSpeech(text);
+  if (!pieces.length) return false;
+  let i = 0;
+  let started = false;
+  const next = () => {
+    const piece = pieces[i++]!;
+    speak(piece, voice, {
+      onStart: () => {
+        if (!started) {
+          started = true;
+          handlers.onStart?.();
+        }
+      },
+      onEnd: () => (i < pieces.length ? next() : handlers.onEnd?.()),
+      onError: handlers.onError,
+      onBlocked: handlers.onBlocked,
+    });
+  };
+  next();
+  return true;
+}
+
 /** Why the last reply couldn't be spoken, in words for a toast. */
 export async function voiceProblemReason(): Promise<string> {
   let reason = "Couldn't reach Microsoft's neural voice service. Check the internet connection and try again.";

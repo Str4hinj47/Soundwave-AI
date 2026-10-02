@@ -2,7 +2,10 @@
 //   GET  /api/v1/morning           settings (+ the weather city in use)        ┐ the desktop
 //   PUT  /api/v1/morning           { city?, items?, openFromPhone?, ideas? }   │ app's own
 //   POST /api/v1/morning/weather   { city? } → today's weather (the "Check")   │ window only
-//   POST /api/v1/morning/run       run it: open items, briefing (the chip)     ┘
+//   POST /api/v1/morning/run       run it: open items, briefing (the chip)     │
+//   GET  /api/v1/morning/briefing  today's briefing: due? ready? heard?        │
+//   POST /api/v1/morning/briefing/prepare   write it now (if it isn't there)   │
+//   POST /api/v1/morning/briefing/heard     { day } — spoken here, not again   ┘
 // The phone runs it through its encrypted channel (lib/companion, op "morning").
 
 import { Router } from "express";
@@ -12,6 +15,9 @@ import { ApiError } from "../middleware/error.js";
 import { localAppGuard } from "../middleware/localApp.js";
 import { validate } from "../middleware/validate.js";
 import { normalizeUrl } from "../lib/brain/pc.js";
+import { MAX_BRIEFING_TOPICS, MAX_TOPIC_CHARS } from "../lib/brain/core/memory.js";
+import { briefingPlan, setBriefingPlan } from "../lib/memory.js";
+import { briefingStatus, markBriefingHeard, prepareTodaysBriefing } from "../lib/briefing.js";
 import {
   MAX_MORNING_ITEMS,
   itemLabel,
@@ -37,6 +43,10 @@ function view() {
     canOpen: config.desktopApp,
     canOpenApps: config.desktopApp && process.platform === "win32",
     maxItems: MAX_MORNING_ITEMS,
+    // The daily briefing lives in the agent's memory (the phone gets it too).
+    briefing: briefingPlan(),
+    maxTopics: MAX_BRIEFING_TOPICS,
+    maxTopicChars: MAX_TOPIC_CHARS,
   };
 }
 
@@ -50,6 +60,16 @@ const putSchema = z.object({
   items: z.array(itemSchema).max(MAX_MORNING_ITEMS).optional(),
   openFromPhone: z.boolean().optional(),
   ideas: z.boolean().optional(),
+  briefing: z
+    .object({
+      topics: z.array(z.string().trim().min(1).max(MAX_TOPIC_CHARS)).max(MAX_BRIEFING_TOPICS).optional(),
+      time: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a 24-hour time like 07:30.")
+        .optional(),
+      auto: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 router.put("/", validate({ body: putSchema }), (req, res) => {
@@ -73,6 +93,7 @@ router.put("/", validate({ body: putSchema }), (req, res) => {
     ...(body.openFromPhone !== undefined ? { openFromPhone: body.openFromPhone } : {}),
     ...(body.ideas !== undefined ? { ideas: body.ideas } : {}),
   });
+  if (body.briefing) setBriefingPlan(body.briefing);
   res.json(view());
 });
 
@@ -94,10 +115,31 @@ router.post("/run", async (req, res, next) => {
     if (!res.writableFinished) controller.abort();
   });
   try {
-    res.json(await runMorningSetup({ via: "pc", signal: controller.signal }));
+    const reply = await runMorningSetup({ via: "pc", signal: controller.signal });
+    // Shown (and spoken) right here: it's today's briefing, heard.
+    if (typeof reply.briefingDate === "string") markBriefingHeard(reply.briefingDate, "pc");
+    res.json(reply);
   } catch (err) {
     next(err);
   }
+});
+
+router.get("/briefing", (_req, res) => {
+  res.json(briefingStatus());
+});
+
+router.post("/briefing/prepare", async (_req, res, next) => {
+  try {
+    await prepareTodaysBriefing("app");
+    res.json(briefingStatus());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/briefing/heard", validate({ body: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }) }), (req, res) => {
+  markBriefingHeard((req.body as { day: string }).day, "pc");
+  res.json(briefingStatus());
 });
 
 export default router;

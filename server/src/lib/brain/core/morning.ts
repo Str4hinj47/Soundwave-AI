@@ -7,6 +7,9 @@
 // Pure TypeScript (no Node APIs): mobile/ compiles it too.
 
 import { isGemini3, type GenerateRequest } from "./gemini.js";
+import type { TopicBrief } from "./research.js";
+
+export type { TopicBrief };
 
 export interface Weather {
   place: string;
@@ -53,6 +56,8 @@ export interface MorningFacts {
   madeTopics: string[];
   /** Include three short ideas. */
   ideas: boolean;
+  /** The user's own briefing topics, researched with Gemini (./research.ts). */
+  topics: TopicBrief[];
 }
 
 // ── Weather (Open-Meteo: free, no key, allows browsers) ─────────────────────
@@ -174,11 +179,12 @@ export const MORNING_INSTRUCTION = [
   "- What happened with their shorts since last time: finished ones by topic (say \"it's on YouTube\" when it was posted), failures in simple words, what's rendering now. If nothing happened, say so briefly.",
   "- Their YouTube channel's numbers in one or two sentences, if given.",
   "- If memory says what you were working on, connect to it in one sentence.",
+  "- Then the user's own briefing topics, each in turn, in the order given: introduce it in a few words (\"On open-source AI tools:\") and give its 2 to 4 most important points from its research — names, numbers, what's new; never read out links. If nothing new was found for a topic, say so in one short sentence. Never invent news.",
   "- If ideas are asked for: three fresh, specific short ideas that fit their channel and differ from the shorts already made — each on its own line as \"Idea 1: …\", \"Idea 2: …\", \"Idea 3: …\" (a topic and its hook, one line each).",
   "- Mention something opened on the PC only if it failed to open. Mention low disk space if given. Mention backgrounds only if few are left (under 10).",
   "- End with one short line offering to start one (\"Say make idea 1\") or to help.",
   "",
-  "Plain text only, no Markdown, no emoji. 110 to 190 words. Use only the facts given — leave out anything missing.",
+  "Plain text only, no Markdown, no emoji. 110 to 190 words, plus about 50 to 90 words for each briefing topic. Use only the facts given — leave out anything missing.",
 ].join("\n");
 
 export function morningPrompt(f: MorningFacts): string {
@@ -208,6 +214,15 @@ export function morningPrompt(f: MorningFacts): string {
   if (f.opened.length) lines.push(`Opened on the PC: ${f.opened.filter((o) => o.ok).map((o) => o.label).join(", ") || "nothing"}${failedOpen.length ? `; couldn't open: ${failedOpen.map((o) => `${o.label} (${o.error ?? "failed"})`).join(", ")}` : ""}.`);
   if (typeof f.lowDiskGB === "number") lines.push(`Low disk space: only ${f.lowDiskGB} GB free.`);
   if (f.memory) lines.push("", "Memory:", f.memory);
+  if (f.topics?.length) {
+    lines.push("", "Briefing topics (cover each, in this order, using only its research):");
+    f.topics.forEach((t, i) => {
+      const how = t.via === "search" ? "researched with Google Search" : t.via === "feeds" ? "from GitHub, Hacker News and Google News" : "not researched";
+      lines.push(`${i + 1}. “${t.topic}” — ${how}:`);
+      lines.push(t.summary ? t.summary : `(nothing new found${t.note ? ` — ${t.note}` : ""})`);
+      if (t.sources.length) lines.push(`Sources: ${t.sources.map((src) => src.title).join(", ")}`);
+    });
+  }
   if (f.ideas) lines.push("", `Ideas: yes — three new ones.${f.madeTopics.length ? ` Already made (don't repeat): ${f.madeTopics.slice(0, 25).map((t) => `“${t}”`).join(", ")}.` : ""}`);
   else lines.push("", "Ideas: no.");
   if (f.where === "phone-offline") lines.push("(The PC is off: this briefing comes from the phone, so nothing was opened on the PC.)");
@@ -242,9 +257,48 @@ export function templateBriefing(f: MorningFacts, opts: { noKey?: boolean } = {}
   if (opened.length) out.push(`I opened ${opened.join(", ")} on your PC.`);
   if (failed.length) out.push(`I couldn't open ${failed.join(", ")}.`);
   if (typeof f.lowDiskGB === "number") out.push(`Heads up: only ${f.lowDiskGB} GB of disk space is free.`);
-  if (opts.noKey) out.push("Add a Gemini key in Settings → Brain and I'll suggest fresh short ideas every morning.");
-  else out.push("Want me to make a short today?");
+  for (const t of f.topics ?? []) {
+    const first = t.summary.split("\n").filter(Boolean).slice(0, 2).join(" ");
+    if (first) out.push(`On ${t.topic}: ${first}`);
+  }
+  if (opts.noKey) {
+    out.push(
+      f.topics?.length
+        ? `Add a Gemini key in Settings → Brain and I'll research your topics (${f.topics.map((t) => t.topic).join("; ")}) and suggest fresh short ideas every morning.`
+        : "Add a Gemini key in Settings → Brain and I'll suggest fresh short ideas every morning.",
+    );
+  } else out.push("Want me to make a short today?");
   return out.join(" ");
+}
+
+/** "2026-10-02" for `now` in the device's (or the given) time zone — which morning a briefing belongs to. */
+export function localDay(now: Date, timeZone?: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", ...(timeZone ? { timeZone } : {}) }).formatToParts(now);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+  }
+}
+
+/** Is today's briefing due (local time ≥ the plan's "HH:MM")? */
+export function briefingDue(time: string, now: Date): boolean {
+  const m = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!m) return false;
+  return now.getHours() * 60 + now.getMinutes() >= Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** How long after the due time the briefing is still "this morning's" (and is spoken when an app opens). */
+export const BRIEFING_WINDOW_MINUTES = 10 * 60;
+
+/** Due today and still within the morning window. */
+export function inBriefingWindow(time: string, now: Date): boolean {
+  const m = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!m) return false;
+  const since = now.getHours() * 60 + now.getMinutes() - (Number(m[1]) * 60 + Number(m[2]));
+  return since >= 0 && since < BRIEFING_WINDOW_MINUTES;
 }
 
 function capitalize(s: string): string {

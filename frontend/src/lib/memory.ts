@@ -13,6 +13,8 @@ export interface MemoryState {
   notes: MemoryNote[];
   summary: { text: string; updatedAt: number } | null;
   lastMorningAt: number | null;
+  /** The morning briefing (Settings → Morning Setup). */
+  briefing?: { topics: string[]; time: string; auto: boolean; updatedAt: number };
   maxNotes: number;
   maxNoteChars: number;
 }

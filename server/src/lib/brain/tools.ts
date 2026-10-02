@@ -14,6 +14,7 @@ import type { GeminiFunctionDeclaration } from "./gemini.js";
 import { openApp, openWebsite, pcStatus } from "./pc.js";
 import { guideTool } from "./core/guide.js";
 import { memoryTools, type MemoryStore } from "./core/memory.js";
+import { localDay } from "./core/morning.js";
 
 export interface ToolEffects {
   /** A short started (or already rendering) — the app follows its progress. */
@@ -22,6 +23,8 @@ export interface ToolEffects {
   video?: { jobId: string; url: string; topic: string };
   /** One line per action taken, e.g. "Opened https://youtube.com/". */
   log: string[];
+  /** The reply is that day's morning briefing (run_morning_setup). */
+  briefingDate?: string;
   tag?: "SYS" | "RPA" | "VOICE" | "AUDIO";
 }
 
@@ -272,6 +275,7 @@ AGENT_TOOLS.push(
     async run(_args, ctx) {
       const facts = await prepareMorning({ via: ctx.via === "phone" ? "phone" : "pc" });
       ctx.effects.tag = "SYS";
+      ctx.effects.briefingDate = localDay(new Date());
       for (const o of facts.opened) ctx.effects.log.push(o.ok ? `Opened ${o.label}` : `Couldn't open ${o.label}: ${o.error ?? "failed"}`);
       return { ...facts, madeTopics: facts.madeTopics.slice(0, 25) };
     },

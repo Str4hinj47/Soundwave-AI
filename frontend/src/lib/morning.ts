@@ -1,7 +1,25 @@
 // ── Morning Setup (the chip in the Command Center, Settings → Morning Setup) ─
 // Server: server/src/routes/morning.ts and lib/morning.ts.
 
-import type { ChatReply } from "./agentChat";
+import type { ChatMessage, ChatReply } from "./agentChat";
+
+/** The daily briefing (kept in the agent's memory; the phone gets it too). */
+export interface BriefingPlan {
+  topics: string[];
+  time: string;
+  auto: boolean;
+  updatedAt: number;
+}
+
+export interface BriefingStatus {
+  day: string;
+  plan: BriefingPlan;
+  due: boolean;
+  inWindow: boolean;
+  preparing: boolean;
+  message: ChatMessage | null;
+  heard: { at: number; on: "pc" | "phone" | null } | null;
+}
 
 export interface MorningItem {
   kind: "website" | "app";
@@ -20,6 +38,9 @@ export interface MorningSettings {
   canOpen: boolean;
   canOpenApps: boolean;
   maxItems: number;
+  briefing: BriefingPlan;
+  maxTopics: number;
+  maxTopicChars: number;
 }
 
 export interface Weather {
@@ -44,7 +65,11 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const morningApi = {
   get: () => call<MorningSettings>(""),
-  save: (patch: Partial<Pick<MorningSettings, "city" | "items" | "openFromPhone" | "ideas">>) => call<MorningSettings>("", { method: "PUT", body: JSON.stringify(patch) }),
+  save: (patch: Partial<Pick<MorningSettings, "city" | "items" | "openFromPhone" | "ideas">> & { briefing?: Partial<Omit<BriefingPlan, "updatedAt">> }) =>
+    call<MorningSettings>("", { method: "PUT", body: JSON.stringify(patch) }),
+  briefing: () => call<BriefingStatus>("/briefing"),
+  prepareBriefing: () => call<BriefingStatus>("/briefing/prepare", { method: "POST" }),
+  briefingHeard: (day: string) => call<BriefingStatus>("/briefing/heard", { method: "POST", body: JSON.stringify({ day }) }),
   weather: (city?: string) => call<{ ok: boolean; city: string | null; weather: Weather | null; error?: string }>("/weather", { method: "POST", body: JSON.stringify(city ? { city } : {}) }),
   run: () => call<ChatReply>("/run", { method: "POST" }),
 };

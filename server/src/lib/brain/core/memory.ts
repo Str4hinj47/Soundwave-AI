@@ -31,10 +31,37 @@ export interface MemoryShort {
   youtubeUrl?: string | null;
 }
 
+/** What the morning briefing covers and when it's due (Settings → Morning Setup, or by asking the agent). */
+export interface BriefingPlan {
+  /** Things to brief on, in the user's words: "the latest news about open-source, free AI tools". */
+  topics: string[];
+  /** "HH:MM", local time. */
+  time: string;
+  /** Prepared every morning and spoken when the app is opened after `time`. */
+  auto: boolean;
+  /** ms since epoch (newest wins when the phone changed it offline). */
+  updatedAt: number;
+}
+
+export const DEFAULT_BRIEFING: BriefingPlan = { topics: [], time: "08:00", auto: true, updatedAt: 0 };
+export const MAX_BRIEFING_TOPICS = 8;
+export const MAX_TOPIC_CHARS = 160;
+
+export function cleanBriefingPlan(input: Partial<BriefingPlan> | null | undefined, base: BriefingPlan = DEFAULT_BRIEFING): BriefingPlan {
+  const time = typeof input?.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.time.trim()) ? input.time.trim() : base.time;
+  const seen = new Set<string>();
+  const topics = (Array.isArray(input?.topics) ? input!.topics : base.topics)
+    .map((t) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_TOPIC_CHARS))
+    .filter((t) => t && !looksSecret(t) && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .slice(0, MAX_BRIEFING_TOPICS);
+  return { topics, time, auto: typeof input?.auto === "boolean" ? input.auto : base.auto, updatedAt: Number(input?.updatedAt) || base.updatedAt || 0 };
+}
+
 export interface MemorySnapshot {
   /** Changes whenever anything below changes. */
   rev: string;
   notes: MemoryNote[];
+  briefing: BriefingPlan;
   summary: { text: string; updatedAt: number } | null;
   shorts: { total: number; completed: number; recent: MemoryShort[] } | null;
   youtube: { linked: boolean; channelTitle?: string | null } | null;
@@ -47,7 +74,7 @@ export interface MemorySnapshot {
 export type MemoryForPrompt = Omit<MemorySnapshot, "rev">;
 
 /** A change made on the phone while the PC was off, replayed on the PC. */
-export type MemoryOp = { op: "add"; note: MemoryNote } | { op: "forget"; id: string };
+export type MemoryOp = { op: "add"; note: MemoryNote } | { op: "forget"; id: string } | { op: "briefing"; plan: BriefingPlan };
 
 export const MAX_NOTES = 60;
 export const MAX_NOTE_CHARS = 300;
@@ -88,6 +115,13 @@ export function findNote(notes: MemoryNote[], idOrText: string): MemoryNote | un
     if (score > (best?.score ?? 0)) best = { note, score };
   }
   return best && best.score >= 0.6 ? best.note : undefined;
+}
+
+/** The briefing plan after phone-side changes (the newest one wins). */
+export function applyBriefingOps(plan: BriefingPlan, ops: MemoryOp[]): BriefingPlan {
+  let out = plan;
+  for (const op of ops) if (op.op === "briefing" && op.plan && (Number(op.plan.updatedAt) || 0) >= out.updatedAt) out = cleanBriefingPlan(op.plan, out);
+  return out;
 }
 
 /** Replays phone-side changes (the PC's list wins for anything else). */
@@ -140,6 +174,15 @@ export function memoryPromptSection(m: MemoryForPrompt | null | undefined, now =
   }
   if (m.youtube) lines.push("", m.youtube.linked ? `YouTube channel linked: ${m.youtube.channelTitle || "yes"}.` : "YouTube isn't linked yet.");
   if (m.lastMorningAt) lines.push(`Last Morning Setup: ${relativeTime(m.lastMorningAt, now)}.`);
+  const b = m.briefing;
+  if (b) {
+    lines.push(
+      "",
+      `Morning briefing: ${b.auto ? `prepared every day at ${b.time} and spoken when the user opens the app` : "only when the user starts Morning Setup"}. Topics: ${
+        b.topics.length ? b.topics.map((t, i) => `${i + 1}) ${t}`).join("; ") : "none yet (weather, shorts and ideas only)"
+      }.`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -150,6 +193,8 @@ export interface MemoryStore {
   /** Saves a note (returns the existing one if it's already there). */
   add(text: string): MemoryNote;
   forget(note: MemoryNote): void;
+  briefing(): BriefingPlan;
+  setBriefing(plan: BriefingPlan): BriefingPlan;
 }
 
 export interface MemoryToolContext {
@@ -195,6 +240,38 @@ export function memoryTools<C extends MemoryToolContext>(): TurnTool<C>[] {
         if (!note) return { forgotten: false, reason: "No note like that in memory." };
         ctx.memory.forget(note);
         return { forgotten: true, text: note.text };
+      },
+    },
+    {
+      declaration: {
+        name: "update_morning_briefing",
+        description:
+          "Change the user's morning briefing (saved in your memory, on the PC and the phone): add or remove topics to brief them on — anything they want, e.g. “the latest news about open-source, free AI tools” or “new trending GitHub repositories” — set the time it's due (24-hour HH:MM) and whether it's prepared automatically every morning (then you start talking when they open the app). Use it whenever they say what they want in their morning briefing.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            add_topics: { type: "ARRAY", items: { type: "STRING" }, description: "Topics to add, in the user's words." },
+            remove_topics: { type: "ARRAY", items: { type: "STRING" }, description: "Topics to remove (their words are enough)." },
+            time: { type: "STRING", description: "When it's due, 24-hour HH:MM, e.g. 07:30." },
+            automatic: { type: "BOOLEAN", description: "Prepare it every morning and speak it when the app opens." },
+          },
+        },
+      },
+      sideEffect: true,
+      async run(args, ctx) {
+        const plan = ctx.memory.briefing();
+        const strings = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x ?? "")).filter(Boolean) : []);
+        const remove = strings(args.remove_topics).map((t) => norm(t));
+        let topics = plan.topics.filter((t) => !remove.some((r) => r && (norm(t).includes(r) || r.includes(norm(t)))));
+        topics = [...topics, ...strings(args.add_topics)];
+        const next = ctx.memory.setBriefing(
+          cleanBriefingPlan(
+            { topics, time: typeof args.time === "string" ? args.time : plan.time, auto: typeof args.automatic === "boolean" ? args.automatic : plan.auto, updatedAt: Date.now() },
+            plan,
+          ),
+        );
+        const badTime = typeof args.time === "string" && next.time !== args.time.trim();
+        return { saved: true, plan: next, ...(badTime ? { note: `“${args.time}” isn't a 24-hour time like 07:30, so the time stayed ${next.time}.` } : {}), maxTopics: MAX_BRIEFING_TOPICS };
       },
     },
   ];

@@ -63,6 +63,8 @@ export function agentInstruction(opts: InstructionOptions): string {
   if (has("run_morning_setup"))
     can.push("- Run the user's Morning Setup with run_morning_setup when they ask for it (\"good morning, run my morning setup\"): it opens their morning websites and apps and returns the facts for a short briefing — give the briefing from those facts.");
   if (has("remember")) can.push("- Remember things across conversations, on the PC and the phone, with remember and forget (what you remember is below).");
+  if (has("update_morning_briefing"))
+    can.push("- Change the user's morning briefing with update_morning_briefing: topics to brief them on (anything they want — news on a subject, trending GitHub repos, a quote…), the time it's due, automatic or not. Each morning you research those topics with Google Search and start talking when they open the app.");
   if (has("soundwave_guide")) can.push("- Explain every Soundwave feature and setup in detail with soundwave_guide.");
   can.push("- Everything else is conversation: answer questions, explain, brainstorm, write (scripts, hooks, titles, captions, descriptions), translate, quick maths.");
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, Check, Laptop, Lock, Play, Unlink } from "lucide-react";
+import { Brain, Check, Laptop, Lock, Play, Sunrise, Unlink } from "lucide-react";
 import { VOICE_META } from "../../../frontend/src/lib/voices";
 import type { Companion } from "../state/useCompanion";
 import type { SpeakMode } from "../lib/storage";
@@ -85,6 +85,48 @@ export function SettingsSheet({ open, onClose, companion }: { open: boolean; onC
             </div>
           );
         })()}
+      </section>
+
+      <section className="mt-6" data-testid="briefing-settings">
+        <h3 className="px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-gray-500">Morning briefing</h3>
+        <div className="mt-2 rounded-3xl border border-line bg-navy/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-300/10 text-amber-300">
+              <Sunrise className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-semibold text-gray-100">
+                {companion.briefingPlan?.auto ? `Every morning at ${companion.briefingPlan.time}` : "Only when you start it"}
+              </p>
+              <p className="mt-0.5 text-[13px] leading-snug text-gray-400">
+                {companion.briefingPlan?.topics.length
+                  ? `Researched with Gemini: ${companion.briefingPlan.topics.join(" · ")}`
+                  : "Weather, your shorts and ideas. Add your own topics — tell me (“brief me on trending GitHub repos”) or use Settings → Morning Setup on the PC."}
+              </p>
+            </div>
+          </div>
+          <label className="mt-4 flex items-center justify-between gap-3">
+            <span className="text-[14.5px] text-gray-200">Talk when I open the app</span>
+            <input
+              type="checkbox"
+              checked={settings.talkOnOpen}
+              onChange={(e) => updateSettings({ talkOnOpen: e.target.checked })}
+              className="h-6 w-11 cursor-pointer accent-violet-500"
+              data-testid="talk-on-open"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              void companion.hearBriefing();
+            }}
+            className="mt-3 h-11 w-full rounded-2xl bg-amber-300/15 text-[14.5px] font-semibold text-amber-100 active:bg-amber-300/25"
+            data-testid="hear-briefing"
+          >
+            Hear today's briefing now
+          </button>
+        </div>
       </section>
 
       <section className="mt-6">

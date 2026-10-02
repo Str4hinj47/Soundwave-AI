@@ -21,14 +21,18 @@ import { generateContent, GeminiError, isGemini3, visibleText } from "./brain/ge
 import { activeBrain, FALLBACK_MODEL } from "./brain/settings.js";
 import { HISTORY_MESSAGES } from "./brain/core/turn.js";
 import {
+  DEFAULT_BRIEFING,
   MAX_NOTES,
   SUMMARY_INSTRUCTION,
+  applyBriefingOps,
   applyMemoryOps,
+  cleanBriefingPlan,
   cleanNoteText,
   cleanSummary,
   looksSecret,
   newNoteId,
   summaryPrompt,
+  type BriefingPlan,
   type MemoryForPrompt,
   type MemoryNote,
   type MemoryOp,
@@ -42,9 +46,11 @@ interface MemoryFile {
   /** Order (ms) of the last conversation message folded into the summary. */
   summarizedUpTo: number;
   lastMorningAt: number | null;
+  /** The morning briefing: topics, when it's due, automatic or not. */
+  briefing: BriefingPlan;
 }
 
-const EMPTY: MemoryFile = { notes: [], summary: null, summarizedUpTo: 0, lastMorningAt: null };
+const EMPTY: MemoryFile = { notes: [], summary: null, summarizedUpTo: 0, lastMorningAt: null, briefing: DEFAULT_BRIEFING };
 /** Messages beyond what's sent with each question, before they're folded into the summary. */
 const SUMMARY_BATCH = 12;
 
@@ -62,7 +68,7 @@ export function memoryAvailable(): boolean {
 function load(): MemoryFile {
   const file = fileFor();
   if (cache?.file === file) return cache.mem;
-  let mem: MemoryFile = { ...EMPTY, notes: [] };
+  let mem: MemoryFile = { ...EMPTY, notes: [], briefing: { ...DEFAULT_BRIEFING } };
   try {
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<MemoryFile>;
     mem = {
@@ -76,6 +82,7 @@ function load(): MemoryFile {
       summary: raw.summary && typeof raw.summary.text === "string" && raw.summary.text.trim() ? { text: raw.summary.text, updatedAt: Number(raw.summary.updatedAt) || Date.now() } : null,
       summarizedUpTo: Number(raw.summarizedUpTo) || 0,
       lastMorningAt: Number(raw.lastMorningAt) || null,
+      briefing: cleanBriefingPlan(raw.briefing ?? null),
     };
   } catch {
     /* first run */
@@ -155,15 +162,31 @@ export function forgetSummary(): void {
 /** "Forget everything" (notes and the summary; the conversation itself stays). */
 export function clearMemory(): void {
   const msgs = getConversation().messages;
+  // The briefing plan is a setting (Settings → Morning Setup): it stays.
   save({ notes: [], summary: null, summarizedUpTo: msgs.length ? messageOrder(msgs.at(-1)!) : Date.now() });
 }
 
-/** Notes added or forgotten on a phone while the PC was off. */
+/** Notes added or forgotten — and briefing changes — made on a phone while the PC was off. */
 export function applyPhoneMemoryOps(ops: MemoryOp[]): void {
   if (!ops.length) return;
   const mem = load();
   const notes = applyMemoryOps(mem.notes, ops);
-  if (JSON.stringify(notes) !== JSON.stringify(mem.notes)) save({ notes });
+  const briefing = applyBriefingOps(mem.briefing, ops);
+  if (JSON.stringify(notes) !== JSON.stringify(mem.notes) || JSON.stringify(briefing) !== JSON.stringify(mem.briefing)) save({ notes, briefing });
+}
+
+// ── The morning briefing plan ───────────────────────────────────────────────
+
+export function briefingPlan(): BriefingPlan {
+  return load().briefing;
+}
+
+/** Settings → Morning Setup, or the agent's update_morning_briefing tool. */
+export function setBriefingPlan(patch: Partial<BriefingPlan>): BriefingPlan {
+  const current = load().briefing;
+  const next = cleanBriefingPlan({ ...current, ...patch, updatedAt: Date.now() }, current);
+  save({ briefing: next });
+  return next;
 }
 
 export function noteMorningRun(at = Date.now()): void {
@@ -179,13 +202,15 @@ export const pcMemoryStore: MemoryStore = {
   notes: () => memoryNotes(),
   add: (text) => addNote(text, "pc"),
   forget: (note) => void forgetNote(note.id),
+  briefing: () => briefingPlan(),
+  setBriefing: (plan) => setBriefingPlan(plan),
 };
 
 // ── Snapshots (the agent's instruction, the phone) ──────────────────────────
 
 export function memoryState() {
   const mem = load();
-  return { notes: mem.notes, summary: mem.summary, lastMorningAt: mem.lastMorningAt };
+  return { notes: mem.notes, summary: mem.summary, lastMorningAt: mem.lastMorningAt, briefing: mem.briefing };
 }
 
 export async function memorySnapshot(): Promise<MemorySnapshot> {
@@ -194,6 +219,7 @@ export async function memorySnapshot(): Promise<MemorySnapshot> {
   const yt = youtubeService.getConfig();
   const body: Omit<MemorySnapshot, "rev" | "takenAt"> = {
     notes: mem.notes,
+    briefing: mem.briefing,
     summary: mem.summary,
     shorts: {
       total: shorts.length,

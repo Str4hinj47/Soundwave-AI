@@ -27,6 +27,7 @@ import {
   Smartphone,
   Brain,
   Link2,
+  Sunrise,
 } from "lucide-react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
@@ -55,7 +56,7 @@ import {
   type ShortBackground,
   type ShortJob,
 } from "../lib/agentChat";
-import { speak, stopSpeaking, voiceProblemReason } from "../lib/speech";
+import { speak, speakLong, stopSpeaking, voiceProblemReason } from "../lib/speech";
 import { HOLD_MS, useVoiceCapture } from "../hooks/useVoiceCapture";
 import { VOICE_PREFS_EVENT, VoiceInputError, fetchVoiceInputStatus, isVoicePrefKey, loadVoicePrefs, saveVoicePrefs, type VoiceInputStatus } from "../lib/voiceInput";
 import { DEFAULT_HOTKEY, getDesktop, hotkeyLabel } from "../lib/desktop";
@@ -266,6 +267,7 @@ export function AgentHub() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [isRunningMorning, setIsRunningMorning] = useState(false);
+  const [briefingNote, setBriefingNote] = useState<string | null>(null);
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   // "Speak replies aloud" — stored, so the desktop voice bar follows it too.
   const [voiceFeedback, setVoiceFeedbackState] = useState(() => loadVoicePrefs().speakReplies);
@@ -433,6 +435,24 @@ export function AgentHub() {
       onBlocked: () => {
         setAssistantState(idleState());
         toast.info("Click anywhere to let Soundwave talk", "The browser blocks sound until you interact with the page.");
+      },
+    });
+  };
+
+  /** The morning briefing, spoken in full (it can be several minutes long). */
+  const speakBriefing = (text: string) => {
+    const current = selectedVoiceRef.current;
+    const voice = isSoundwaveVoice(current) ? current : loadAgentVoice();
+    speakLong(text, voice, {
+      onStart: () => setAssistantState("SPEAKING"),
+      onEnd: () => setAssistantState(idleState()),
+      onError: () => {
+        setAssistantState(idleState());
+        void reportVoiceProblem();
+      },
+      onBlocked: () => {
+        setAssistantState(idleState());
+        toast.info("Click anywhere to hear your morning briefing", "The browser blocks sound until you interact with the page.");
       },
     });
   };
@@ -802,7 +822,7 @@ export function AgentHub() {
       const data = await morningApi.run();
       const aiMsg = replyToMessage(data, "Morning Setup");
       setChatMessages((prev) => [...prev, aiMsg]);
-      speakText(aiMsg.text);
+      if (voiceFeedbackRef.current) speakBriefing(aiMsg.text);
     } catch (e) {
       const message = (e as Error).message;
       setChatMessages((prev) => [...prev, { id: newMessageId(), sender: "assistant", text: `I couldn't run the Morning Setup: ${message}`, time: chatTime(), at: Date.now(), tag: "SYS" }]);
@@ -812,6 +832,46 @@ export function AgentHub() {
       void refreshBrain();
     }
   };
+
+  // ── The daily briefing: speak it when the Command Center is opened ──────
+  // The PC writes it when it's due (Settings → Morning Setup); the first app
+  // opened after that — this window or the phone — speaks it, once.
+  const briefingBusy = useRef(false);
+  useEffect(() => {
+    const check = async () => {
+      if (briefingBusy.current || document.visibilityState !== "visible" || !document.hasFocus()) return;
+      briefingBusy.current = true;
+      try {
+        let st = await morningApi.briefing();
+        if (!st.plan.auto || !st.inWindow || st.heard) return;
+        if (!st.message) {
+          setBriefingNote(st.plan.topics.length ? `Preparing your morning briefing — researching ${st.plan.topics.length} topic${st.plan.topics.length === 1 ? "" : "s"}…` : "Preparing your morning briefing…");
+          st = await morningApi.prepareBriefing();
+        }
+        const msg = st.message;
+        if (!msg || st.heard) return;
+        setChatMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : mergeChat(prev, [msg])));
+        await morningApi.briefingHeard(st.day);
+        speakBriefing(msg.text);
+      } catch {
+        /* the server isn't reachable right now — try again next time */
+      } finally {
+        setBriefingNote(null);
+        briefingBusy.current = false;
+      }
+    };
+    void check();
+    const onShow = () => void check();
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
+    const timer = setInterval(onShow, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── The agent's memory (gear → Memory) ─────────────────────────────────
   const refreshMemory = async () => {
@@ -1912,6 +1972,7 @@ export function AgentHub() {
                   <span className="flex items-center gap-1 uppercase text-[9px] font-bold tracking-wider text-cyan-400">
                     {msg.via === "phone" && <Smartphone className="h-2.5 w-2.5" aria-label="From your phone" />}
                     {msg.viaVoice && <Mic className="h-2.5 w-2.5" aria-label="Spoken" />}
+                    {msg.briefingDate && <Sunrise className="h-2.5 w-2.5 text-amber-300" aria-label="Morning briefing" />}
                     {msg.answeredBy === "phone" && <Smartphone className="h-2.5 w-2.5" aria-label="Answered on your phone" />}
                     {msg.via === "phone"
                       ? msg.viaVoice
@@ -1919,9 +1980,13 @@ export function AgentHub() {
                         : "YOU (PHONE)"
                       : msg.viaVoice
                         ? "YOU (VOICE)"
-                        : msg.answeredBy === "phone"
-                          ? "AGENT (ON PHONE, PC OFF)"
-                          : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
+                        : msg.briefingDate
+                          ? msg.answeredBy === "phone"
+                            ? "MORNING BRIEFING (ON PHONE)"
+                            : "MORNING BRIEFING"
+                          : msg.answeredBy === "phone"
+                            ? "AGENT (ON PHONE, PC OFF)"
+                            : msg.tag || (msg.sender === "user" ? "USER" : "AGENT")}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {msg.sender === "assistant" && (
@@ -1954,6 +2019,13 @@ export function AgentHub() {
                 <div className="h-1 w-full overflow-hidden rounded-full bg-gray-800">
                   <div className="h-full bg-cyan-400 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
                 </div>
+              </div>
+            )}
+
+            {briefingNote && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-[10px] text-amber-200 font-mono flex items-center gap-2" data-testid="briefing-note">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {briefingNote}
               </div>
             )}
 
@@ -2539,6 +2611,26 @@ export function AgentHub() {
                     >
                       Add
                     </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5" data-testid="memory-briefing">
+                  <label className="text-gray-300 font-semibold">Morning briefing</label>
+                  <div className="rounded-lg border border-[#172A4A] bg-[#070D18] p-2.5 text-[11px] text-gray-300">
+                    {memoryState?.briefing ? (
+                      <>
+                        <span className="text-amber-200">
+                          {memoryState.briefing.auto ? `Every morning at ${memoryState.briefing.time}` : "Only when you start Morning Setup"}
+                        </span>
+                        {" · "}
+                        {memoryState.briefing.topics.length ? memoryState.briefing.topics.join(" · ") : "no topics yet"}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                    <Link to="/settings/morning" onClick={() => setSettingsOpen(false)} className="ml-2 text-cyan-400 hover:text-cyan-300 underline">
+                      Change
+                    </Link>
                   </div>
                 </div>
 

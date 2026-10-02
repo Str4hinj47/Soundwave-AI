@@ -31,7 +31,7 @@ Main parts:
 - Memory: notes the agent saves, a summary of earlier conversations, and the list of shorts made — so it remembers what you did together.
 - Voice: tap the mic, hold it to talk, or press Ctrl+Shift+Space from any app. Speech is recognized on the PC; replies are spoken in Microsoft neural voices.
 - Phone app (Android): the same conversation on the phone. It can keep chatting with the agent even when the PC is off.
-- Morning Setup: a daily briefing (weather, what happened with your shorts, ideas for today) that also opens your morning websites and apps on the PC.
+- Morning Setup and the daily briefing: every morning Soundwave researches the topics you chose (anything — AI news, trending GitHub repos…) with Gemini and starts talking when you open the app, with the weather, your shorts and ideas for today; the chip also opens your morning websites and apps on the PC.
 
 Other pages in the left sidebar: Overview (dashboard), Projects (every short), Voice Library, Generate Short, Activity, Settings, Help & Docs.`,
   },
@@ -175,13 +175,14 @@ Privacy: your messages and the recent conversation go to Google with your key (o
 - Check the PC: "how's my PC doing?" (CPU, memory, disk, uptime).
 - Remember: "remember that my channel is about space", "what do you remember about me?", "forget that".
 - Run the Morning Setup: "good morning, run my morning setup".
+- Change the daily briefing: "brief me on trending GitHub repos every morning", "make my briefing 7:30", "remove the football topic".
 - Explain Soundwave: any question about a feature, setting or setup.
 - Talk: answer questions, brainstorm topics, hooks, titles and descriptions, write scripts, translate, quick maths.
 - Search the web, if Search is on in Settings → Brain (needs billing).
 
 It can't (yet): change the volume or other PC settings, read the screen or files, set timers or reminders, send emails or messages, or edit videos after they're made. It never claims to have done something it didn't.
 
-When the PC is off, the phone's agent can only chat, explain the app, use the memory and run a briefing-only Morning Setup.`,
+When the PC is off, the phone's agent can chat, explain the app, use the memory, change the daily briefing and give it (researching your topics with Gemini) — making shorts, videos and PC actions wait for the PC.`,
   },
   {
     id: "memory",
@@ -231,7 +232,7 @@ Reading replies aloud: gear → General & Voice → "Speak Replies Aloud" (also 
 
 On the phone: Settings → "Read replies aloud" (When I talk / Always / Never) and "Voice" (same as the PC, or pick one for the phone).
 
-The voices come from Microsoft's online speech service, so they need the internet. If it can't be reached the app says so instead of using a robotic fallback voice, and a short is never rendered with a stand-in voice. When the PC is off the phone can't read replies aloud.`,
+The voices come from Microsoft's online speech service, so they need the internet. If it can't be reached the app says so instead of using a robotic fallback voice, and a short is never rendered with a stand-in voice. When the PC is off, the phone app (1.2.0+) speaks the same voices itself.`,
   },
   {
     id: "phone",
@@ -246,7 +247,7 @@ Install and pair (once):
 
 With the PC on (Soundwave AI running — the tray counts — and the phone on the same Wi-Fi): chat and talk to the full agent, make shorts, watch finished shorts (Watch button), hear replies in the Soundwave voices, and run the Morning Setup (it opens your morning apps on the PC). Messages from the phone show as "YOU (PHONE)" on the PC.
 
-With the PC off or out of reach: the app keeps chatting — Gemini answers directly on the phone, with the conversation and the agent's memory, so it knows what you did. It can explain every Soundwave feature and run a briefing-only Morning Setup (weather, your last known shorts, ideas). Voice input works (Gemini transcribes it). It can't make shorts, show or download videos, open things on the PC or read replies aloud until the PC is back. Everything you said goes back into the PC's conversation and memory as soon as the phone reaches the PC again.
+With the PC off or out of reach: the app keeps chatting — Gemini answers directly on the phone, with the conversation and the agent's memory, so it knows what you did. It can explain every Soundwave feature, change your morning briefing, and give you the daily briefing on your own topics (it researches them with Gemini). Voice input works (Gemini transcribes it) and replies are read aloud in your Soundwave voice by the phone itself. It can't make shorts, show or download videos, or open things on the PC until the PC is back. Everything you said goes back into the PC's conversation and memory as soon as the phone reaches the PC again.
 
 Chatting without the PC needs "Chat from the phone when this PC is off" in Settings → Phone on the PC (on by default) and a Gemini key in Settings → Brain. The PC then gives your paired phones a copy of the key and the memory, end-to-end encrypted. Turn it off and phones delete the key next time they connect.
 
@@ -258,21 +259,27 @@ Updating the app: test builds are signed with a new key each time, so uninstall 
   },
   {
     id: "morning-setup",
-    title: "Morning Setup",
-    summary: "the daily briefing and morning routine on PC and phone, and how to customize it",
-    text: `Morning Setup starts your day in one tap: press the "🌅 Morning Setup" chip in the Command Center or in the phone app, or say "good morning, run my morning setup".
+    title: "Morning Setup and the daily briefing",
+    summary: "the automatic morning briefing on your own topics (researched with Gemini), when it talks, the Morning Setup chip, PC off, how to change it",
+    text: `There are two ways to get your morning briefing:
+1. Automatically: every morning at the time you choose (08:00 by default) Soundwave prepares your briefing — it researches your topics with Gemini — and starts talking as soon as you open the Soundwave app on your phone, or the Command Center on the PC, after that time. Once you've heard it on one device it isn't spoken again on the other (it stays in the chat). It's offered until about 10 hours after the briefing time.
+2. Right now: press the "🌅 Morning Setup" chip (Command Center or phone app) or say "good morning, run my morning setup". That one also opens your morning websites and apps on the PC (YouTube Studio by default).
 
-What it does:
-1. Opens your morning websites and apps on the PC (YouTube Studio by default).
-2. Gives a spoken briefing: the day and date, the weather for your city today, what happened with your shorts since the last Morning Setup (finished, failed, still rendering, YouTube links), your YouTube channel's numbers if it's linked, how many backgrounds are left, a reminder of what you were working on (from memory), and three fresh short ideas that you haven't made yet. Say "make the first one" to start one.
+What's in it: the day and date, the weather for your city, what happened with your shorts since the last briefing, your YouTube channel's numbers (if linked), what you were working on (from memory), your own topics, and three fresh short ideas. Say "make idea 1" to start one.
 
-Customize it in Settings → Morning Setup:
-- City for the weather (by default the city of your PC's time zone).
-- Websites and apps to open (add a web address like https://studio.youtube.com, or an app name like Spotify; remove any).
-- "Open them when I start it from my phone".
-- "Include three short ideas".
+Your own topics can be anything, in your own words — for example "the latest news about open-source, free AI tools", "new trending GitHub repositories", "football results from Serbia", "one motivational quote". Up to 8.
 
-On the phone with the PC off: you get the briefing only — weather, your shorts as of the last time the phone talked to the PC, memory and ideas. Nothing is opened on the PC. Without a Gemini key the briefing has the facts but no ideas.`,
+How the topics are researched: for each one Gemini 2.5 Flash searches Google (free with a free Gemini key — up to 500 searches a day). If search isn't available for your key, Soundwave reads fresh items from GitHub, Hacker News and Google News and Gemini sums them up instead. The briefing only tells you what was found, and says so when there's nothing new.
+
+Set it up — either way works, and both are saved in my memory (so the phone knows them too):
+- Settings → Morning Setup → "Your daily briefing": turn on "Brief me every morning", pick the time, and add your topics (Add topic; the bin icon removes one).
+- Or just tell me: "brief me on trending GitHub repos every morning", "remove the football topic", "make my briefing 7:30".
+
+With the PC off: the phone does everything itself. When you open the app after the briefing time it researches your topics with Gemini, writes the briefing and reads it aloud in your Soundwave voice (the phone app can speak Microsoft's voices on its own). Weather and your last known shorts are included; nothing is opened on the PC. If the PC was on at briefing time, the briefing is already waiting and the phone starts talking right away. Either way it goes into the PC's conversation.
+
+On the phone: tap Stop to stop it, or the speaker button to hear it again. The phone's Settings → "Talk when I open the app" turns the automatic speaking off on that phone.
+
+Other Morning Setup settings (Settings → Morning Setup): the city for the weather (by default your PC's time zone city), the websites and apps the chip opens, "Open them when I start it from my phone", and "Include three short ideas". Without a Gemini key the briefing still has the weather and your shorts, but no research or ideas.`,
   },
   {
     id: "pages",
@@ -295,7 +302,7 @@ On the phone with the PC off: you get the briefing only — weather, your shorts
 - Preferences: the agent voice, the thinking orb style, "Download my data".
 - Voice & Desktop: microphone test, send when I stop talking, sound cues, speak replies aloud, the voice shortcut (Ctrl+Shift+Space by default), keep running in the tray, start with Windows, notifications.
 - Phone: let my phone connect (pairing QR code), chat from the phone when this PC is off, paired phones, help if the phone can't connect.
-- Morning Setup: weather city, websites and apps to open, open them from the phone, short ideas.
+- Morning Setup: your daily briefing (every morning at…, your topics), weather city, websites and apps to open, open them from the phone, short ideas.
 
 In the Command Center, the gear button opens Assistant Configuration: General & Voice, Memory, YouTube API & Shorts, Thinking Orb.`,
   },

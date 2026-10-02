@@ -17,7 +17,7 @@ import { findJob } from "./conversation.js";
 import { listShorts } from "./shortsLibrary.js";
 import { getOrbitalStatus } from "./orbitalBackground.js";
 import { youtubeService } from "./youtube.js";
-import { lastMorningAt, memoryState, noteMorningRun } from "./memory.js";
+import { briefingPlan, lastMorningAt, memoryState, noteMorningRun } from "./memory.js";
 import { getActiveShortJobs } from "../routes/agentShort.js";
 import { generateContent, GeminiError, visibleText } from "./brain/gemini.js";
 import { activeBrain, FALLBACK_MODEL, noteBrainError } from "./brain/settings.js";
@@ -27,6 +27,7 @@ import { relativeTime } from "./brain/core/memory.js";
 import {
   cityFromTimeZone,
   fetchWeather,
+  localDay,
   memoryDigest,
   morningNow,
   morningRequest,
@@ -34,6 +35,7 @@ import {
   type MorningFacts,
   type Weather,
 } from "./brain/core/morning.js";
+import { researchTopics, type FetchText, type TopicBrief } from "./brain/core/research.js";
 
 export interface MorningItem {
   kind: "website" | "app";
@@ -162,6 +164,35 @@ async function youtubeFacts(): Promise<MorningFacts["youtube"]> {
   }
 }
 
+/** The PC fetches the public feeds itself (GitHub's API wants a User-Agent). */
+export const pcFetchText: FetchText = async (url, opts = {}) => {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "SoundwaveAI-Desktop (+https://github.com/Str4hinj47/Soundwave-AI)", Accept: "application/json, application/rss+xml, text/xml;q=0.9, */*;q=0.5" },
+      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+    });
+    return res.ok ? await res.text() : null;
+  } catch {
+    return null;
+  }
+};
+
+/** The user's briefing topics, researched with Gemini (Google Search, else the public feeds). */
+export async function researchBriefingTopics(topics: string[], opts: { now?: Date; signal?: AbortSignal } = {}): Promise<TopicBrief[]> {
+  if (!topics.length) return [];
+  const brain = activeBrain();
+  if (!brain) return topics.map((topic) => ({ topic, summary: "", sources: [], via: "none" as const, note: "needs a Gemini key" }));
+  return researchTopics(topics, {
+    apiKey: brain.apiKey,
+    model: brain.model,
+    generate: generateContent,
+    now: opts.now,
+    fetchText: pcFetchText,
+    signal: opts.signal,
+    log: (m) => console.warn(`[morning] ${m}`),
+  });
+}
+
 /** Everything the briefing is written from. */
 export async function gatherMorningFacts(opts: { via: "pc" | "phone"; opened: MorningFacts["opened"]; now?: Date; signal?: AbortSignal }): Promise<MorningFacts> {
   const settings = loadMorningSettings();
@@ -171,11 +202,13 @@ export async function gatherMorningFacts(opts: { via: "pc" | "phone"; opened: Mo
   const since = last && sinceMs === last ? `since your last Morning Setup (${relativeTime(last, now.getTime())})` : "in the last 24 hours";
 
   const { city } = morningCity(settings);
-  const [weather, shorts, youtube, pc] = await Promise.all([
+  const plan = briefingPlan();
+  const [weather, shorts, youtube, pc, topics] = await Promise.all([
     morningWeather(city, opts.signal),
     listShorts("local-user").catch(() => []),
     youtubeFacts(),
     pcStatus(100).catch(() => null),
+    researchBriefingTopics(plan.topics, { now, signal: opts.signal }),
   ]);
 
   const newer = shorts.filter((s) => Date.parse(s.completedAt ?? s.createdAt) >= sinceMs);
@@ -208,13 +241,15 @@ export async function gatherMorningFacts(opts: { via: "pc" | "phone"; opened: Mo
     memory: memoryDigest(mem),
     madeTopics: shorts.map((s) => s.topic),
     ideas: settings.ideas && Boolean(activeBrain()),
+    topics,
   };
 }
 
 /** Opens the items (if allowed from here) and gathers the facts — shared by the chip and the agent's tool. */
-export async function prepareMorning(opts: { via: "pc" | "phone"; signal?: AbortSignal }): Promise<MorningFacts> {
+export async function prepareMorning(opts: { via: "pc" | "phone"; signal?: AbortSignal; open?: boolean }): Promise<MorningFacts> {
   const settings = loadMorningSettings();
-  const open = opts.via === "pc" || settings.openFromPhone;
+  // The automatic briefing never opens things; the chip and the agent do (from the phone only if allowed).
+  const open = opts.open ?? (opts.via === "pc" || settings.openFromPhone);
   const opened = open ? await openMorningItems(settings.items) : [];
   const facts = await gatherMorningFacts({ via: opts.via, opened, signal: opts.signal });
   noteMorningRun();
@@ -241,20 +276,32 @@ export async function writeBriefing(facts: MorningFacts, signal?: AbortSignal): 
   return { text: templateBriefing(facts), model: null };
 }
 
-/** The "🌅 Morning Setup" chip, on the PC or from the phone. */
-export async function runMorningSetup(opts: { via: "pc" | "phone"; signal?: AbortSignal }): Promise<ChatReply> {
-  const facts = await prepareMorning(opts);
-  const { text, model } = await writeBriefing(facts, opts.signal);
+/** What the briefing was built from, for the line under it. */
+export function briefingOutput(facts: MorningFacts): string {
   const output: string[] = [];
   for (const o of facts.opened) output.push(o.ok ? `Opened ${o.label}` : `Couldn't open ${o.label}: ${o.error ?? "failed"}`);
   if (facts.weather) output.push(`Weather: ${facts.weather.place}${facts.weather.country ? `, ${facts.weather.country}` : ""} (Open-Meteo)`);
   else if (facts.weatherNote) output.push(`Weather: ${facts.weatherNote}`);
+  for (const t of facts.topics) {
+    const how = t.via === "search" ? "Google Search" : t.via === "feeds" ? "GitHub, Hacker News, Google News" : `not researched${t.note ? ` (${t.note})` : ""}`;
+    output.push(`${t.topic}: ${how}${t.sources.length ? ` — ${t.sources.map((src) => src.title).slice(0, 3).join(", ")}` : ""}`);
+  }
+  return output.join("\n");
+}
+
+/** The "🌅 Morning Setup" chip, on the PC or from the phone — and the automatic morning briefing (open: false). */
+export async function runMorningSetup(opts: { via: "pc" | "phone"; signal?: AbortSignal; open?: boolean }): Promise<ChatReply> {
+  const facts = await prepareMorning(opts);
+  const { text, model } = await writeBriefing(facts, opts.signal);
+  const output = briefingOutput(facts);
   return {
     success: true,
     reply: text,
     tag: "SYS",
     action: "morning_setup",
-    ...(output.length ? { actionOutput: output.join("\n") } : {}),
+    // Today's briefing: the apps speak it when they're opened, once.
+    briefingDate: localDay(new Date()),
+    ...(output ? { actionOutput: output } : {}),
     ...(model ? { brain: { provider: "gemini", model } } : {}),
   };
 }

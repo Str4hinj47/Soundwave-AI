@@ -44,6 +44,8 @@ export interface ChatMessage {
   via?: "phone";
   /** Answered by the phone itself (Gemini, while the PC was off). */
   answeredBy?: "phone";
+  /** This is the morning briefing for that day ("2026-10-02"): the apps speak it once when opened. */
+  briefingDate?: string;
 }
 
 export const CHAT_STORAGE_KEY = "soundwave_agent_chat_history";
@@ -139,6 +141,8 @@ export interface ChatReply {
   downloadUrl?: string;
   tag?: ChatMessage["tag"];
   error?: string | { message?: string };
+  /** The morning briefing for that day. */
+  briefingDate?: string;
 }
 
 export async function sendChat(
@@ -182,6 +186,7 @@ export function replyToMessage(data: ChatReply, query: string): ChatMessage {
     // A finished short shown in the chat: its name (the phone's player shows it).
     ...(videoLink && data.topic ? { topic: data.topic } : {}),
     ...(started ? { jobId: data.jobId, jobState: "started" as const, topic: data.topic || query } : {}),
+    ...(typeof data.briefingDate === "string" ? { briefingDate: data.briefingDate } : {}),
   };
 }
 

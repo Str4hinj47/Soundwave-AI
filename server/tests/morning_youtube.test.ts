@@ -262,7 +262,10 @@ describe("Morning Setup helpers", () => {
       memory: "",
       madeTopics: [],
       ideas: false,
+      topics: [{ topic: "open-source AI tools", summary: "Ollama 1.0 shipped with a new model library.\nLlama 5 weights were released.", sources: [], via: "search" }],
     });
-    expect(text).toBe("Good morning! It's Friday 2 October 2026. In the last 24 hours: “volcanoes” didn't finish. Only 4 unused backgrounds are left. Want me to make a short today?");
+    expect(text).toBe(
+      "Good morning! It's Friday 2 October 2026. In the last 24 hours: “volcanoes” didn't finish. Only 4 unused backgrounds are left. On open-source AI tools: Ollama 1.0 shipped with a new model library. Llama 5 weights were released. Want me to make a short today?",
+    );
   });
 });

@@ -58,6 +58,18 @@ export interface PcInfo {
 export interface Outbox {
   messages: ChatMessage[];
   memoryOps: MemoryOp[];
+  /** Days whose morning briefing was spoken on the phone (the PC won't speak it again). */
+  heard?: string[];
+}
+
+/** Today's morning briefing as the PC sees it (op "briefing.today"). */
+export interface BriefingToday {
+  day: string;
+  due: boolean;
+  inWindow: boolean;
+  preparing: boolean;
+  message: ChatMessage | null;
+  heard: { at: number; on: "pc" | "phone" | null } | null;
 }
 
 export interface Conversation {
@@ -509,7 +521,7 @@ export class CompanionClient {
   async merge(outbox: Outbox, signal?: AbortSignal): Promise<{ merged: number }> {
     const { result } = await this.rpc<{ epoch: string; rev: number; messages: ChatMessage[]; merged: number; memory?: MemorySnapshot | null; memoryRev?: string | null }>(
       "merge",
-      { messages: outbox.messages, memoryOps: outbox.memoryOps },
+      { messages: outbox.messages, memoryOps: outbox.memoryOps, heard: outbox.heard ?? [] },
       { timeoutMs: 30_000, signal },
     );
     this.emit("flushed", outbox);
@@ -525,10 +537,26 @@ export class CompanionClient {
     return result.reply;
   }
 
+  /** Today's morning briefing on the PC; `prepare`: have the PC write it now if it's due and missing (takes a while). */
+  async briefingToday(opts: { prepare?: boolean; signal?: AbortSignal } = {}): Promise<BriefingToday> {
+    const { result } = await this.rpc<BriefingToday & { epoch: string; rev: number; messages: ChatMessage[] }>(
+      "briefing.today",
+      { prepare: Boolean(opts.prepare) },
+      { timeoutMs: opts.prepare ? 150_000 : RPC_TIMEOUT_MS, signal: opts.signal },
+    );
+    this.applySync({ ...result, jobs: this.jobs });
+    return result;
+  }
+
+  /** The phone spoke today's briefing: the PC won't speak it again. */
+  async briefingHeard(day: string): Promise<void> {
+    await this.rpc("briefing.heard", { day }, { timeoutMs: 8000 });
+  }
+
   /** Before the first sync after (re)connecting: hand over what was said offline. */
   private async flushOutbox(signal?: AbortSignal): Promise<void> {
     const box = this.outbox();
-    if (!box || (!box.messages.length && !box.memoryOps.length)) return;
+    if (!box || (!box.messages.length && !box.memoryOps.length && !box.heard?.length)) return;
     try {
       await this.merge(box, signal);
     } catch (err) {

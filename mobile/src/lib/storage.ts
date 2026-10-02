@@ -12,6 +12,8 @@ const KEYS = {
   kit: "soundwave.kit",
   memory: "soundwave.memory",
   outbox: "soundwave.outbox",
+  /** Days whose morning briefing this phone already spoke. */
+  heard: "soundwave.heardBriefings",
 };
 
 function parse<T>(raw: string | null, ok: (v: unknown) => boolean): T | null {
@@ -30,9 +32,11 @@ export interface AppSettings {
   speak: SpeakMode;
   /** Soundwave voice for replies; null = the one picked on the PC. */
   voice: string | null;
+  /** Start talking (the morning briefing) when the app is opened after the briefing time. */
+  talkOnOpen: boolean;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { speak: "voice", voice: null };
+export const DEFAULT_SETTINGS: AppSettings = { speak: "voice", voice: null, talkOnOpen: true };
 
 async function get(key: string): Promise<string | null> {
   try {
@@ -75,6 +79,7 @@ export const storage = {
       return {
         speak: s.speak === "always" || s.speak === "never" ? s.speak : "voice",
         voice: typeof s.voice === "string" ? s.voice : null,
+        talkOnOpen: s.talkOnOpen !== false,
       };
     } catch {
       return DEFAULT_SETTINGS;
@@ -99,7 +104,13 @@ export const storage = {
     return parse<Outbox>(await get(KEYS.outbox), (v) => Array.isArray((v as Outbox).messages) && Array.isArray((v as Outbox).memoryOps)) ?? { messages: [], memoryOps: [] };
   },
   saveOutbox(o: Outbox): Promise<void> {
-    return set(KEYS.outbox, o.messages.length || o.memoryOps.length ? JSON.stringify(o) : null);
+    return set(KEYS.outbox, o.messages.length || o.memoryOps.length || o.heard?.length ? JSON.stringify(o) : null);
+  },
+  async loadHeard(): Promise<string[]> {
+    return parse<string[]>(await get(KEYS.heard), (v) => Array.isArray(v)) ?? [];
+  },
+  saveHeard(days: string[]): Promise<void> {
+    return set(KEYS.heard, JSON.stringify(days.slice(-14)));
   },
   /** "Unpair" (or the PC forgot this phone): forget the PC and everything from it, the key included. */
   async clearAll(): Promise<void> {

@@ -39,6 +39,8 @@ export interface ChatMessage {
   via?: "phone";
   /** Answered by the phone itself (Gemini, while the PC was off). */
   answeredBy?: "phone";
+  /** This is the morning briefing for that day ("2026-10-02"): the apps speak it once when opened. */
+  briefingDate?: string;
 }
 
 export function chatTime(date = new Date()): string {
@@ -106,6 +108,7 @@ export const chatMessageSchema = z
     at: z.number().finite().optional(),
     via: z.literal("phone").optional(),
     answeredBy: z.literal("phone").optional(),
+    briefingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   })
   .strip();
 
@@ -158,6 +161,7 @@ export function replyToMessage(data: ChatReply, query: string, now = Date.now())
     // A finished short shown in the chat: its name (the phone's player shows it).
     ...(videoLink && data.topic ? { topic: data.topic } : {}),
     ...(started ? { jobId: data.jobId, jobState: "started" as const, topic: data.topic || query } : {}),
+    ...(typeof data.briefingDate === "string" ? { briefingDate: data.briefingDate } : {}),
   };
 }
 
