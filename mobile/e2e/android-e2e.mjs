@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { _android as android } from "playwright-core";
-import { FAKE_HELLO, FAKE_KEY } from "../../desktop/test/fake-gemini.mjs";
+import { FAKE_HELLO, FAKE_KEY, FAKE_MORNING, FAKE_PHONE } from "../../desktop/test/fake-gemini.mjs";
 
 const PKG = "ai.soundwave.companion";
 const PC = process.env.PC_URL || "http://127.0.0.1:4000";
@@ -213,25 +213,54 @@ try {
     annotate("notice", "Phone app E2E", `keyboard check skipped (the emulator didn't show a soft keyboard: mInputShown=${ime})`);
   }
 
-  // Settings sheet.
+  // Settings sheet — including "Chat without the PC", set up from the PC's Gemini key.
   await page.click('[data-testid="settings-button"]');
   await bodyHas(page, /Read replies aloud/);
+  await bodyHas(page, /Ready — Gemini 3\.8 Flash/, 30_000);
+  ok('settings: "Chat without the PC — Ready — Gemini 3.8 Flash" (the PC shared its brain kit)');
   await sleep(900);
   screenshot("5-settings");
   adb("shell", "input keyevent 4"); // Android back closes the sheet
   await page.waitForFunction(() => !/Read replies aloud/.test(document.body.innerText), null, { timeout: 10_000 });
   ok("Android back button closes the settings sheet");
 
-  // The PC turns phone access off → the phone says so; back on → it reconnects.
+  // The PC goes away (phone access off): the phone keeps chatting on its own, with Gemini directly.
   await pc("/api/v1/companion/enabled", { enabled: false });
-  await page.waitForSelector('[data-testid="offline-banner"]', { timeout: 60_000 });
-  await sleep(600);
-  screenshot("6-offline");
-  ok('shows "Can\'t reach" when the PC stops listening');
+  await page.waitForSelector('[data-testid="phone-mode-banner"]', { timeout: 60_000 });
+  ok("the PC stopped answering: the phone switched to chatting on its own");
+  const offlineText = await say(page, "are you still there without the PC?", new RegExp(escapeRe(FAKE_PHONE)), 60_000);
+  ok(`answered on the phone itself while the PC was off: "${firstLine(offlineText)}"`);
+  if (!(await page.$('[data-testid="answered-on-phone"]'))) fail('the phone\'s own answer isn\'t marked "on phone"');
+
+  // Morning Setup with the PC off: the phone's own briefing (weather from the stand-in Open-Meteo).
+  await page.click('[data-testid="morning-chip"]');
+  await bodyHas(page, new RegExp(escapeRe(FAKE_MORNING)), 60_000);
+  await sleep(800);
+  screenshot("6-phone-mode");
+  const fromPhone = (await (await fetch(`${GEMINI}/_fake/requests`)).json()).filter((r) => /:generateContent$/.test(r.url ?? ""));
+  const phoneChat = fromPhone.find((r) => userText(r) === "are you still there without the PC?");
+  const phoneMorning = fromPhone.find((r) => /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "") && /The PC is off/.test(userText(r)));
+  if (!phoneChat || phoneChat.key !== FAKE_KEY) fail("the phone's own Gemini request wasn't seen (with the key)");
+  else if (!/answering from the Soundwave phone app on your own/.test(phoneChat.body?.systemInstruction?.parts?.[0]?.text ?? "")) fail("the phone didn't tell Gemini the PC is off");
+  else if (!phoneMorning) fail("the phone's Morning Setup briefing request wasn't seen");
+  else if (!/Weather: In Kruševac it's 14°C/.test(userText(phoneMorning))) fail(`the phone's briefing had no weather: ${userText(phoneMorning).slice(0, 300)}`);
+  else ok("with the PC off the phone asked Gemini itself (key, \"PC is off\" note, memory) and briefed with the weather from Open-Meteo");
+
+  // The PC is back: what was said on the phone goes into the PC's conversation.
   await pc("/api/v1/companion/enabled", { enabled: true });
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Try now/.test(b.textContent ?? ""))?.click());
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Try now|Look for the PC/.test(b.textContent ?? ""))?.click());
   await bodyHas(page, /Connected to/, 60_000);
-  ok("reconnected when phone access came back on");
+  let synced = null;
+  for (let i = 0; i < 30 && !synced; i++) {
+    const msgs = (await pc("/api/v1/companion/conversation")).messages;
+    const asked = msgs.find((m) => m.text === "are you still there without the PC?");
+    const answered = msgs.find((m) => m.text === FAKE_PHONE);
+    if (asked && answered) synced = { asked, answered, morning: msgs.some((m) => m.text === FAKE_MORNING && m.answeredBy === "phone") };
+    else await sleep(1000);
+  }
+  if (!synced) fail("the phone's offline messages never reached the PC");
+  else if (synced.asked.via !== "phone" || synced.answered.answeredBy !== "phone" || !synced.morning) fail(`offline messages reached the PC without their labels: ${JSON.stringify(synced).slice(0, 300)}`);
+  else ok("reconnected, and the offline chat + Morning Setup are now in the PC's conversation (marked as answered on the phone)");
 
   // Restart the app: still paired, conversation still there.
   const oldPid = webviewPid;

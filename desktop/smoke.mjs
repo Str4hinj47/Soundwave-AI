@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
-const { FAKE_HELLO, FAKE_KEY, startFakeGemini } = await import(pathToFileURL(path.join(desktopDir, "test", "fake-gemini.mjs")).href);
+const { FAKE_HELLO, FAKE_KEY, FAKE_MORNING, startFakeGemini } = await import(pathToFileURL(path.join(desktopDir, "test", "fake-gemini.mjs")).href);
 const { applyServerEnv } = require(path.join(desktopDir, "src", "server-env.cjs"));
 
 const appRoot = path.join(desktopDir, "app");
@@ -75,6 +75,8 @@ function assert(cond, label) {
 // The agent's brain talks to a fake Gemini on loopback (no real key in CI).
 const fakeGemini = await startFakeGemini();
 process.env.GEMINI_API_BASE = fakeGemini.url;
+process.env.OPEN_METEO_GEOCODING_URL = `${fakeGemini.url}/geocode`;
+process.env.OPEN_METEO_FORECAST_URL = `${fakeGemini.url}/forecast`;
 
 try {
   const { appUrl } = await applyServerEnv({ appRoot, binDir, userDataDir });
@@ -227,6 +229,20 @@ try {
     appsNote = `${abilities.openApps.count} Start menu apps via ${abilities.openApps.source}; "notepad" → ${abilities.openApps.match ?? "no match"}`;
   }
   annotate("notice", "Agent brain (fake Gemini)", `Key saved and tested; chat answered by Gemini; get_pc_status ran here: ${pcResult?.response?.os}, ${pcResult?.response?.cpu?.model}. Apps: ${appsNote}.`);
+
+  // 1.4.0: the guide, the memory and Morning Setup.
+  assert(toolNames.includes("soundwave_guide") && toolNames.includes("remember") && toolNames.includes("run_morning_setup"), "the agent can explain Soundwave (guide), remember things and run Morning Setup");
+  const note = await send("POST", `${appUrl}/api/v1/memory/notes`, { text: "The smoke test's channel is about space facts" });
+  assert(note.status === 201 && fs.existsSync(path.join(userDataDir, "data", "agent-memory.json")), "memory: a note is saved in the user-data folder");
+  const recalled = await send("POST", `${appUrl}/api/v1/agent/chat`, { message: "what do you remember about me?" });
+  const memoryAsk = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1);
+  assert(recalled.status === 200 && /The smoke test's channel is about space facts/.test(memoryAsk?.body?.systemInstruction?.parts?.[0]?.text ?? ""), "memory: Gemini sees the agent's notes");
+  const morningSet = await send("PUT", `${appUrl}/api/v1/morning`, { items: [], city: "Kruševac" });
+  assert(morningSet.status === 200 && morningSet.body.weatherCity === "Kruševac", "Morning Setup: settings saved");
+  const briefing = await send("POST", `${appUrl}/api/v1/morning/run`, {});
+  const facts = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1)?.body?.contents?.[0]?.parts?.[0]?.text ?? "";
+  assert(briefing.status === 200 && briefing.body.reply === FAKE_MORNING && /Weather: In Kruševac it's 14°C/.test(facts), "Morning Setup: a briefing written by Gemini from real facts (weather included)");
+  annotate("notice", "Memory and Morning Setup", `Note saved and seen by Gemini; Morning Setup briefing from facts: ${facts.split("\n").slice(0, 2).join(" ")}`);
   const removed = await send("DELETE", `${appUrl}/api/v1/brain/key`);
   assert(removed.status === 200 && removed.body.configured === false, "brain: the key can be removed again");
   await fakeGemini.close();

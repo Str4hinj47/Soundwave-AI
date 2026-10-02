@@ -75,9 +75,15 @@ turn it off again.
 The phone app itself is built by `.github/workflows/android-companion.yml`
 (artifact `soundwave-companion-apk`) and tested on an Android 15 emulator
 against the real server, set up like the desktop app (`DESKTOP_APP=1`) with a
-stand-in Gemini (`desktop/test/fake-gemini.mjs --port 4100`): without a key
-the agent tells the phone to add one; after the key is saved through
-Settings → Brain's API, Gemini answers the phone and runs a PC tool for it.
+stand-in Gemini (`desktop/test/fake-gemini.mjs --port 4100`, which also
+stands in for Open-Meteo): without a key the agent tells the phone to add
+one; after the key is saved through Settings → Brain's API, Gemini answers
+the phone and runs a PC tool for it. Then the PC turns phone access off: the
+app must switch to chatting on its own (it reaches the stand-ins at 10.0.2.2 —
+the PC rewrites loopback service URLs in the brain kit to the address the
+phone used), answer a message and run a briefing-only Morning Setup with the
+weather, and — once phone access is back on — hand both to the PC's
+conversation, labelled as answered on the phone.
 Signing: add the repository secrets
 `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` (/ `ANDROID_KEY_ALIAS`)
 for a permanent key so updates install over each other; without them every
@@ -98,6 +104,16 @@ point the app at a fake Gemini on loopback (`GEMINI_API_BASE`,
 run a real tool on the Windows runner (`get_pc_status`) and check the Start
 menu app lookup. The request format is pinned in `server/tests/brain.test.ts`
 (the same JSON the official `@google/genai` SDK sends).
+
+1.4.0 adds the agent's memory (`%APPDATA%\Soundwave AI\data\agent-memory.json`),
+the built-in guide (`soundwave_guide`), Morning Setup (`morning.json`; weather
+from Open-Meteo — `OPEN_METEO_*_URL` point CI at the stand-in) and "Connect
+YouTube account" (installed-app OAuth with PKCE; Google redirects to the app's
+loopback address, caught at `/` by its one-time `state`). The smoke test and
+the E2E check a memory note reaching Gemini, the Morning Setup briefing being
+written from facts (weather included), the Memory tab and the YouTube tab.
+Update the guide (`server/src/lib/brain/core/guide.ts`) whenever a screen
+changes — `server/tests/memory_guide.test.ts` checks its key facts.
 
 ## YouTube import (yt-dlp) in the desktop app
 

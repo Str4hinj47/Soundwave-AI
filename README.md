@@ -17,12 +17,25 @@ bundled English model — no account, no API key, nothing uploaded. The desktop
 app lives in the tray (closing the window keeps it running), can start with
 Windows, and sends a Windows notification when a short is ready.
 
-**From your phone.** The **Soundwave** Android app is a remote for the agent
-on your PC: type or talk, start shorts, watch them when they're done — the
-same conversation as the Command Center. It talks straight to the PC over
-your Wi-Fi, end-to-end encrypted, and works while Soundwave AI runs there
-(the tray counts). Pair it once by scanning the QR code in **Settings →
-Phone**.
+**From your phone.** The **Soundwave** Android app is the agent in your
+pocket: type or talk, start shorts, watch them when they're done, run your
+Morning Setup — the same conversation as the Command Center. It talks
+straight to the PC over your Wi-Fi, end-to-end encrypted, while Soundwave AI
+runs there (the tray counts) — and when the PC is off it **keeps chatting on
+its own** with Gemini, the conversation and the agent's memory, then hands
+everything back to the PC. Pair it once by scanning the QR code in
+**Settings → Phone**.
+
+**It remembers, and it knows its own app.** The agent keeps notes ("remember
+that…"), a running summary of earlier conversations and the list of shorts
+you made, so it picks up where you left off. Ask it how anything in Soundwave
+works — linking YouTube, pairing the phone, Morning Setup — and it explains
+step by step from the built-in guide, with the real button names.
+
+**🌅 Morning Setup.** One tap (PC or phone): it opens your morning websites
+and apps on the PC and gives a spoken briefing — weather, what happened with
+your shorts since yesterday, your YouTube numbers, what you were working on
+and three fresh short ideas.
 
 ---
 
@@ -69,6 +82,9 @@ it never claims something it didn't do:
 | `get_pc_status` | live CPU load, memory, disk, uptime of this PC |
 | `open_website` | opens an http(s) page in the default browser |
 | `open_app` | opens an app from the Windows Start menu (`Get-StartApps`) |
+| `run_morning_setup` | Morning Setup: opens the morning items (Settings → Morning Setup) and returns the facts for the briefing |
+| `remember`, `forget` | the agent's notes (memory, shared with the phone; never keys or passwords) |
+| `soundwave_guide` | the built-in user guide — every feature, exact steps and button names (`server/src/lib/brain/core/guide.ts`) |
 | Google Search | live answers — only with a key that has billing (not on the free tier) |
 
 Default model: **Gemini 3.8 Flash** (thinking level *low*, for snappy spoken
@@ -76,7 +92,24 @@ replies). If its free requests run out or it's overloaded, the agent retries
 once with **Gemini 3.5 Flash-Lite** (its own free quota) — never after an
 action already ran. Without a key the agent still makes shorts (with the
 built-in scripts) and tells you how to add one. Servers can set
-`GEMINI_API_KEY` / `GEMINI_MODEL` instead. Code: `server/src/lib/brain/`.
+`GEMINI_API_KEY` / `GEMINI_MODEL` instead. Code: `server/src/lib/brain/` —
+`core/` (the Gemini client, tool loop, instruction, guide, memory and Morning
+Setup briefing) is plain TypeScript that the phone app compiles too.
+
+**Memory** (desktop 1.4.0+): `%APPDATA%\Soundwave AI\data\agent-memory.json`
+— notes, Gemini's running summary of earlier conversations (written by the
+lighter Flash-Lite model when the chat outgrows the 24 messages sent along,
+and when you press Clear), and the last Morning Setup. Command Center → gear
+→ **Memory** shows and edits it.
+
+**Link YouTube** (desktop 1.4.0+): create a free OAuth client of type
+**Desktop app** in Google Cloud (YouTube Data API v3 enabled, yourself as a
+test user), paste its ID and secret in Command Center → gear → **YouTube API
+& Shorts**, press **Connect YouTube account** and sign in with Google in your
+browser — the app catches the loopback redirect (PKCE) and saves the refresh
+token. Uploads from unaudited Google Cloud projects stay private until
+YouTube's API audit; "Testing" consent screens expire the sign-in after 7 days
+(publish the app to avoid it). The agent explains all of this on request.
 
 ## Get the phone app (Android)
 
@@ -84,9 +117,11 @@ CI builds **`SoundwaveCompanion-*.apk`** (the `soundwave-companion-apk`
 artifact of the *Android Companion* workflow) and tests it on an Android 15
 emulator against the real PC server. To use it:
 
-1. Install the desktop app **1.2.0 or newer** on your PC.
+1. Install the desktop app **1.4.0 or newer** on your PC (1.2.0+ works,
+   without chatting while the PC is off).
 2. On the phone, open the APK and allow installing from that source
-   (Android asks once). Android 7.0+.
+   (Android asks once). Android 7.0+. Test builds are signed with a new key
+   each time: uninstall the previous app first, then pair again.
 3. On the PC: **Settings → Phone → Let my phone connect** (Windows may ask to
    allow Soundwave AI on private networks — allow it).
 4. In the app: **Scan QR code**. Done — the phone remembers the PC.
@@ -95,9 +130,19 @@ The phone uses the PC's brain: once a Gemini key is saved in **Settings →
 Brain** on the PC, the agent answers the phone with Gemini too — nothing to
 set up on the phone. Web pages and apps it opens appear on the PC.
 
-It only works while Soundwave AI is running on the PC, and the phone must be
-on the same network (or on a VPN such as Tailscale with the PC — the pairing
-code includes VPN addresses). See [mobile/README.md](mobile/README.md) for how
+**With the PC off** (phone app 1.1.0 + desktop 1.4.0): if **Settings → Phone
+→ Chat from the phone when this PC is off** is on (default), the PC hands its
+paired phones a copy of the Gemini key and the agent's memory over the
+encrypted channel. When the PC can't be reached, the app answers with Gemini
+directly — the same agent core, the conversation, the memory and the guide —
+runs a briefing-only Morning Setup (weather from Open-Meteo) and transcribes
+voice with Gemini. Everything said there (and notes saved) goes back into the
+PC's conversation and memory when the phone reaches the PC again. Turning the
+setting off makes phones delete the key the next time they connect.
+
+The full agent (shorts, videos, PC actions, the Soundwave voices) needs
+Soundwave AI running on the PC, with the phone on the same network (or on a
+VPN such as Tailscale with the PC — the pairing code includes VPN addresses). See [mobile/README.md](mobile/README.md) for how
 it works and how to build it.
 
 ---
@@ -360,6 +405,9 @@ OAuth identity; new OAuth users are created email-verified with no password.
 | Speech engine (whisper.cpp) | not in `vendor/whisper/` / `WHISPER_*` unset | `/agent/transcribe` answers 503 with the reason; the mic shows it; typing works |
 | Voice cloning | `VOICECLONE_URL` unset or sidecar down | `/tts/clone*` answers with a clear error; the Soundwave voices are unaffected |
 | Gemini (agent brain) | no key in Settings → Brain / `GEMINI_API_KEY` | the agent still makes shorts (built-in scripts) and finds videos; other chat answers explain how to add a key — nothing is made up |
+| Memory | not the desktop app (`MEMORY=1` turns it on) | no notes/summary in the agent's instruction; hosted servers never keep a shared memory |
+| Weather (Open-Meteo) | unreachable / no city | Morning Setup leaves the weather out and says why (`OPEN_METEO_GEOCODING_URL` / `OPEN_METEO_FORECAST_URL` point tests at a stand-in) |
+| YouTube | not linked | Morning Setup skips the channel numbers; posting buttons ask you to link it (`GOOGLE_OAUTH_*_URL` / `YOUTUBE_API_BASE` point tests at stand-ins) |
 
 ### Voice cloning (OmniVoice)
 

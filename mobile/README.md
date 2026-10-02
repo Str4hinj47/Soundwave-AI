@@ -1,9 +1,12 @@
 # Soundwave — the phone companion (Android)
 
 Chat with the Soundwave agent running on your PC from your phone: type or
-talk, start shorts, watch them when they're done. It's the **same
-conversation** as the desktop Command Center, and it only works while
-Soundwave AI is running on the PC (the tray counts).
+talk, start shorts, watch them when they're done, run your Morning Setup.
+It's the **same conversation** as the desktop Command Center. The full agent
+works while Soundwave AI is running on the PC (the tray counts); when the PC
+is off, the app **keeps chatting on its own** with Gemini — the conversation,
+the agent's memory and its user guide — and hands everything back to the PC
+when it's reachable again.
 
 - **Capacitor 8** Android app; the UI is React + Vite + Tailwind (`src/`).
 - Talks **directly to the PC** over the local network — no cloud, no account.
@@ -11,7 +14,11 @@ Soundwave AI is running on the PC (the tray counts).
   and replies are read aloud in the agent's Soundwave voice (synthesized on
   the PC).
 - Shares plain-TypeScript modules with the desktop frontend (chat messages,
-  the voice recorder, the voice list) by relative import from `../frontend/src`.
+  the voice recorder, the voice list) by relative import from `../frontend/src`,
+  and the **agent core** with the PC server (`../server/src/lib/brain/core`:
+  the Gemini client, the tool loop, the instruction, the Soundwave guide, the
+  memory tools and the Morning Setup briefing) — so the phone's own brain is
+  the same agent.
 
 ## Using it
 
@@ -25,6 +32,28 @@ Soundwave AI is running on the PC (the tray counts).
 Away from home: install a VPN such as Tailscale on both, then pair again — the
 pairing code includes the PC's VPN address. You can also add addresses (a DNS
 name, a VPN hostname) with `COMPANION_HOSTS` on the PC.
+
+### When the PC is off (app 1.1.0 + Soundwave AI 1.4.0)
+
+With **Settings → Phone → Chat from the phone when this PC is off** on (the
+default) and a Gemini key in Settings → Brain, the PC gives the phone its
+**brain kit** (op `brain.kit`: the key, model, fallback model, thinking level,
+Morning Setup's weather city) and a **memory snapshot** (notes, the summary of
+earlier conversations, the latest shorts, YouTube link status — sent with
+`sync` whenever it changes). Both are stored app-private; `clearAll` (unpair,
+or the PC forgot this phone) deletes them, and turning the setting off makes
+the phone delete the key on its next connection.
+
+When the PC can't be reached, `src/lib/offline.ts` answers with Gemini
+directly from the WebView (only `content-type` + `x-goog-api-key` headers —
+what Google's CORS allows): the same instruction (told the PC is off), the
+recent conversation, the memory, and the tools `soundwave_guide`, `remember`
+and `forget`. Morning Setup gives a briefing only (Open-Meteo weather, the
+last known shorts, ideas) and voice input is transcribed by Gemini. Shorts,
+videos, PC actions and reading aloud wait for the PC. Messages made there are
+labelled `answeredBy: "phone"` and wait in an **outbox** (with memory
+changes); right after reconnecting — before the first sync — the client sends
+it with op `merge`, so the PC's conversation and memory get everything.
 
 ## How it connects (and why it's safe)
 
@@ -64,8 +93,10 @@ the server's tests run them against each other.
   (`allowBackup="false"`, data-extraction rules exclude everything).
 
 Operations the phone can run: `hello`, `sync` (long-poll: waits up to 20 s for
-news), `send`, `transcribe` (payload: 16 kHz WAV), `speak` (answer payload:
-MP3), `video.info` / `video.read` (a finished short, 2 MB at a time), `unpair`.
+news; carries the memory snapshot when it changed), `send`, `transcribe`
+(payload: 16 kHz WAV), `speak` (answer payload: MP3), `video.info` /
+`video.read` (a finished short, 2 MB at a time), `morning` (Morning Setup on
+the PC), `brain.kit`, `merge` (what was said while the PC was off), `unpair`.
 
 ### The shared conversation
 

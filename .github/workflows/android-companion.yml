@@ -25,6 +25,8 @@ on:
       - "frontend/public/audio/**"
       - "server/src/lib/companion/**"
       - "server/src/lib/brain/**"
+      - "server/src/lib/memory.ts"
+      - "server/src/lib/morning.ts"
       - "server/src/lib/conversation.ts"
       - "server/src/lib/chatMessages.ts"
       - "server/src/routes/companion.ts"
@@ -181,7 +183,10 @@ jobs:
           # Like the desktop app: Settings → Brain and the agent's PC tools.
           DESKTOP_APP: "1"
           # "Gemini" is a stand-in on this machine; the test saves its key in Settings → Brain.
+          # (The phone reaches the same stand-ins at 10.0.2.2 when it chats with the PC off.)
           GEMINI_API_BASE: http://127.0.0.1:4100
+          OPEN_METEO_GEOCODING_URL: http://127.0.0.1:4100/geocode
+          OPEN_METEO_FORECAST_URL: http://127.0.0.1:4100/forecast
           # The emulator reaches this machine at 10.0.2.2 — put it in the pairing code.
           COMPANION_HOSTS: 10.0.2.2
           BIND_HOST: 0.0.0.0

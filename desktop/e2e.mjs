@@ -77,7 +77,7 @@ fs.mkdirSync(shotsDir, { recursive: true });
 
 const { _electron: electron } = await import("playwright-core");
 // The agent's brain talks to a fake Gemini on loopback (no real key in CI).
-const { FAKE_HELLO, FAKE_KEY, startFakeGemini } = await import(new URL("./test/fake-gemini.mjs", import.meta.url).href);
+const { FAKE_HELLO, FAKE_KEY, FAKE_MORNING, startFakeGemini } = await import(new URL("./test/fake-gemini.mjs", import.meta.url).href);
 const fakeGemini = await startFakeGemini();
 
 console.log(`[e2e] launching ${exe}`);
@@ -85,7 +85,13 @@ try {
   app = await electron.launch({
     executablePath: exe,
     args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${micFile}`],
-    env: { ...process.env, GEMINI_API_BASE: fakeGemini.url },
+    env: {
+      ...process.env,
+      GEMINI_API_BASE: fakeGemini.url,
+      // Morning Setup's weather from the same stand-in.
+      OPEN_METEO_GEOCODING_URL: `${fakeGemini.url}/geocode`,
+      OPEN_METEO_FORECAST_URL: `${fakeGemini.url}/forecast`,
+    },
     timeout: 180_000,
   });
 } catch (err) {
@@ -233,6 +239,33 @@ try {
   await main.screenshot({ path: path.join(shotsDir, "8-command-center-gemini.png"), timeout: 15_000 }).catch(() => {});
   ok(`Command Center: "${pill}" pill; a typed message went to Gemini and its answer is in the chat`);
   annotate("notice", "Desktop E2E: agent brain", `Settings → Brain saved the key (${hint}) and its test passed; the Command Center shows "${pill}" and the chat was answered by Gemini (fake, on loopback).`);
+
+  // ── 3d. Morning Setup, the Memory tab and Connect YouTube (1.4.0) ─────────
+  // Nothing to open on the CI machine; the weather comes from the stand-in.
+  await main.evaluate(() =>
+    fetch("/api/v1/morning", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [], city: "Kruševac" }) }),
+  );
+  await main.click('[data-testid="morning-chip"]');
+  await main.waitForFunction((t) => document.body.innerText.includes(t), FAKE_MORNING, { timeout: 60_000 });
+  const briefing = fakeGemini.seen.filter((r) => r.url?.endsWith(":generateContent") && /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "")).at(-1);
+  const facts = briefing?.body?.contents?.[0]?.parts?.[0]?.text ?? "";
+  if (!/Weather: In Kruševac it's 14°C/.test(facts)) await fail(`Morning Setup: the briefing wasn't written from the weather facts: ${facts.slice(0, 300)}`);
+  ok("Morning Setup: the chip ran it, and Gemini wrote the briefing from real facts (weather from Open-Meteo's stand-in)");
+
+  // (A toast — e.g. the reply being read aloud — may sit over the gear: click it directly.)
+  await main.evaluate(() => document.querySelector('button[title="Assistant Settings"]')?.click());
+  await main.click('[data-testid="memory-tab"]');
+  await main.fill('[data-testid="memory-input"]', "The CI user's channel is about space facts");
+  await main.press('[data-testid="memory-input"]', "Enter");
+  await main.waitForSelector('[data-testid="memory-note"]', { timeout: 15_000 });
+  const memoryNow = await main.evaluate(async () => (await fetch("/api/v1/memory")).json());
+  if (!memoryNow.notes?.some((n) => /space facts/.test(n.text))) await fail(`Memory tab: the note isn't in the agent's memory (${JSON.stringify(memoryNow).slice(0, 200)})`);
+  await main.screenshot({ path: path.join(shotsDir, "9-memory-tab.png"), timeout: 15_000 }).catch(() => {});
+  await main.click('button:has-text("YouTube API & Shorts")');
+  await main.waitForSelector('[data-testid="yt-connect"]', { timeout: 15_000 });
+  await main.screenshot({ path: path.join(shotsDir, "10-youtube-tab.png"), timeout: 15_000 }).catch(() => {});
+  await main.keyboard.press("Escape");
+  ok('Memory tab: a note added in the app is in the agent\'s memory; the YouTube tab has "Connect YouTube account" and the steps');
 
   // ── 4. Tray behaviour + notifications bridge ──────────────────────────────
   await app.evaluate(() => {
