@@ -61,6 +61,22 @@ body {
   background: #373b4d;
 }
 
+/* ── Scroll hint: fade the bottom edge of a scroll box with more below ── */
+@media (min-width: 1024px) {
+  .sw-fade-bottom {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  }
+}
+
+/* ── Desktop voice bar (/overlay): a transparent, frameless window ───── */
+html.sw-overlay,
+html.sw-overlay body,
+html.sw-overlay #root {
+  background: transparent !important;
+  overflow: hidden;
+}
+
 /* ── Custom range inputs ─────────────────────────────────────────────── */
 .sw-range {
   -webkit-appearance: none;

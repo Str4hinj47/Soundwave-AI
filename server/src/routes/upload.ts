@@ -10,7 +10,7 @@ import { ApiError } from "../middleware/error.js";
 import { uploadLimiter } from "../lib/security.js";
 import { getStore } from "../lib/store.js";
 import { PLANS } from "../lib/plans.js";
-import { parseYouTubeUrl, fetchMetadata, downloadVideo } from "../lib/ytdlp.js";
+import { importYouTubeLink, YouTubeImportError } from "../lib/youtubeImport.js";
 import { config } from "../config.js";
 
 const router = Router();
@@ -103,25 +103,15 @@ const youtubeSchema = z.object({
 router.post("/youtube", optionalAuth, uploadLimiter, validate({ body: youtubeSchema }), async (req, res, next) => {
   try {
     const { url } = req.body as z.infer<typeof youtubeSchema>;
-    const parsed = parseYouTubeUrl(url);
-    if (!parsed) {
-      throw new ApiError(400, "INVALID_YOUTUBE_URL", "Paste a valid YouTube link (youtube.com/watch, youtu.be, or /shorts).");
-    }
-    const target = parsed.toString();
-    const meta = await fetchMetadata(target).catch((e: Error) => {
-      throw new ApiError(502, "YOUTUBE_METADATA_FAILED", e.message);
-    });
-    // NO LIMITS — ignore duration limit for local agent automation
-    const maxBytes = 2048 * 1024 * 1024;
-    const uuid = crypto.randomUUID();
-    const result = await downloadVideo(target, uuid, maxBytes).catch((e: Error & { status?: number; code?: string }) => {
-      if (e.message.includes("yt-dlp is not installed")) {
-        throw new ApiError(503, "YOUTUBE_IMPORT_UNAVAILABLE", e.message);
-      }
+    // NO LIMITS — ignore duration limit for local agent automation (2GB cap).
+    const result = await importYouTubeLink(url).catch((e: unknown) => {
+      if (!(e instanceof YouTubeImportError)) throw e;
+      if (e.stage === "url") throw new ApiError(400, "INVALID_YOUTUBE_URL", e.message);
+      if (e.stage === "metadata") throw new ApiError(502, "YOUTUBE_METADATA_FAILED", e.message);
+      if (e.code === "YT_NOT_INSTALLED") throw new ApiError(503, "YOUTUBE_IMPORT_UNAVAILABLE", e.message);
       throw new ApiError(502, "YOUTUBE_DOWNLOAD_FAILED", e.message);
     });
-    const name = `${meta.title}.${result.ext}`.replace(/[\\/:*?"<>|]/g, "_").slice(0, 180);
-    res.status(201).json({ fileKey: result.fileKey, name, size: result.size, duration: meta.duration });
+    res.status(201).json({ fileKey: result.fileKey, name: result.name, size: result.size, duration: result.duration });
   } catch (e) {
     next(e);
   }

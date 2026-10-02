@@ -1,0 +1,148 @@
+// ── The daily morning briefing on the PC ────────────────────────────────────
+// When it's due (Settings → Morning Setup: "every morning at 08:00"), the PC
+// researches the user's topics with Gemini and writes the briefing before
+// anyone asks, then posts it in the conversation marked with its day. The
+// phone app and the Command Center speak it the first time they're opened
+// after that — once: whoever plays it first marks it heard.
+//
+// If the PC was off at the due time it catches up when it starts (until 10
+// hours after the due time) — unless the phone already made today's briefing
+// on its own; that one comes back with the phone's offline messages.
+// The automatic briefing never opens websites or apps (the chip does).
+
+import fs from "node:fs";
+import path from "node:path";
+import { config } from "../config.js";
+import { replyToMessage, type ChatMessage } from "./chatMessages.js";
+import { appendToConversation, getConversation } from "./conversation.js";
+import { briefingPlan, memoryAvailable } from "./memory.js";
+import { runMorningSetup } from "./morning.js";
+import { BRIEFING_WINDOW_MINUTES, briefingDue, inBriefingWindow as inWindow, localDay } from "./brain/core/morning.js";
+
+export { BRIEFING_WINDOW_MINUTES };
+
+interface BriefingState {
+  day: string | null;
+  messageId: string | null;
+  preparedAt: number | null;
+  heardAt: number | null;
+  heardOn: "pc" | "phone" | null;
+}
+
+const EMPTY: BriefingState = { day: null, messageId: null, preparedAt: null, heardAt: null, heardOn: null };
+
+function fileFor(): string {
+  return path.join(config.dataDir, "briefing.json");
+}
+
+function loadState(): BriefingState {
+  try {
+    return { ...EMPTY, ...(JSON.parse(fs.readFileSync(fileFor(), "utf8")) as Partial<BriefingState>) };
+  } catch {
+    return { ...EMPTY };
+  }
+}
+
+function saveState(next: BriefingState): void {
+  try {
+    fs.mkdirSync(path.dirname(fileFor()), { recursive: true });
+    fs.writeFileSync(fileFor(), JSON.stringify(next, null, 2), "utf8");
+  } catch (err) {
+    console.warn(`[briefing] could not save: ${(err as Error).message}`);
+  }
+}
+
+/** Due today and still within the morning window. */
+export function inBriefingWindow(time: string, now = new Date()): boolean {
+  return inWindow(time, now);
+}
+
+/** Today's briefing in the conversation (made by the PC, the chip, the agent, or the phone). */
+export function todaysBriefingMessage(day = localDay(new Date())): ChatMessage | null {
+  const msgs = getConversation().messages;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!;
+    if (m.sender === "assistant" && m.briefingDate === day) return m;
+  }
+  return null;
+}
+
+let preparing: Promise<ChatMessage | null> | null = null;
+
+export function briefingStatus(now = new Date()) {
+  const plan = briefingPlan();
+  const day = localDay(now);
+  const state = loadState();
+  const message = todaysBriefingMessage(day);
+  const heard = state.day === day && state.heardAt ? { at: state.heardAt, on: state.heardOn } : null;
+  return {
+    day,
+    plan,
+    due: plan.auto && briefingDue(plan.time, now),
+    inWindow: plan.auto && inBriefingWindow(plan.time, now),
+    preparing: Boolean(preparing),
+    message,
+    heard,
+  };
+}
+
+/** Researches and writes today's briefing now (or returns the one that's there). */
+export function prepareTodaysBriefing(reason: "schedule" | "phone" | "app"): Promise<ChatMessage | null> {
+  const day = localDay(new Date());
+  const existing = todaysBriefingMessage(day);
+  if (existing) return Promise.resolve(existing);
+  if (preparing) return preparing;
+  preparing = (async () => {
+    try {
+      const reply = await runMorningSetup({ via: "pc", open: false });
+      const msg: ChatMessage = { ...replyToMessage(reply, "Morning briefing"), briefingDate: day };
+      appendToConversation(msg);
+      saveState({ day, messageId: msg.id, preparedAt: Date.now(), heardAt: null, heardOn: null });
+      console.log(`[briefing] today's briefing is ready (${reason})`);
+      return msg;
+    } catch (err) {
+      console.warn(`[briefing] couldn't prepare today's briefing: ${(err as Error).message}`);
+      return null;
+    } finally {
+      preparing = null;
+    }
+  })();
+  return preparing;
+}
+
+/** Played on the PC or the phone (or made by the phone itself): don't speak it again elsewhere. */
+export function markBriefingHeard(day: string, on: "pc" | "phone"): void {
+  const state = loadState();
+  if (state.day === day && state.heardAt) return;
+  const message = todaysBriefingMessage(day);
+  saveState({ day, messageId: message?.id ?? state.messageId, preparedAt: state.day === day ? state.preparedAt : null, heardAt: Date.now(), heardOn: on });
+}
+
+/** Desktop app: prepare the briefing when it's due (checked every minute, and soon after start). */
+export function initBriefingScheduler(): () => void {
+  if (!memoryAvailable()) return () => undefined;
+  const tick = () => {
+    const plan = briefingPlan();
+    const now = new Date();
+    if (!plan.auto || !inBriefingWindow(plan.time, now) || todaysBriefingMessage(localDay(now)) || preparing) return;
+    void prepareTodaysBriefing("schedule");
+  };
+  const timer = setInterval(tick, 60_000);
+  timer.unref?.();
+  const first = setTimeout(tick, 15_000);
+  first.unref?.();
+  return () => {
+    clearInterval(timer);
+    clearTimeout(first);
+  };
+}
+
+/** Tests: forget the state. */
+export function resetBriefingForTests(): void {
+  preparing = null;
+  try {
+    fs.rmSync(fileFor(), { force: true });
+  } catch {
+    /* nothing saved */
+  }
+}

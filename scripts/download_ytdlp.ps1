@@ -21,12 +21,14 @@ if (Test-Path $ytdlpExe) {
     }
 }
 
-Write-Host "[INFO] Downloading standalone yt-dlp.exe for background video downloading..."
+Write-Host "[INFO] Downloading standalone yt-dlp.exe for the YouTube link importer..."
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
+# Nightly first: it is the channel yt-dlp recommends for regular users, and
+# fixes for YouTube changes land there days or weeks before a stable release.
 $downloadUrls = @(
-    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
-    "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe"
+    "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe",
+    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 )
 
 $downloaded = $false

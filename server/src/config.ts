@@ -17,6 +17,9 @@ export const config = {
   env: env.NODE_ENV ?? "development",
   isProd: (env.NODE_ENV ?? "development") === "production",
   port: int("PORT", 4000),
+  // Interface to bind. Desktop/packaged builds set 127.0.0.1 so the local API
+  // is never reachable from the LAN.
+  bindHost: str("BIND_HOST", "0.0.0.0"),
   appUrl: str("APP_URL", "http://localhost:5173"),
   databaseUrl: str("DATABASE_URL", ""),
   // In production these MUST be present (validated at startup).
@@ -39,8 +42,16 @@ export const config = {
   // set YTDLP_PATH to override with a system binary.
   ytDlpPath: str("YTDLP_PATH", ""),
   ytDlpCookies: str("YTDLP_COOKIES", ""), // optional cookies.txt for age/bot-gated videos
+  // Live browser profile for --cookies-from-browser (firefox|chrome|...).
+  // Preferred over YTDLP_COOKIES on desktop: no export step, no rotation.
+  ytDlpBrowser: str("YTDLP_BROWSER", ""),
   ytDlpMaxDuration: int("YTDLP_MAX_DURATION", 1200), // seconds — refuses longer videos
   ytDlpTimeoutMs: int("YTDLP_TIMEOUT_MS", 240_000),
+  // Run `yt-dlp --update-to <channel>` in the background at startup
+  // ("nightly", "stable", or channel@tag). The desktop app sets it for its
+  // writable user-data copy; the Windows launcher updates the vendored exe
+  // itself. Empty/"off" = never self-update.
+  ytDlpAutoUpdate: str("YTDLP_AUTO_UPDATE", ""),
   // Voice cloning (OmniVoice sidecar — see voiceclone/). Empty = feature off.
   voiceCloneUrl: str("VOICECLONE_URL", ""),
   elevenLabsApiKey: str("ELEVENLABS_API_KEY", ""),
@@ -59,6 +70,48 @@ export const config = {
   })(),
   dataDir: str("DATA_DIR", path.join(process.cwd(), "data")),
   uploadsDir: str("UPLOADS_DIR", path.join(process.cwd(), "uploads")),
+  // Absolute path to a built frontend (frontend/dist). Packaged/desktop builds
+  // set this so Express serves the SPA from one origin — no Vite, no second port.
+  webDist: str("WEB_DIST", ""),
+  // Phone companion (lib/companion): the desktop app sets COMPANION=1. Only
+  // then can Settings → Phone open the LAN listener the paired phone app
+  // talks to (and only while the person has it turned on). Hosted/web
+  // deployments never expose it.
+  companionAvailable: env.COMPANION === "1",
+  companionPort: int("COMPANION_PORT", 47800),
+  // Extra addresses to put in the pairing code, comma-separated: a DNS/VPN
+  // name for this PC, or a full https:// origin that forwards to the phone
+  // listener. Detected network addresses are always included.
+  companionHosts: (env.COMPANION_HOSTS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // The desktop app (DESKTOP_APP=1, set by desktop/src/server-env.cjs): the
+  // server runs on the person's own PC, so the agent may open websites and
+  // apps here, and Settings → Brain can save a Gemini API key.
+  desktopApp: env.DESKTOP_APP === "1",
+  // Settings → Brain outside the desktop app (local development only).
+  brainSettingsAvailable: env.DESKTOP_APP === "1" || env.BRAIN_SETTINGS === "1",
+  // The agent's brain: Google Gemini (lib/brain). A key saved in Settings →
+  // Brain (DATA_DIR/brain.json) wins; these are for hosted/dev setups.
+  geminiApiKey: str("GEMINI_API_KEY", ""),
+  geminiModel: str("GEMINI_MODEL", ""),
+  geminiApiBase: str("GEMINI_API_BASE", "https://generativelanguage.googleapis.com").replace(/\/+$/, ""),
+  // The agent's memory (lib/memory.ts): notes, a summary of earlier
+  // conversations and the shorts made. The desktop app has it; MEMORY=1
+  // turns it on for local development.
+  memoryAvailable: env.DESKTOP_APP === "1" || env.MEMORY === "1",
+  // Gemini's address for paired phones chatting while the PC is off. Empty =
+  // Google's (tests point the emulator at a stand-in).
+  companionGeminiBase: str("COMPANION_GEMINI_BASE", "").replace(/\/+$/, ""),
+  // Morning Setup's weather: Open-Meteo (free, no key). Tests use a stand-in.
+  openMeteoGeocodingUrl: str("OPEN_METEO_GEOCODING_URL", "https://geocoding-api.open-meteo.com/v1/search"),
+  openMeteoForecastUrl: str("OPEN_METEO_FORECAST_URL", "https://api.open-meteo.com/v1/forecast"),
+  // YouTube: the Data API and Google's OAuth endpoints ("Connect YouTube
+  // account" signs in through the browser). Tests use stand-ins.
+  youtubeApiBase: str("YOUTUBE_API_BASE", "https://www.googleapis.com").replace(/\/+$/, ""),
+  googleOAuthAuthUrl: str("GOOGLE_OAUTH_AUTH_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
+  googleOAuthTokenUrl: str("GOOGLE_OAUTH_TOKEN_URL", "https://oauth2.googleapis.com/token"),
 } as const;
 
 // Everything optional at runtime is intentionally absent here so lean (free)

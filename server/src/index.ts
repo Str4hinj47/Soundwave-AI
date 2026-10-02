@@ -2,6 +2,12 @@ import { spawnSync } from "node:child_process";
 import { config, validateConfig, resolveFfmpegPath } from "./config.js";
 import { createApp } from "./app.js";
 import { getStore } from "./lib/store.js";
+import { startYtDlpSelfUpdate } from "./lib/ytdlp.js";
+import { ytDlpJsRuntime } from "./lib/jsRuntime.js";
+import { initConversation } from "./lib/conversation.js";
+import { initCompanion } from "./lib/companion/listener.js";
+import { initMemory } from "./lib/memory.js";
+import { initBriefingScheduler } from "./lib/briefing.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[soundwave] Handled asynchronous rejection:", reason);
@@ -19,7 +25,7 @@ async function main() {
   // Video export needs FFmpeg — warn loudly at boot when it's missing so a
   // Windows user sees the fix before the first export attempt.
   const ffmpeg = resolveFfmpegPath();
-  const probe = spawnSync(ffmpeg, ["-version"], { stdio: "pipe", encoding: "utf8" });
+  const probe = spawnSync(ffmpeg, ["-version"], { stdio: "pipe", encoding: "utf8", windowsHide: true });
   if (probe.status === 0) {
     const firstLine = (probe.stdout ?? "").split("\n")[0]?.trim() ?? "found";
     console.log(`[soundwave] ffmpeg: ${firstLine}`);
@@ -29,10 +35,28 @@ async function main() {
     );
   }
 
+  // yt-dlp housekeeping, both in the background: the desktop app updates its
+  // own yt-dlp copy (YTDLP_AUTO_UPDATE) and checks that it can serve as
+  // yt-dlp's JavaScript runtime — done before the first import needs either.
+  startYtDlpSelfUpdate();
+  void ytDlpJsRuntime();
+
   const app = createApp();
-  app.listen(config.port, "0.0.0.0", () => {
-    console.log(`[soundwave] API listening on http://0.0.0.0:${config.port} (${config.env})`);
+  app.listen(config.port, config.bindHost, () => {
+    console.log(`[soundwave] API listening on http://${config.bindHost}:${config.port} (${config.env})`);
   });
+
+  // The shared agent conversation: report shorts that finished (or died with
+  // the last session) while nobody was watching. Then the phone companion's
+  // LAN listener, if the person left "Let my phone connect" on.
+  initConversation();
+  // The agent's memory keeps a summary of what falls out of the recent conversation.
+  initMemory();
+  // The morning briefing: prepared when it's due, spoken when an app is opened.
+  initBriefingScheduler();
+  if (config.companionAvailable) {
+    initCompanion().catch((err) => console.warn("[companion] could not start:", (err as Error).message));
+  }
 }
 
 main().catch((err) => {

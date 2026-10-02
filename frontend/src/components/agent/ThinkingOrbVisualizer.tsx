@@ -8,6 +8,8 @@ export interface ThinkingOrbVisualizerProps {
   className?: string;
   orbMode?: OrbState | "auto";
   onOrbClick?: () => void;
+  /** Just the orb — no aura or guide ring (small placements like the voice bar). */
+  bare?: boolean;
 }
 
 export const ALL_ORB_STATES: { id: OrbState | "auto"; label: string; desc: string }[] = [
@@ -30,6 +32,7 @@ export function ThinkingOrbVisualizer({
   className = "",
   orbMode = "auto",
   onOrbClick,
+  bare = false,
 }: ThinkingOrbVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -90,6 +93,10 @@ export function ThinkingOrbVisualizer({
       cancelAnimationFrame(animId);
     };
   }, [resolvedState, assistantState, isMicActive, size]);
+
+  if (bare) {
+    return <canvas ref={canvasRef} style={{ width: size, height: size }} className={`select-none ${className}`} onClick={onOrbClick} />;
+  }
 
   return (
     <div className={`relative flex flex-col items-center justify-center select-none ${className}`}>

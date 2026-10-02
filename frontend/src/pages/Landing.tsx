@@ -161,7 +161,7 @@ function VoicePreviewSection() {
       </div>
       <div className="mt-8 text-center">
         <Link
-          to={user ? "/studio" : "/signup"}
+          to={user ? "/agent" : "/signup"}
           className="inline-flex items-center gap-2 rounded-btn bg-gradient-to-r from-blue-500 to-violet-500 px-6 py-3 font-semibold text-white shadow-glow transition-all duration-200 hover:from-blue-400 hover:to-violet-400"
         >
           Use a Voice <ArrowRight className="h-4 w-4" />

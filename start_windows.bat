@@ -1,5 +1,7 @@
 @echo off
 title Soundwave AI Suite Launcher
+:: Run from the launcher's own folder so every relative path below resolves.
+cd /d "%~dp0"
 echo =================================================================
 echo   Waves Starting Soundwave AI Studio and Autonomous Agent
 echo =================================================================
@@ -8,10 +10,18 @@ echo =================================================================
 where node >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Node.js is not installed or not in PATH!
-    echo Please download and install Node.js 20+ from https://nodejs.org
+    echo Please download and install Node.js 22+ from https://nodejs.org
     pause
     exit /b 1
 )
+:: yt-dlp only accepts Node.js 22+ as the JavaScript runtime it needs to solve
+:: YouTube's challenges when the agent imports Orbital NCG / YouTube videos.
+node -e "process.exit(Math.max(0, Math.sign(22 - parseInt(process.versions.node))))"
+if not errorlevel 1 goto :node_ok
+echo [WARNING] Node.js 22 or newer is recommended. yt-dlp needs it to solve YouTube's
+echo           JavaScript challenges when the agent imports Orbital NCG videos.
+echo           Get the current LTS from https://nodejs.org
+:node_ok
 
 :: Check for Python (optional)
 where python >nul 2>&1
@@ -20,7 +30,7 @@ if %ERRORLEVEL% NEQ 0 (
 ) else (
     where pip >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
-        echo [INFO] Verifying Python dependencies for YouTube Parkour Clipper...
+        echo [INFO] Verifying Python dependencies for the agent and YouTube link importer...
         pip install -r requirements.txt --quiet
     )
 )
@@ -77,23 +87,35 @@ echo [INFO] Using vendored FFmpeg at vendor\ffmpeg\ffmpeg.exe.
 :ffmpeg_ready
 echo [INFO] FFmpeg is ready.
 
-:: Check for yt-dlp
-where yt-dlp >nul 2>&1
-if %ERRORLEVEL% EQU 0 goto :ytdlp_ready
-
+:: yt-dlp powers the YouTube link importer. Prefer the standalone yt-dlp.exe in
+:: vendor\yt-dlp, which this launcher keeps up to date - YouTube breaks older
+:: yt-dlp builds every few weeks. A yt-dlp on PATH is only the fallback.
 if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
 
 :: Download standalone portable yt-dlp.exe via PowerShell script
 if exist scripts\download_ytdlp.ps1 (
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\download_ytdlp.ps1
 )
-
 if exist vendor\yt-dlp\yt-dlp.exe goto :ytdlp_vendored
-goto :continue_boot
+
+where yt-dlp >nul 2>&1
+if %ERRORLEVEL% NEQ 0 goto :continue_boot
+for /f "delims=" %%Y in ('where yt-dlp') do (
+    set "YTDLP_PATH=%%Y"
+    goto :ytdlp_path_set
+)
+:ytdlp_path_set
+echo [INFO] Using yt-dlp from PATH: %YTDLP_PATH%
+echo        If YouTube imports fail, update it: yt-dlp -U, or pip install -U yt-dlp
+goto :ytdlp_ready
 
 :ytdlp_vendored
 set "PATH=%CD%\vendor\yt-dlp;%PATH%"
 set "YTDLP_PATH=%CD%\vendor\yt-dlp\yt-dlp.exe"
+:: Fixes for YouTube changes reach yt-dlp's nightly channel first - the channel
+:: yt-dlp recommends for regular users - so update to it on every start.
+echo [INFO] Checking for yt-dlp updates...
+"%YTDLP_PATH%" --update-to nightly
 echo [INFO] Using vendored yt-dlp at vendor\yt-dlp\yt-dlp.exe.
 
 :ytdlp_ready
@@ -109,17 +131,23 @@ if not exist server\.env (
 :: Ensure DATABASE_URL is disabled for zero-infra local JSON store (no postgres needed)
 powershell -NoProfile -Command "if (Test-Path 'server\.env') { (Get-Content 'server\.env') -replace '^DATABASE_URL=postgresql:', '#DATABASE_URL=postgresql:' | Set-Content 'server\.env' }"
 
-:: Install server dependencies if needed
-if not exist server\node_modules (
-    echo [INFO] Installing server dependencies...
-    cd server && call npm install && cd ..
-)
+:: Install or repair the server and frontend npm dependencies. Checking only
+:: whether node_modules exists misses installs that stopped part-way, which
+:: later break the dev server with errors like
+:: Failed to resolve import "lucide-react". The helper reinstalls from scratch
+:: when the last npm install did not finish, otherwise checks every package
+:: against package-lock.json and runs npm install when anything is missing,
+:: and re-runs install scripts that npm 12's allowScripts gate skipped.
+node scripts\ensure_node_deps.mjs server frontend
+if not errorlevel 1 goto :deps_ready
+echo.
+echo [ERROR] The npm dependencies could not be installed - see the messages above.
+echo         Close any open Soundwave server windows, check your internet
+echo         connection, then run start_windows.bat again.
+pause
+exit /b 1
 
-:: Install frontend dependencies if needed
-if not exist frontend\node_modules (
-    echo [INFO] Installing frontend dependencies...
-    cd frontend && call npm install && cd ..
-)
+:deps_ready
 
 :: Start Backend API Server in a new window
 echo [INFO] Starting Backend API Server on http://localhost:4000 ...

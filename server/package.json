@@ -3,6 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "prisma@5.22.0": true
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -25,6 +33,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "node-edge-tts": "^1.2.10",
+    "ws": "^8.22.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -36,6 +45,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^20.16.10",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
     "prisma": "^5.20.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.1",

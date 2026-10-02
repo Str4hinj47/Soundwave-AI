@@ -19,7 +19,7 @@ except ImportError:
 
 PLUGIN = {
     "name": "soundwave_yt_short_runner",
-    "description": "Soundwave AI Viral Short Generator — creates 9:16 vertical shorts with TTS voiceover, TikTok #8B5CF6 subtitles, and Minecraft parkour backgrounds in 1 click or batch across all 7 niches.",
+    "description": "Soundwave AI Viral Short Generator — creates 9:16 vertical shorts with TTS voiceover, TikTok #8B5CF6 subtitles, and Orbital NCG gameplay backgrounds (an unused youtube.com/@OrbitalNCG video per short, imported via the YouTube link importer) in 1 click or batch across all 7 niches.",
     "parameters": {
         "type": "OBJECT",
         "properties": {

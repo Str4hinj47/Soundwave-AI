@@ -19,11 +19,12 @@ describe("Ghost Operator API", () => {
     const res = await request(app).get("/api/v1/ghost/macros");
     expect(res.status).toBe(200);
     expect(res.body.macros).toBeDefined();
-    expect(res.body.macros.length).toBeGreaterThanOrEqual(4);
-
-    const morningMacro = res.body.macros.find((m: any) => m.id === "creator_morning_prep");
-    expect(morningMacro).toBeDefined();
-    expect(morningMacro.steps.length).toBe(4);
+    expect(res.body.macros.length).toBeGreaterThanOrEqual(2);
+    const ids = res.body.macros.map((m: any) => m.id);
+    expect(ids).toContain("workspace_cleanup_diagnostics");
+    // Deep Focus was removed; Morning Setup is a real feature now (not a macro).
+    expect(ids).not.toContain("deep_focus_pomodoro");
+    expect(ids).not.toContain("creator_morning_prep");
   });
 
   it("decomposes complex natural language into sequential action steps", async () => {
@@ -64,7 +65,7 @@ describe("Ghost Operator API", () => {
     const res = await request(app)
       .post("/api/v1/ghost/execute")
       .send({
-        macroId: "deep_focus_pomodoro",
+        macroId: "workspace_cleanup_diagnostics",
       });
 
     expect(res.status).toBe(200);

@@ -15,8 +15,14 @@ current_dir = Path(__file__).parent.resolve()
 sys.path.insert(0, str(current_dir))
 
 from viral_engine import generate_viral_script, NICHES, list_niches
-from cache_manager import list_cached_clips, build_cache_clip, get_cache_dir
-from short_runner import generate_single_short, generate_all_niches_batch, ensure_server_running
+from short_runner import (
+    ORBITAL_CHANNEL_URL,
+    generate_single_short,
+    generate_all_niches_batch,
+    ensure_server_running,
+    get_orbital_status,
+    reset_orbital_history,
+)
 from progress_tracker import get_html_path, open_in_browser
 from hud import SoundwaveHudTerminal, launch_gui_hud
 
@@ -29,12 +35,35 @@ def print_banner():
     """
     print(banner)
 
+def orbital_summary(status=None) -> str:
+    """e.g. 'Orbital NCG backgrounds: 37 unused / 5 used (youtube.com/@OrbitalNCG)'."""
+    status = status if status is not None else get_orbital_status()
+    if not status:
+        return f"Orbital NCG backgrounds: server offline ({ORBITAL_CHANNEL_URL})"
+    available = status.get("available")
+    unused = "?" if available is None else available
+    return f"Orbital NCG backgrounds: {unused} unused / {status.get('usedCount', 0)} used ({ORBITAL_CHANNEL_URL})"
+
+
+def print_orbital_history(limit: int = 10) -> None:
+    status = get_orbital_status()
+    print(orbital_summary(status))
+    if not status:
+        return
+    used = status.get("used") or []
+    if not used:
+        print("  No Orbital videos used yet — every Generate imports one it hasn't used before.")
+    for entry in used[:limit]:
+        print(f"  • {entry.get('title')} — {entry.get('url')} ({entry.get('usedAt', '')[:10]})")
+    if len(used) > limit:
+        print(f"  … and {len(used) - limit} more")
+
+
 def run_interactive_cli():
     print_banner()
     server_ok = ensure_server_running()
     print(f"Status: Soundwave AI Server is {'ONLINE' if server_ok else 'OFFLINE (run: cd server && npm run dev)'}")
-    clips = list_cached_clips()
-    print(f"Background Cache: {len(clips)} cached 80s clips available")
+    print(orbital_summary() if server_ok else f"Background source: unused Orbital NCG videos ({ORBITAL_CHANNEL_URL})")
 
     hud = SoundwaveHudTerminal()
 
@@ -44,7 +73,7 @@ def run_interactive_cli():
         print("  2) 📦 Batch Generate All 7 Niches")
         print("  3) 🎨 Launch Desktop HUD Visualizer")
         print("  4) 🌐 Open Live Progress Dashboard")
-        print("  5) 🎬 Download & Slice Background Gameplay")
+        print("  5) 🎮 Orbital NCG Background History")
         print("  6) 📜 Preview Viral Scripts")
         print("  0) Exit")
 
@@ -84,12 +113,10 @@ def run_interactive_cli():
             open_in_browser(hp)
 
         elif choice == "5":
-            print("Building background gameplay clip...")
-            out = build_cache_clip()
-            if out:
-                print(f"Clip ready: {out}")
-            else:
-                print("Failed to build clip.")
+            print_orbital_history()
+            if input("Reset the Orbital history so used videos can be picked again? [y/N]: ").strip().lower() == "y":
+                status = reset_orbital_history()
+                print(orbital_summary(status) if status else "Reset failed — is the server running?")
 
         elif choice == "6":
             for k in NICHES:
@@ -108,9 +135,8 @@ def main():
     parser.add_argument("--batch", action="store_true", help="Batch generate 1 short for every niche (7 total)")
     parser.add_argument("--voice", type=str, default="en-US-GuyNeural", help="TTS Voice (default: en-US-GuyNeural)")
     parser.add_argument("--resolution", type=str, default="720p", choices=["720p", "1080p"], help="Video resolution")
-    parser.add_argument("--build-cache", action="store_true", help="Download and slice an 80s background clip")
     parser.add_argument("--open-progress", action="store_true", help="Open the live HTML progress monitor in the browser")
-    parser.add_argument("--status", action="store_true", help="Check server health and cache statistics")
+    parser.add_argument("--status", action="store_true", help="Check server health and the Orbital NCG background history")
 
     args = parser.parse_args()
 
@@ -134,15 +160,10 @@ def main():
 
     if args.status:
         print_banner()
-        print(f"Soundwave Server: {'ONLINE' if ensure_server_running() else 'OFFLINE'}")
-        clips = list_cached_clips()
-        print(f"Background Cache: {len(clips)} clips in {get_cache_dir()}")
-        return
-
-    if args.build_cache:
-        print("Downloading and slicing 80s gameplay clip...")
-        clip = build_cache_clip()
-        print(f"Result: {clip}")
+        online = ensure_server_running()
+        print(f"Soundwave Server: {'ONLINE' if online else 'OFFLINE'}")
+        if online:
+            print_orbital_history()
         return
 
     if args.open_progress:

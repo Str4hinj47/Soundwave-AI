@@ -7,6 +7,20 @@ frontend/dist/
 server/dist/
 *.tsbuildinfo
 
+# local speech engine for voice input (whisper.cpp + a ggml model) — the
+# desktop build fetches its own; see README "Voice input"
+vendor/whisper/
+
+# desktop packaging (assembled tree + installer output; binaries fetched at build time)
+desktop/app/
+desktop/release/
+desktop/bin/*
+!desktop/bin/.gitkeep
+# voice-input test assets (CI downloads them) + end-to-end screenshots
+desktop/jfk.wav
+desktop/e2e-mic.wav
+desktop/e2e-shots/
+
 # env
 .env
 .env.*

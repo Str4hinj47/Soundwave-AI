@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+# Run from the launcher's own folder so every relative path below resolves.
+cd "$(dirname "$0")"
 
 echo "================================================================="
 echo "  🌊 Starting Soundwave AI Studio & Autonomous Agent"
@@ -20,15 +22,14 @@ if [ ! -f server/.env ]; then
     sed -i.bak 's/^DATABASE_URL=/#DATABASE_URL=/' server/.env 2>/dev/null || true
 fi
 
-# Install dependencies if missing
-if [ ! -d server/node_modules ]; then
-    echo "[INFO] Installing server dependencies..."
-    (cd server && npm install)
-fi
-
-if [ ! -d frontend/node_modules ]; then
-    echo "[INFO] Installing frontend dependencies..."
-    (cd frontend && npm install)
+# Install or repair npm dependencies. Checking only whether node_modules exists
+# misses installs that stopped part-way (the dev server then fails with
+# 'Failed to resolve import ...'). The helper reinstalls from scratch when the
+# last npm install did not finish, otherwise checks every package against
+# package-lock.json and runs npm install when anything is missing.
+if ! node scripts/ensure_node_deps.mjs server frontend; then
+    echo "[ERROR] The npm dependencies could not be installed - see the messages above."
+    exit 1
 fi
 
 echo "[INFO] Starting Backend API Server (port 4000)..."

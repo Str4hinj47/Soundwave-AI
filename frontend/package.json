@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,8 +16,8 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "framer-motion": "^11.11.0",
-    "lamejs": "^1.2.1",
     "lucide-react": "^0.447.0",
+    "qrcode": "1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",
@@ -23,6 +27,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/qrcode": "1.5.5",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",

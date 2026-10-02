@@ -3,16 +3,15 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ToastHost } from "./components/ui/ToastHost";
 import { AppShell } from "./components/layout/AppShell";
 import { Dashboard } from "./pages/Dashboard";
-import { Studio } from "./pages/Studio";
-import { SubtitleEditor } from "./pages/SubtitleEditor";
-import { VideoCompositor } from "./pages/VideoCompositor";
 import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
 import { VoiceLibrary } from "./pages/VoiceLibrary";
 import { AgentHub } from "./pages/AgentHub";
 import { CreatorStudio } from "./pages/CreatorStudio";
+import { VoiceOverlay } from "./pages/VoiceOverlay";
 import { NotFound } from "./pages/NotFound";
+import { BackgroundServices } from "./components/agent/BackgroundServices";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -22,28 +21,37 @@ function ScrollToTop() {
   return null;
 }
 
-// Soundwave AI Suite — Autonomous Shorts Agent + Voice Studio
+/** Where the app opens (the desktop app loads "/"): the agent's Command Center. */
+const HOME = "/agent";
+
+// Soundwave AI — the agent is the one that makes the videos.
 export default function App() {
   return (
     <>
       <ScrollToTop />
       <ToastHost />
+      {/* Notifications for finished shorts + the desktop shell's voice shortcut. */}
+      <BackgroundServices />
       <Routes>
-        {/* Root -> direct to video compositor */}
-        <Route path="/" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/signin" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/signup" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/pricing" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/forgot-password" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/reset-password" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/verify-email" element={<Navigate to="/studio/video" replace />} />
-        <Route path="/oauth/callback" element={<Navigate to="/studio/video" replace />} />
+        {/* Root → the Command Center */}
+        <Route path="/" element={<Navigate to={HOME} replace />} />
+        <Route path="/signin" element={<Navigate to={HOME} replace />} />
+        <Route path="/signup" element={<Navigate to={HOME} replace />} />
+        <Route path="/pricing" element={<Navigate to={HOME} replace />} />
+        <Route path="/forgot-password" element={<Navigate to={HOME} replace />} />
+        <Route path="/reset-password" element={<Navigate to={HOME} replace />} />
+        <Route path="/verify-email" element={<Navigate to={HOME} replace />} />
+        <Route path="/oauth/callback" element={<Navigate to={HOME} replace />} />
 
-        {/* Backward-compatible alias for /jarvis -> /agent */}
-        <Route path="/jarvis" element={<Navigate to="/agent" replace />} />
-        <Route path="/automation" element={<Navigate to="/agent" replace />} />
+        {/* Old addresses: /jarvis and /automation, and the removed Compose
+            Video / Generate Voiceover pages (bookmarks keep working). */}
+        <Route path="/jarvis" element={<Navigate to={HOME} replace />} />
+        <Route path="/automation" element={<Navigate to={HOME} replace />} />
+        <Route path="/studio/*" element={<Navigate to={HOME} replace />} />
 
-        {/* Studio and Agent routes inside AppShell */}
+        {/* The desktop app's floating voice bar (its own transparent window). */}
+        <Route path="/overlay" element={<VoiceOverlay />} />
+
         <Route
           path="/agent"
           element={
@@ -65,30 +73,6 @@ export default function App() {
           element={
             <AppShell>
               <Dashboard />
-            </AppShell>
-          }
-        />
-        <Route
-          path="/studio"
-          element={
-            <AppShell>
-              <Studio />
-            </AppShell>
-          }
-        />
-        <Route
-          path="/studio/subtitles"
-          element={
-            <AppShell>
-              <SubtitleEditor />
-            </AppShell>
-          }
-        />
-        <Route
-          path="/studio/video"
-          element={
-            <AppShell>
-              <VideoCompositor />
             </AppShell>
           }
         />

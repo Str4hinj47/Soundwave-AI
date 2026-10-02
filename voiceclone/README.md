@@ -53,11 +53,12 @@ VOICECLONE_URL=http://localhost:8100
 VOICECLONE_TIMEOUT_MS=600000
 ```
 
-Restart the Node API (`npm run dev`). Open the Studio — a **Cloned** tab now
-sits next to the Microsoft Neural voices. Upload a 3–10 s clean reference
-clip (WAV/MP3/FLAC/OGG), give it a name, generate — the cloned audio flows
-into the normal subtitles + video pipeline. Unset `VOICECLONE_URL` to turn
-the feature off (the UI hides it automatically).
+Restart the Node API (`npm run dev`). Cloning is available through the API
+(`POST /api/v1/tts/clone/profiles` with a 3–10 s clean reference clip —
+WAV/MP3/FLAC/OGG — then `POST /api/v1/tts/clone`). The app itself no longer
+has a voiceover page: the agent is the only thing that makes videos, and it
+speaks and narrates with the Soundwave (Microsoft neural) voices. Unset
+`VOICECLONE_URL` to turn the feature off.
 
 ## 3. Other hardware
 
@@ -130,8 +131,8 @@ winget install cloudflare.cloudflared
 cloudflared tunnel --url http://localhost:8100
 ```
 Set `VOICECLONE_URL` to the `trycloudflare.com` URL it prints (+ token) on
-your deployed API. Cloning works while your PC runs; the Studio politely
-explains it's offline otherwise. Zero cost either way.
+your deployed API. Cloning works while your PC runs; the API answers with a
+clear "offline" error otherwise. Zero cost either way.
 
 ## 5. Environment variables
 
