@@ -27,6 +27,7 @@ on:
       - "server/src/lib/brain/**"
       - "server/src/lib/memory.ts"
       - "server/src/lib/morning.ts"
+      - "server/src/lib/briefing.ts"
       - "server/src/lib/conversation.ts"
       - "server/src/lib/chatMessages.ts"
       - "server/src/routes/companion.ts"

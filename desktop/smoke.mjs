@@ -237,6 +237,22 @@ try {
   const recalled = await send("POST", `${appUrl}/api/v1/agent/chat`, { message: "what do you remember about me?" });
   const memoryAsk = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1);
   assert(recalled.status === 200 && /The smoke test's channel is about space facts/.test(memoryAsk?.body?.systemInstruction?.parts?.[0]?.text ?? ""), "memory: Gemini sees the agent's notes");
+  // 1.5.0: the daily briefing on your own topics — Gemini researches them (2.5 Flash + Google Search).
+  const due = new Date(Date.now() - 2 * 60_000);
+  const dueAt = `${String(due.getHours()).padStart(2, "0")}:${String(due.getMinutes()).padStart(2, "0")}`;
+  const plan = await send("PUT", `${appUrl}/api/v1/morning`, { briefing: { topics: ["the latest news about open-source, free AI tools"], time: dueAt, auto: true } });
+  assert(plan.status === 200 && plan.body.briefing?.topics?.length === 1 && plan.body.briefing.time === dueAt, "daily briefing: topics and time saved (in the agent's memory)");
+  const prepared = await send("POST", `${appUrl}/api/v1/morning/briefing/prepare`, {});
+  const searched = fakeGemini.seen.filter((r) => /gemini-2\.5-flash:generateContent$/.test(r.url) && JSON.stringify(r.body?.tools ?? []).includes("googleSearch"));
+  const briefFacts = fakeGemini.seen.filter((r) => r.url.endsWith(":generateContent")).at(-1)?.body?.contents?.[0]?.parts?.[0]?.text ?? "";
+  assert(
+    prepared.status === 200 && prepared.body.message?.briefingDate && searched.length === 1 && /researched with Google Search:\nOllama 1\.0 shipped/.test(briefFacts),
+    "daily briefing: written when due — Gemini searched the topic and the briefing was written from what it found",
+  );
+  const heardNow = await send("POST", `${appUrl}/api/v1/morning/briefing/heard`, { day: prepared.body.day });
+  assert(heardNow.status === 200 && heardNow.body.heard?.on === "pc", "daily briefing: marked heard (it isn't spoken again elsewhere)");
+  annotate("notice", "Daily briefing", `Due ${dueAt}; researched “the latest news about open-source, free AI tools” with Gemini 2.5 Flash + Google Search (stand-in); briefing posted for ${prepared.body.day}.`);
+
   const morningSet = await send("PUT", `${appUrl}/api/v1/morning`, { items: [], city: "Kruševac" });
   assert(morningSet.status === 200 && morningSet.body.weatherCity === "Kruševac", "Morning Setup: settings saved");
   const briefing = await send("POST", `${appUrl}/api/v1/morning/run`, {});

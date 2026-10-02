@@ -33,6 +33,23 @@ Away from home: install a VPN such as Tailscale on both, then pair again — the
 pairing code includes the PC's VPN address. You can also add addresses (a DNS
 name, a VPN hostname) with `COMPANION_HOSTS` on the PC.
 
+### The morning briefing (app 1.2.0 + Soundwave AI 1.5.0)
+
+The plan (topics, time, automatic) comes with the memory snapshot. When the
+app is opened (or comes to the front) after the briefing time and today's
+briefing hasn't been heard on this phone or the PC, it starts by itself: with
+the PC reachable it asks for the briefing the PC wrote when it was due (op
+`briefing.today`, `prepare: true` makes the PC write it now); with the PC off
+it researches the topics with Gemini (`server/src/lib/brain/core/research.ts`
+— Google Search on Gemini 2.5 Flash, else GitHub / Hacker News / Google News
+fetched natively through `CapacitorHttp`), writes the briefing and adds it to
+the outbox. Then it reads the whole thing aloud — through the PC's voices, or
+with the PC off through the native **EdgeTts** plugin
+(`android/app/src/main/java/ai/soundwave/companion/EdgeTtsPlugin.java`, OkHttp
+WebSocket to Microsoft's voice service with the headers a WebView can't send).
+Capacitor lets audio play without a tap, so it really starts talking on open.
+"Talk when I open the app" in the app's Settings turns it off on that phone.
+
 ### When the PC is off (app 1.1.0 + Soundwave AI 1.4.0)
 
 With **Settings → Phone → Chat from the phone when this PC is off** on (the
@@ -50,7 +67,7 @@ what Google's CORS allows): the same instruction (told the PC is off), the
 recent conversation, the memory, and the tools `soundwave_guide`, `remember`
 and `forget`. Morning Setup gives a briefing only (Open-Meteo weather, the
 last known shorts, ideas) and voice input is transcribed by Gemini. Shorts,
-videos, PC actions and reading aloud wait for the PC. Messages made there are
+videos and PC actions wait for the PC; replies are read aloud by the phone itself (1.2.0+). Messages made there are
 labelled `answeredBy: "phone"` and wait in an **outbox** (with memory
 changes); right after reconnecting — before the first sync — the client sends
 it with op `merge`, so the PC's conversation and memory get everything.
@@ -96,7 +113,8 @@ Operations the phone can run: `hello`, `sync` (long-poll: waits up to 20 s for
 news; carries the memory snapshot when it changed), `send`, `transcribe`
 (payload: 16 kHz WAV), `speak` (answer payload: MP3), `video.info` /
 `video.read` (a finished short, 2 MB at a time), `morning` (Morning Setup on
-the PC), `brain.kit`, `merge` (what was said while the PC was off), `unpair`.
+the PC), `briefing.today` / `briefing.heard` (the daily briefing), `brain.kit`,
+`merge` (what was said while the PC was off), `unpair`.
 
 ### The shared conversation
 

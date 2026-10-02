@@ -15,6 +15,8 @@ export const FAKE_HELLO = "Hello from the fake Gemini — I'm the agent's brain 
 export const FAKE_PHONE = "Hello from the fake Gemini, answering on your phone while the PC is off.";
 /** Every Morning Setup briefing. */
 export const FAKE_MORNING = "Good morning from the fake Gemini! Here's your Morning Setup briefing.";
+/** What a "Google Search" for a briefing topic finds. */
+export const FAKE_RESEARCH = "Ollama 1.0 shipped with a new model library.\nMistral released open weights for Mistral Small 4.";
 
 const text = (t) => ({ candidates: [{ content: { role: "model", parts: [{ text: t, thoughtSignature: "ZmFrZS10ZXh0" }] }, finishReason: "STOP" }] });
 const call = (name, args, id) => ({
@@ -23,6 +25,18 @@ const call = (name, args, id) => ({
 
 function answer(body) {
   const instruction = body?.systemInstruction?.parts?.[0]?.text ?? "";
+  // Research for a briefing topic: Gemini 2.5 Flash with Google Search grounding.
+  if (Array.isArray(body?.tools) && body.tools.some((t) => t && "googleSearch" in t) && !body.tools.some((t) => t?.functionDeclarations)) {
+    return {
+      candidates: [
+        {
+          content: { role: "model", parts: [{ text: FAKE_RESEARCH }] },
+          finishReason: "STOP",
+          groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/ollama", title: "example.com" } }] },
+        },
+      ],
+    };
+  }
   // (The agent's own instruction mentions Morning Setup too — match the briefing writer's exact words.)
   if (/^You are Soundwave[^\n]*Write the user's Morning Setup briefing/.test(instruction)) return text(FAKE_MORNING);
   if (/^You keep the long-term memory of Soundwave/.test(instruction)) return text("The user tested Soundwave AI in CI.");

@@ -227,6 +227,9 @@ describe("the Soundwave guide", () => {
     expect(textOf("brain")).toMatch(/aistudio\.google\.com\/apikey[\s\S]*Save & test/);
     expect(textOf("phone")).toMatch(/Chat from the phone when this PC is off/);
     expect(textOf("morning-setup")).toMatch(/Settings → Morning Setup/);
+    expect(textOf("morning-setup")).toMatch(/starts talking as soon as you open the Soundwave app/);
+    expect(textOf("morning-setup")).toMatch(/Gemini 2\.5 Flash searches Google \(free with a free Gemini key/);
+    expect(textOf("morning-setup")).toMatch(/With the PC off: the phone does everything itself/);
     expect(textOf("memory")).toMatch(/gear → Memory tab/);
     expect(textOf("command-center")).toMatch(/🌅 Morning Setup/);
     expect(guide.GUIDE_SECTIONS.map((s) => s.text).join("\n")).not.toMatch(/Deep Focus|Pomodoro/);

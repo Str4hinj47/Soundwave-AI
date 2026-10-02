@@ -115,6 +115,14 @@ written from facts (weather included), the Memory tab and the YouTube tab.
 Update the guide (`server/src/lib/brain/core/guide.ts`) whenever a screen
 changes — `server/tests/memory_guide.test.ts` checks its key facts.
 
+1.5.0 adds the daily briefing: topics researched with Gemini 2.5 Flash + Google
+Search (free tier; the public feeds as backup), written when due, spoken when
+an app opens. The smoke test, the packaged-app E2E and the phone E2E check it
+against the stand-in (which answers `googleSearch` requests too). The phone app
+(1.2.0) gained a native plugin (`EdgeTtsPlugin.java`, OkHttp) so it speaks the
+Soundwave voices with the PC off — the phone E2E has it synthesize real speech
+from Microsoft's service on the emulator.
+
 ## YouTube import (yt-dlp) in the desktop app
 
 YouTube changes regularly break older yt-dlp builds (e.g. "The page needs to

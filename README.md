@@ -32,10 +32,17 @@ you made, so it picks up where you left off. Ask it how anything in Soundwave
 works — linking YouTube, pairing the phone, Morning Setup — and it explains
 step by step from the built-in guide, with the real button names.
 
-**🌅 Morning Setup.** One tap (PC or phone): it opens your morning websites
-and apps on the PC and gives a spoken briefing — weather, what happened with
-your shorts since yesterday, your YouTube numbers, what you were working on
-and three fresh short ideas.
+**🌅 Morning Setup and the daily briefing.** Tell it what you want to hear
+about every morning — anything: "the latest news about open-source, free AI
+tools", "new trending GitHub repositories" (Settings → Morning Setup, or just
+say it). The plan is saved in the agent's memory. When the briefing is due,
+Gemini researches each topic (Google Search on Gemini 2.5 Flash — free with a
+free key; GitHub, Hacker News and Google News as a backup) and writes the
+briefing — weather, your shorts, your YouTube numbers, your topics, three
+fresh short ideas — and **it starts talking when you open the app**. With the
+PC off, the phone researches, writes and speaks it all by itself, in the same
+Soundwave voice. The 🌅 chip runs it right away and also opens your morning
+websites and apps on the PC.
 
 ---
 
@@ -82,7 +89,8 @@ it never claims something it didn't do:
 | `get_pc_status` | live CPU load, memory, disk, uptime of this PC |
 | `open_website` | opens an http(s) page in the default browser |
 | `open_app` | opens an app from the Windows Start menu (`Get-StartApps`) |
-| `run_morning_setup` | Morning Setup: opens the morning items (Settings → Morning Setup) and returns the facts for the briefing |
+| `run_morning_setup` | Morning Setup: opens the morning items (Settings → Morning Setup), researches the briefing topics and returns the facts for the briefing |
+| `update_morning_briefing` | the daily briefing plan — topics (anything), time, automatic — saved in the agent's memory |
 | `remember`, `forget` | the agent's notes (memory, shared with the phone; never keys or passwords) |
 | `soundwave_guide` | the built-in user guide — every feature, exact steps and button names (`server/src/lib/brain/core/guide.ts`) |
 | Google Search | live answers — only with a key that has billing (not on the free tier) |
@@ -95,6 +103,16 @@ built-in scripts) and tells you how to add one. Servers can set
 `GEMINI_API_KEY` / `GEMINI_MODEL` instead. Code: `server/src/lib/brain/` —
 `core/` (the Gemini client, tool loop, instruction, guide, memory and Morning
 Setup briefing) is plain TypeScript that the phone app compiles too.
+
+**Daily briefing** (desktop 1.5.0 / phone 1.2.0): the plan (topics, time,
+automatic) lives in the agent's memory. The PC writes the briefing when it's
+due (`lib/briefing.ts`, catching up at start-up within 10 hours) and posts it
+in the conversation marked with its day; the phone app and the Command Center
+speak it the first time they're opened after that — once (`briefing.heard`).
+Research: `server/src/lib/brain/core/research.ts` (shared with the phone).
+With the PC off the phone does the same itself and speaks through the native
+`EdgeTts` plugin (`mobile/android/.../EdgeTtsPlugin.java` — Microsoft's voices
+need headers a WebView can't send).
 
 **Memory** (desktop 1.4.0+): `%APPDATA%\Soundwave AI\data\agent-memory.json`
 — notes, Gemini's running summary of earlier conversations (written by the
@@ -117,8 +135,8 @@ CI builds **`SoundwaveCompanion-*.apk`** (the `soundwave-companion-apk`
 artifact of the *Android Companion* workflow) and tests it on an Android 15
 emulator against the real PC server. To use it:
 
-1. Install the desktop app **1.4.0 or newer** on your PC (1.2.0+ works,
-   without chatting while the PC is off).
+1. Install the desktop app **1.5.0 or newer** on your PC (1.2.0+ works,
+   without chatting while the PC is off or the daily briefing).
 2. On the phone, open the APK and allow installing from that source
    (Android asks once). Android 7.0+. Test builds are signed with a new key
    each time: uninstall the previous app first, then pair again.

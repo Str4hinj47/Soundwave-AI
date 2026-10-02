@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { _android as android } from "playwright-core";
-import { FAKE_HELLO, FAKE_KEY, FAKE_MORNING, FAKE_PHONE } from "../../desktop/test/fake-gemini.mjs";
+import { FAKE_HELLO, FAKE_KEY, FAKE_MORNING, FAKE_PHONE, FAKE_RESEARCH } from "../../desktop/test/fake-gemini.mjs";
 
 const PKG = "ai.soundwave.companion";
 const PC = process.env.PC_URL || "http://127.0.0.1:4000";
@@ -283,6 +283,21 @@ try {
   await page.waitForFunction(() => !/Read replies aloud/.test(document.body.innerText), null, { timeout: 10_000 });
   ok("Android back button closes the settings sheet");
 
+  // The daily briefing (app 1.2.0): set on the PC, due in ~2 minutes by the phone's clock — so it
+  // isn't delivered while the PC still answers; the phone gets the plan with the agent's memory.
+  const BRIEF_TOPIC = "the latest news about open-source, free AI tools";
+  const [ph, pm, ps] = adb("shell", "date +%H:%M:%S").trim().split(":").map(Number);
+  const dueMin = (ph * 60 + pm + 2) % (24 * 60);
+  const dueAt = `${String(Math.floor(dueMin / 60)).padStart(2, "0")}:${String(dueMin % 60).padStart(2, "0")}`;
+  const dueAtMs = Date.now() + (((dueMin * 60 - (ph * 3600 + pm * 60 + ps)) + 86_400) % 86_400) * 1000;
+  await pc("/api/v1/morning", { items: [], city: "Kruševac", briefing: { topics: [BRIEF_TOPIC], time: dueAt, auto: true } }, "PUT");
+  await page.click('[data-testid="settings-button"]');
+  await bodyHas(page, new RegExp(`Every morning at ${dueAt}`), 60_000);
+  await bodyHas(page, new RegExp(escapeRe(BRIEF_TOPIC)), 10_000);
+  adb("shell", "input keyevent 4");
+  await page.waitForFunction(() => !/Read replies aloud/.test(document.body.innerText), null, { timeout: 10_000 });
+  ok(`the briefing plan reached the phone with the agent's memory (every morning at ${dueAt}: “${BRIEF_TOPIC}”)`);
+
   // The PC goes away (phone access off): the phone keeps chatting on its own, with Gemini directly.
   await pc("/api/v1/companion/enabled", { enabled: false });
   await page.waitForSelector('[data-testid="phone-mode-banner"]', { timeout: 60_000 });
@@ -290,6 +305,50 @@ try {
   const offlineText = await say(page, "are you still there without the PC?", new RegExp(escapeRe(FAKE_PHONE)), 60_000);
   ok(`answered on the phone itself while the PC was off: "${firstLine(offlineText)}"`);
   if (!(await page.$('[data-testid="answered-on-phone"]'))) fail('the phone\'s own answer isn\'t marked "on phone"');
+
+  // The briefing is due: open the app again (as in the morning) — with the PC off, the phone
+  // researches the topic with Gemini, writes the briefing and starts talking by itself.
+  while (Date.now() < dueAtMs + 4000) await sleep(2000);
+  const pidBeforeMorning = webviewPid;
+  adb("shell", `am force-stop ${PKG}`);
+  await sleep(1000);
+  adb("shell", `monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`);
+  page = await attach(device, { notPid: pidBeforeMorning });
+  await page.waitForSelector('[data-testid="chat"]', { timeout: 90_000 });
+  await page.waitForSelector('[data-testid="briefing-bar"], [data-testid="briefing-label"]', { timeout: 60_000 });
+  ok("opened after the briefing time with the PC off: the briefing started by itself");
+  let phase = null;
+  let problem = null;
+  for (let i = 0; i < 600 && phase !== "speaking" && !problem; i++) {
+    const st = await page.evaluate(() => ({ phase: document.querySelector('[data-testid="briefing-bar"]')?.getAttribute("data-phase") ?? null, text: document.body.innerText }));
+    phase = st.phase;
+    problem = /The morning briefing didn't work this time: ([^\n]+)/.exec(st.text)?.[1] ?? null;
+    if (phase !== "speaking" && !problem) await sleep(200);
+  }
+  await bodyHas(page, new RegExp(escapeRe(FAKE_MORNING)), 30_000);
+  await sleep(500);
+  screenshot("6a-briefing-on-open");
+  if (phase === "speaking") ok("the briefing was written on the phone and is being read aloud in the Soundwave voice — by the phone itself");
+  else fail(`the briefing didn't start talking: ${problem ?? "no speaking phase seen"}`);
+  const brief = (await (await fetch(`${GEMINI}/_fake/requests`)).json()).filter(
+    (r) => /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "") && /The PC is off/.test(userText(r)),
+  )[0];
+  const firstFinding = FAKE_RESEARCH.split("\n")[0];
+  if (!brief) fail("the phone's briefing request never reached Gemini");
+  else if (!userText(brief).includes(`1. “${BRIEF_TOPIC}” — researched with Google Search:\n${firstFinding}`))
+    fail(`the phone's briefing wasn't written from the topic's research: ${userText(brief).slice(0, 400)}`);
+  else ok(`with the PC off the phone researched “${BRIEF_TOPIC}” (Gemini 2.5 Flash + Google Search) and wrote the briefing from it`);
+  // The native voice on its own (Microsoft's service, straight from the phone).
+  const voice = await page.evaluate(async () => {
+    try {
+      const r = await window.Capacitor.Plugins.EdgeTts.synthesize({ text: "Good morning from Soundwave, speaking on your phone.", voice: "en-US-GuyNeural" });
+      return { ok: true, bytes: r.bytes };
+    } catch (e) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  });
+  if (voice.ok && voice.bytes > 2000) ok(`the phone made Soundwave speech itself: Guy, ${voice.bytes} bytes of MP3 from Microsoft's voice service`);
+  else fail(`the phone couldn't make Soundwave speech itself: ${voice.error ?? `${voice.bytes} bytes`}`);
 
   // Morning Setup with the PC off: the phone's own briefing (weather from the stand-in Open-Meteo).
   await page.click('[data-testid="morning-chip"]');
@@ -320,6 +379,11 @@ try {
   if (!synced) fail("the phone's offline messages never reached the PC");
   else if (synced.asked.via !== "phone" || synced.answered.answeredBy !== "phone" || !synced.morning) fail(`offline messages reached the PC without their labels: ${JSON.stringify(synced).slice(0, 300)}`);
   else ok("reconnected, and the offline chat + Morning Setup are now in the PC's conversation (marked as answered on the phone)");
+  const briefingNow = await pc("/api/v1/morning/briefing");
+  const phoneBriefing = (await pc("/api/v1/companion/conversation")).messages.find((m) => m.briefingDate === briefingNow.day && m.answeredBy === "phone");
+  if (!phoneBriefing) fail("the phone's morning briefing isn't in the PC's conversation");
+  else if (briefingNow.heard?.on !== "phone") fail(`the PC doesn't know the briefing was heard on the phone (${JSON.stringify(briefingNow.heard)})`);
+  else ok("the phone's morning briefing is in the PC's conversation, and the PC knows it was heard (it won't speak it again)");
 
   // Restart the app: still paired, conversation still there.
   const oldPid = webviewPid;

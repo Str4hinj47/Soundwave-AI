@@ -26,6 +26,8 @@ export interface FakeGoogle {
   seen: Seen[];
   /** Answers for generateContent, in order (default: 500). */
   gemini: Array<(req: Seen) => Reply>;
+  /** Answers generateContent by content when nothing is queued (parallel calls). */
+  router: ((req: Seen) => Reply | null) | null;
   /** Answers for POST /token (default: a code exchange / refresh that works). */
   token: Array<(req: Seen) => Reply>;
   weather: { place: Record<string, unknown> | null; tempC: number; code: number };
@@ -40,7 +42,8 @@ export async function startFakeGoogle(): Promise<FakeGoogle> {
     url: "",
     close: (async () => undefined) as () => Promise<void>,
     seen: [],
-    gemini: [],
+    gemini: [] as Array<(req: Seen) => Reply>,
+    router: null as ((req: Seen) => Reply | null) | null,
     token: [],
     weather: { place: { name: "Kruševac", latitude: 43.58, longitude: 21.33, country: "Serbia", country_code: "RS" }, tempC: 14.2, code: 2 },
     youtube: { title: "Orbit Facts", subscribers: "1234", views: "98765", videos: "42", ok: true },
@@ -48,6 +51,7 @@ export async function startFakeGoogle(): Promise<FakeGoogle> {
     reset() {
       fake.seen.length = 0;
       fake.gemini.length = 0;
+      fake.router = null;
       fake.token.length = 0;
       fake.weather = { place: { name: "Kruševac", latitude: 43.58, longitude: 21.33, country: "Serbia", country_code: "RS" }, tempC: 14.2, code: 2 };
       fake.youtube = { title: "Orbit Facts", subscribers: "1234", views: "98765", videos: "42", ok: true };
@@ -58,7 +62,9 @@ export async function startFakeGoogle(): Promise<FakeGoogle> {
     const p = seen.path;
     if (seen.method === "POST" && /^\/v1beta\/models\/[^/]+:generateContent$/.test(p)) {
       const next = fake.gemini.shift();
-      return next ? next(seen) : { status: 500, body: { error: { code: 500, message: "test: nothing queued", status: "INTERNAL" } } };
+      if (next) return next(seen);
+      const routed = fake.router?.(seen);
+      return routed ?? { status: 500, body: { error: { code: 500, message: "test: nothing queued", status: "INTERNAL" } } };
     }
     if (p === "/geocode") return { body: { results: fake.weather.place ? [fake.weather.place] : [] } };
     if (p === "/forecast") {

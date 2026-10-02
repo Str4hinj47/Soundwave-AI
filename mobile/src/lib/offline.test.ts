@@ -41,6 +41,7 @@ let kit: PhoneKit;
 const memory: MemorySnapshot = {
   rev: "r1",
   notes: [{ id: "n_aaaaaaaaaa", text: "The user's channel is about space facts", at: Date.now() - 86_400_000, from: "pc" }],
+  briefing: { topics: ["the latest news about open-source, free AI tools"], time: "07:30", auto: true, updatedAt: 1 },
   summary: { text: "Yesterday the user made a short about black holes and planned one about Saturn.", updatedAt: Date.now() - 3_600_000 },
   shorts: {
     total: 5,
@@ -107,7 +108,7 @@ describe("chatting on the phone while the PC is off", () => {
     expect(instruction).toMatch(/“Saturn's rings” — finished 2 hours ago, on YouTube/);
     expect(instruction).toMatch(/You can't \(yet\): make shorts, show or download videos, open anything on the PC/);
     const tools = req!.body.tools[0].functionDeclarations.map((d: { name: string }) => d.name);
-    expect(tools).toEqual(["soundwave_guide", "remember", "forget"]);
+    expect(tools).toEqual(["soundwave_guide", "remember", "forget", "update_morning_briefing"]);
     expect(ops).toEqual([]);
   });
 
@@ -131,11 +132,21 @@ describe("chatting on the phone while the PC is off", () => {
 });
 
 describe("Morning Setup on the phone (PC off)", () => {
-  it("briefs from the weather, the PC's last known shorts and the memory — nothing opened on the PC", async () => {
-    queue.push(text("Good morning! Rainy in Kruševac today. Your Saturn short is on YouTube. Idea 1: … Idea 2: … Idea 3: …"));
+  it("researches the briefing topics with Google Search, then briefs — nothing opened on the PC", async () => {
+    queue.push(
+      (req) => {
+        expect(req.path).toBe("/v1beta/models/gemini-2.5-flash:generateContent");
+        expect(req.body.tools).toEqual([{ googleSearch: {} }]);
+        return { body: { candidates: [{ content: { role: "model", parts: [{ text: "Ollama 1.0 shipped." }] }, finishReason: "STOP", groundingMetadata: { groundingChunks: [{ web: { title: "example.com" } }] } }] } };
+      },
+      text("Good morning! Rainy in Kruševac today. Your Saturn short is on YouTube. On open-source AI tools: Ollama 1.0 shipped. Idea 1: … Idea 2: … Idea 3: …"),
+    );
     const r = await offlineMorning({ kit, memory: effectiveMemory(memory, []) });
     expect(r.text).toMatch(/^Good morning! Rainy in Kruševac/);
-    const prompt = generateCalls()[0]!.body.contents[0].parts[0].text as string;
+    expect(r.briefingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(r.research).toBe("the latest news about open-source, free AI tools: Google Search");
+    const prompt = generateCalls()[1]!.body.contents[0].parts[0].text as string;
+    expect(prompt).toMatch(/1\. “the latest news about open-source, free AI tools” — researched with Google Search:\nOllama 1\.0 shipped\.\nSources: example\.com/);
     expect(prompt).toMatch(/Weather: In Kruševac it's 12°C and light rain, today between 7 and 15°C, 80% chance of rain\./);
     expect(prompt).toMatch(/Shorts since your last Morning Setup \(as of .+\):\n- finished: “Saturn's rings” \(on YouTube\)/);
     expect(prompt).not.toMatch(/black holes” \(on/); // older than the last Morning Setup
@@ -146,7 +157,7 @@ describe("Morning Setup on the phone (PC off)", () => {
 
   it("falls back to a plain briefing when Gemini can't answer", async () => {
     queue.push(() => ({ status: 503, body: { error: { code: 503, message: "overloaded" } } }));
-    const r = await offlineMorning({ kit: { ...kit, weather: { city: null } }, memory: effectiveMemory(memory, []) });
+    const r = await offlineMorning({ kit: { ...kit, weather: { city: null } }, memory: { ...effectiveMemory(memory, [])!, briefing: { topics: [], time: "07:30", auto: true, updatedAt: 1 } } });
     expect(r.model).toBeNull();
     expect(r.text).toMatch(/^Good morning! It's \w+day \d+ \w+ \d{4}\. Since your last Morning Setup: your short about “Saturn's rings” finished \(on YouTube\)\./);
     expect(r.weatherNote).toMatch(/no city set/);
@@ -171,5 +182,13 @@ describe("voice input on the phone (PC off)", () => {
 describe("helpers", () => {
   it("makes message ids like the PC's", () => {
     expect(phoneMessageId(1_790_000_000_000)).toMatch(/^1790000000000-[0-9a-f]{6}$/);
+  });
+
+  it("changes the briefing plan from the phone (it goes back to the PC as a memory op)", async () => {
+    queue.push(call("update_morning_briefing", { add_topics: ["new trending GitHub repositories"], time: "06:45" }, "u1"), text("Done — 06:45 with GitHub repos."));
+    const ops: MemoryOp[] = [];
+    await offlineReply({ kit, memory: effectiveMemory(memory, []), history: [], message: "add trending github repos, at 6:45", record: (op) => ops.push(op) });
+    expect(ops).toEqual([{ op: "briefing", plan: expect.objectContaining({ topics: ["the latest news about open-source, free AI tools", "new trending GitHub repositories"], time: "06:45", auto: true }) }]);
+    expect(effectiveMemory(memory, ops)!.briefing).toMatchObject({ time: "06:45" });
   });
 });

@@ -36,6 +36,8 @@ const { CompanionClient, pairWithPc } = await import("../../mobile/src/lib/clien
 const offline = await import("../../mobile/src/lib/offline.js");
 const memory = await import("../src/lib/memory.js");
 const morning = await import("../src/lib/morning.js");
+const briefing = await import("../src/lib/briefing.js");
+const coreMorning = await import("../src/lib/brain/core/morning.js");
 
 // ── A fake Gemini API ───────────────────────────────────────────────────────
 
@@ -110,7 +112,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const f of ["companion.json", "agent-conversation.json", "morning.json"]) fs.rmSync(path.join(DATA, f), { force: true });
+  for (const f of ["companion.json", "agent-conversation.json", "morning.json", "briefing.json"]) fs.rmSync(path.join(DATA, f), { force: true });
   service.resetCompanionStateForTests();
   conversation.resetConversationForTests();
   settings.resetBrainSettingsForTests();
@@ -377,5 +379,80 @@ describe("when the PC is off, the phone chats on its own", () => {
     expect(shared.at(-2)).toMatchObject({ sender: "user", text: "🌅 Morning Setup", via: "phone" });
     expect(generateCalls()[0]!.body.contents[0].parts[0].text).toMatch(/^Now: \w+day/);
     expect(memory.lastMorningAt()).toBeGreaterThan(Date.now() - 5000);
+  });
+});
+
+describe("the morning briefing on the phone", () => {
+  const minutesAgo = (n: number) => {
+    const d = new Date(Date.now() - n * 60_000);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const searchAnswer = () => ({
+    body: {
+      candidates: [
+        {
+          content: { role: "model", parts: [{ text: "Ollama 1.0 shipped with a new model library." }] },
+          finishReason: "STOP",
+          groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com", title: "example.com" } }] },
+        },
+      ],
+    },
+  });
+
+  it("opened after the briefing time with the PC on: the PC writes it (researching the topics) and the phone marks it heard", async () => {
+    briefing.resetBriefingForTests();
+    await saveKeyOnPc();
+    morning.saveMorningSettings({ items: [] });
+    memory.setBriefingPlan({ topics: ["the latest news about open-source, free AI tools"], time: minutesAgo(3), auto: true });
+    const client = await pairedClient();
+
+    let status = await client.briefingToday();
+    expect(status).toMatchObject({ due: true, inWindow: true, message: null, heard: null });
+
+    fake.queue.push(searchAnswer, text("Good morning! On open-source AI tools: Ollama 1.0 is out."));
+    status = await client.briefingToday({ prepare: true });
+    const day = coreMorning.localDay(new Date());
+    expect(status.message).toMatchObject({ briefingDate: day, text: "Good morning! On open-source AI tools: Ollama 1.0 is out." });
+    const [search, writer] = generateCalls();
+    expect(search!.url).toMatch(/gemini-2\.5-flash:generateContent$/);
+    expect(search!.body.tools).toEqual([{ googleSearch: {} }]);
+    expect(writer!.body.contents[0].parts[0].text).toMatch(/1\. “the latest news about open-source, free AI tools” — researched with Google Search:\nOllama 1\.0 shipped/);
+    expect(client.conversation!.messages.some((m) => m.briefingDate === day)).toBe(true);
+
+    await client.briefingHeard(day);
+    expect(briefing.briefingStatus().heard).toMatchObject({ on: "phone" });
+  });
+
+  it("with the PC off the phone writes its own briefing; back online it counts as heard on the PC too", async () => {
+    briefing.resetBriefingForTests();
+    await saveKeyOnPc();
+    memory.setBriefingPlan({ topics: ["new trending GitHub repositories"], time: minutesAgo(3), auto: true });
+    const client = await pairedClient();
+    const kit = await client.fetchKit();
+    if (!kit.enabled) throw new Error("no kit");
+    let snapshot: Parameters<typeof offline.effectiveMemory>[0] = null;
+    client.on("memory", (m) => (snapshot = m));
+    await client.sync();
+    expect(snapshot!.briefing.topics).toEqual(["new trending GitHub repositories"]);
+    const port = listener.listenerState().port!;
+    await listener.stopListener();
+
+    fake.queue.push(searchAnswer, text("Good morning from your phone! On GitHub: agent-lab is trending."));
+    const r = await offline.offlineMorning({ kit, memory: offline.effectiveMemory(snapshot, []) });
+    const day = coreMorning.localDay(new Date());
+    expect(r).toMatchObject({ text: "Good morning from your phone! On GitHub: agent-lab is trending.", briefingDate: day, research: "new trending GitHub repositories: Google Search" });
+    expect(generateCalls()[0]!.key).toBe(KEY);
+
+    service.setEnabledFlag(true);
+    await listener.startListener({ host: "127.0.0.1", port });
+    expect(await client.connect()).toBe(true);
+    const at = Date.now();
+    await client.merge({
+      messages: [{ id: `${at}-brief1`, sender: "assistant", text: r.text, time: "", at, tag: "SYS", answeredBy: "phone", briefingDate: day }],
+      memoryOps: [],
+      heard: [],
+    });
+    expect(briefing.todaysBriefingMessage(day)).toMatchObject({ answeredBy: "phone", briefingDate: day });
+    expect(briefing.briefingStatus().heard).toMatchObject({ on: "phone" });
   });
 });

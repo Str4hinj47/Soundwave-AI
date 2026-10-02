@@ -47,8 +47,9 @@ export function Help() {
         <Section icon={<Sunrise className="h-4 w-4" />} title="Memory and Morning Setup">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-gray-300">
             <li><strong className="text-white">It remembers:</strong> notes it saves (“remember that my channel is about space”), a summary of earlier conversations (Gemini updates it as the chat grows and when you press Clear) and the shorts you made. See, add or delete notes in the Command Center → gear → <em>Memory</em>.</li>
-            <li><strong className="text-white">Morning Setup:</strong> press <em>🌅 Morning Setup</em> (Command Center or phone) or say “good morning, run my morning setup”. It opens your morning websites and apps on this PC (YouTube Studio by default) and gives a spoken briefing: weather, what happened with your shorts, your YouTube numbers, what you were working on and three new short ideas.</li>
-            <li><strong className="text-white">Customize it</strong> in <Link to="/settings/morning" className="text-cyan-300 hover:text-cyan-200">Settings → Morning Setup</Link>: the weather city, what to open, whether to open it when you start from the phone, and the ideas.</li>
+            <li><strong className="text-white">Your daily briefing, on anything:</strong> add topics in <Link to="/settings/morning" className="text-cyan-300 hover:text-cyan-200">Settings → Morning Setup</Link> (or tell the agent) — “the latest news about open-source, free AI tools”, “new trending GitHub repositories”… Every morning at your time Gemini researches them (Google Search, free with a free key) and the briefing starts talking when you open the app — on the phone even with the PC off.</li>
+            <li><strong className="text-white">Morning Setup now:</strong> press <em>🌅 Morning Setup</em> (Command Center or phone) or say “good morning, run my morning setup”. It also opens your morning websites and apps on this PC (YouTube Studio by default). The briefing has the weather, your shorts, your YouTube numbers, what you were working on, your topics and three new short ideas.</li>
+            <li><strong className="text-white">Customize it</strong> in Settings → Morning Setup: the time and topics, the weather city, what to open, whether to open it when you start from the phone, and the ideas.</li>
           </ul>
         </Section>
 

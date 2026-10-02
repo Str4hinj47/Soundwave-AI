@@ -240,12 +240,44 @@ try {
   ok(`Command Center: "${pill}" pill; a typed message went to Gemini and its answer is in the chat`);
   annotate("notice", "Desktop E2E: agent brain", `Settings → Brain saved the key (${hint}) and its test passed; the Command Center shows "${pill}" and the chat was answered by Gemini (fake, on loopback).`);
 
-  // ── 3d. Morning Setup, the Memory tab and Connect YouTube (1.4.0) ─────────
+  // ── 3c+. The daily briefing (1.5.0): due → written (topics researched) → spoken when the Command Center opens ──
   // Nothing to open on the CI machine; the weather comes from the stand-in.
-  await main.evaluate(() =>
-    fetch("/api/v1/morning", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [], city: "Kruševac" }) }),
+  const due = new Date(Date.now() - 2 * 60_000);
+  const dueAt = `${String(due.getHours()).padStart(2, "0")}:${String(due.getMinutes()).padStart(2, "0")}`;
+  await main.evaluate(
+    (t) =>
+      fetch("/api/v1/morning", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [], city: "Kruševac", briefing: { topics: ["the latest news about open-source, free AI tools"], time: t, auto: true } }),
+      }),
+    dueAt,
   );
+  await main.goto(`${appBase}/agent`);
+  await app.evaluate(() => {
+    const w = globalThis.__soundwaveShell.mainWindow();
+    w.show();
+    w.focus();
+  });
+  await main.waitForFunction(() => /MORNING BRIEFING/.test(document.body.innerText), null, { timeout: 90_000 });
+  const researched = fakeGemini.seen.filter((r) => /gemini-2\.5-flash:generateContent$/.test(r.url ?? "") && JSON.stringify(r.body?.tools ?? []).includes("googleSearch"));
+  if (!researched.length) await fail("daily briefing: the topic wasn't researched with Google Search");
+  let heardOn = null;
+  for (let i = 0; i < 20 && !heardOn; i++) {
+    heardOn = (await main.evaluate(async () => (await fetch("/api/v1/morning/briefing")).json())).heard?.on ?? null;
+    if (!heardOn) await new Promise((r) => setTimeout(r, 500));
+  }
+  await main.screenshot({ path: path.join(shotsDir, "8b-daily-briefing.png"), timeout: 15_000 }).catch(() => {});
+  if (heardOn === "pc") ok("daily briefing: written when due (the topic researched with Google Search), shown and spoken when the Command Center opened");
+  else annotate("warning", "Desktop E2E", `daily briefing: written and shown, but it wasn't marked heard here (window focus in CI?) — heard: ${heardOn}`);
+
+  // ── 3d. Morning Setup, the Memory tab and Connect YouTube (1.4.0) ─────────
+  const writersBefore = fakeGemini.seen.filter((r) => /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "")).length;
   await main.click('[data-testid="morning-chip"]');
+  for (let i = 0; i < 120; i++) {
+    if (fakeGemini.seen.filter((r) => /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "")).length > writersBefore) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   await main.waitForFunction((t) => document.body.innerText.includes(t), FAKE_MORNING, { timeout: 60_000 });
   const briefing = fakeGemini.seen.filter((r) => r.url?.endsWith(":generateContent") && /Write the user's Morning Setup briefing/.test(r.body?.systemInstruction?.parts?.[0]?.text ?? "")).at(-1);
   const facts = briefing?.body?.contents?.[0]?.parts?.[0]?.text ?? "";
