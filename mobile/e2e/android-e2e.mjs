@@ -54,10 +54,34 @@ async function pc(route, body, method = body === undefined ? "GET" : "POST") {
 }
 
 let webviewPid = null;
+/** JavaScript errors the app's page reported (shown when a step fails). */
+const pageErrors = [];
+function watch(page) {
+  page.on("pageerror", (e) => pageErrors.push(`pageerror: ${e.message}`.slice(0, 300)));
+  page.on("console", (m) => {
+    if (m.type() === "error") pageErrors.push(`console: ${m.text()}`.slice(0, 300));
+  });
+  return page;
+}
+
+/** The app's JavaScript errors as logged by Capacitor/Chromium (in case the page we hold isn't the live one). */
+function logcatErrors() {
+  try {
+    return adb("logcat", "-d", "-t", "4000")
+      .split("\n")
+      .filter((l) => /Capacitor\/Console|chromium|AndroidRuntime/.test(l) && /error|uncaught|exception|fatal/i.test(l))
+      .slice(-6)
+      .map((l) => l.replace(/^\S+\s+\S+\s+\d+\s+\d+\s+/, "").slice(0, 240));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * The app's WebView page. After a restart, Playwright can still hand out the
  * killed process's WebView for a moment (its page is already closed) — so
- * wait for one from a new process.
+ * wait for one from a new process. And prefer a page that shows the app: right
+ * after a cold start Playwright has handed out a blank page that never filled.
  */
 async function attach(device, { notPid = null } = {}) {
   const deadline = Date.now() + 90_000;
@@ -65,13 +89,31 @@ async function attach(device, { notPid = null } = {}) {
     const webview = await device.webView({ pkg: PKG }, { timeout: Math.max(1_000, deadline - Date.now()) });
     if (notPid === null || webview.pid() !== notPid) {
       webviewPid = webview.pid();
-      const page = await webview.page();
+      const page = watch(await webview.page());
       page.setDefaultTimeout(45_000);
       return page;
     }
     if (Date.now() > deadline) throw new Error(`the restarted app's WebView never appeared (still pid ${notPid})`);
     await sleep(500);
   }
+}
+
+/** Every page of the app's WebViews that shows something (the live one), else null. */
+async function livePage(device) {
+  for (const webview of device.webViews().filter((w) => w.pkg() === PKG)) {
+    try {
+      const page = await webview.page();
+      const text = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+      if (text.trim()) {
+        webviewPid = webview.pid();
+        page.setDefaultTimeout(45_000);
+        return watch(page);
+      }
+    } catch {
+      /* a closed WebView */
+    }
+  }
+  return null;
 }
 
 const bodyHas = (page, re, timeout = 45_000) =>
@@ -131,14 +173,31 @@ try {
   const ua = await page.evaluate(() => navigator.userAgent);
   const webviewVersion = /Chrome\/([\d.]+)/.exec(ua)?.[1] ?? "unknown";
   try {
-    await page.waitForSelector('[data-testid="chat"]', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid="chat"]', { timeout: 45_000 });
   } catch {
-    // Not paired after a minute: record what the phone shows, then hand it the link once more.
-    annotate("warning", "Phone app E2E", `not paired 60 s after opening the link — the screen says: ${await screenText(page)}`);
+    // No chat after 45 s: say what we see, then look for the app's live page (Playwright
+    // sometimes hands out a blank one on a cold start), and only then send the link again.
+    annotate(
+      "warning",
+      "Phone app E2E",
+      `no chat 45 s after opening the link — page ${page.url()} says: “${await screenText(page)}”; page errors: ${pageErrors.slice(-3).join(" | ") || "none"}; logcat: ${logcatErrors().join(" | ") || "nothing"}`,
+    );
     screenshot("0-not-paired-yet");
-    openLink();
-    await page.waitForSelector('[data-testid="chat"]', { timeout: 60_000 });
-    annotate("warning", "Phone app E2E", "paired after the link was opened a second time");
+    const live = await livePage(device);
+    if (live && (await live.$('[data-testid="chat"]'))) {
+      page = live;
+      annotate("warning", "Phone app E2E", `the app was paired; Playwright had handed out a blank page (now attached to the live one, ${page.url()})`);
+    } else {
+      if (live) page = live;
+      openLink();
+      for (let i = 0; i < 12 && !(await page.$('[data-testid="chat"]').catch(() => null)); i++) {
+        await sleep(5000);
+        const again = await livePage(device);
+        if (again) page = again;
+      }
+      await page.waitForSelector('[data-testid="chat"]', { timeout: 15_000 });
+      annotate("warning", "Phone app E2E", "the chat appeared after the link was opened a second time");
+    }
   }
   await bodyHas(page, /Connected to/, 60_000);
   const paired = (await pc("/api/v1/companion")).devices;
@@ -276,7 +335,8 @@ try {
   screenshot("7-after-restart");
 } catch (err) {
   fail(`stopped: ${err.message}`);
-  annotate("error", "Phone app E2E", `the screen at that moment: ${await screenText(page)}`);
+  annotate("error", "Phone app E2E", `the screen at that moment (${page?.url?.() ?? "no page"}): ${await screenText(page)}`);
+  annotate("error", "Phone app E2E", `page errors: ${pageErrors.slice(-4).join(" | ") || "none"}; logcat: ${logcatErrors().join(" | ") || "nothing"}`);
   screenshot("zz-failure");
 } finally {
   try {
